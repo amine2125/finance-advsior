@@ -1,0 +1,36 @@
+# Market data is never committed (licensing: starter ZIP and provider terms)
+data/
+!data/README.md
+Datathon2026.zip
+*.zip
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+backend/.venv/
+backend/.localdata/
+backend/dist/
+.pytest_cache/
+*.egg-info/
+
+# Node
+node_modules/
+frontend/dist/
+infrastructure/cdk.out/
+infrastructure/*.js
+!infrastructure/jest.config.js
+infrastructure/**/*.d.ts
+infrastructure/bin/*.js
+infrastructure/lib/*.js
+
+# Env and secrets
+.env
+.env.*
+!.env.example
+*.pem
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/

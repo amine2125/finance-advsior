@@ -1,0 +1,9 @@
+# Runtime (also bundled into the Lambda package; boto3 is provided by the Lambda runtime but pinned here for local use)
+fastapi==0.163.0
+pydantic==2.14.3
+pandas==2.2.3
+numpy==2.0.2
+httpx==0.28.1
+mangum==0.22.0
+boto3==1.44.3
+uvicorn==0.54.0
