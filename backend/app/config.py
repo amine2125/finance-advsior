@@ -9,6 +9,24 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
+def _load_dotenv(path: Path) -> None:
+    """Local convenience: read KEY=VALUE lines from the repo's .env without overriding real environment variables."""
+    if not path.is_file():
+        return
+    for line in path.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        k, v = line.split("=", 1)
+        v = v.strip().strip('"').strip("'")
+        if k.strip() and v:
+            os.environ.setdefault(k.strip(), v)
+
+
+if not os.getenv("AWS_LAMBDA_FUNCTION_NAME"):  # never on AWS: Lambda gets its config from the stack
+    _load_dotenv(REPO_ROOT / ".env")
+
+
 def _bool(name: str, default: bool) -> bool:
     raw = os.getenv(name)
     if raw is None:

@@ -16,9 +16,9 @@ from app.analytics.tiers import classify_risk_tier, tier_from_stats
 from app.analytics.valuation import dcf_value, implied_growth, sensitivity_grid
 from app.data.loader import DataUnavailableError
 from app.models import RiskTier
-from app.services.seed import OFFICIAL_PERSONAS
+from app.services.seed import REFERENCE_PERSONAS
 
-AMIRA, MATEO, ROBERT = OFFICIAL_PERSONAS
+AMIRA, MATEO, ROBERT = REFERENCE_PERSONAS
 
 
 def test_valuation_weights_and_fx(md):

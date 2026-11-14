@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import datetime as dt
+from functools import lru_cache
 
 import pandas as pd
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
@@ -15,6 +16,7 @@ from ..analytics.forecast_policy import POLICY_TABLE
 from ..analytics.lenses import run_asset_lenses
 from ..analytics.lenses.fundamental_lens import fixture_check
 from ..analytics.portfolio import portfolio_risk_metrics, value_holdings
+from ..analytics.profile_builder import OnboardingAnswers, build_profile
 from ..analytics.scenarios import SHOCK_PRESETS, apply_shock, historical_replay, position_size_table
 from ..analytics.tiers import classify_universe
 from ..config import get_settings
@@ -48,10 +50,23 @@ def health():
     return {"status": "ok", "version": __version__, "dataset_version": md.dataset_version, "data_as_of": md.end_date.date().isoformat()}
 
 
+@lru_cache(maxsize=1)
+def _aws_credentials_present() -> bool:
+    try:
+        import boto3
+        return boto3.Session().get_credentials() is not None
+    except Exception:  # noqa: BLE001
+        return False
+
+
 @router.get("/system/info")
 def system_info():
     s = get_settings()
-    return {"app": s.app_name, "env": s.env, "region": s.aws_region, "bedrock_region": s.bedrock_region,
+    llm_ready = s.llm_enabled and _aws_credentials_present()
+    return {"llm_ready": llm_ready,
+            "llm_status": "Amazon Bedrock prêt" if llm_ready else ("IA désactivée (AEGIS_LLM_ENABLED=false)" if not s.llm_enabled
+                                                                   else "Identifiants AWS absents : Amazon Bedrock non configuré"),
+            "app": s.app_name, "env": s.env, "region": s.aws_region, "bedrock_region": s.bedrock_region,
             "agent_model_id": s.agent_model_id, "supervisor_model_id": s.supervisor_model_id, "llm_enabled": s.llm_enabled,
             "storage_backend": s.storage_backend, "job_runner": s.job_runner, "web_research_enabled": s.web_research_enabled,
             "live_mode": s.live_mode_enabled, "notifications": "Amazon SNS" if s.alert_sns_topic_arn else "non configuré",
@@ -166,6 +181,103 @@ def update_persona(persona_id: str, profile: InvestorProfile, owner: str = Depen
     return ps.save_persona(owner, profile).model_dump(mode="json")
 
 
+@router.delete("/personas/{persona_id}")
+def delete_persona(persona_id: str, owner: str = Depends(owner_id)):
+    ps.delete_persona(owner, persona_id)
+    return {"deleted": persona_id}
+
+
+# ------------------------------------------------------------------------------------------------ onboarding
+def _profile_out(p: InvestorProfile, derivation: list[str] | None = None) -> dict:
+    from ..analytics.persona_rules import allowed_tier
+    at = allowed_tier(p)
+    out = p.model_dump(mode="json") | {"allowed_tier": at["allowed_tier"].value, "binding_inputs": at["binding_inputs"],
+                                       "tier_inputs": at["tier_inputs"], "uncertainties": at["uncertainties"],
+                                       "benchmark_label": BENCHMARKS.get(p.benchmark_id, {}).get("label")}
+    if derivation is not None:
+        out["derivation"] = derivation
+    return out
+
+
+@router.post("/onboarding/preview")
+def onboarding_preview(answers: OnboardingAnswers):
+    """Computes the profile from the answers without saving it, so the user can review every rule first."""
+    profile, derivation = build_profile(answers)
+    return _profile_out(profile, derivation)
+
+
+@router.post("/onboarding")
+def onboarding(answers: OnboardingAnswers, owner: str = Depends(owner_id)):
+    existing = ps.list_personas(owner)
+    profile, derivation = build_profile(answers, persona_id=existing[0].persona_id if existing else None)
+    saved = ps.save_persona(owner, profile)
+    store = get_store()
+    store.put(owner, "META", "onboarding", {"answers": answers.model_dump(mode="json"), "derivation": derivation, "at": dt.datetime.utcnow().isoformat()})
+    return _profile_out(saved, derivation)
+
+
+@router.get("/me")
+def me(owner: str = Depends(owner_id)):
+    """Everything the home screen needs: the user's profile (if onboarded) and portfolios. Empty until onboarding."""
+    profiles = ps.list_personas(owner)
+    meta = get_store().get(owner, "META", "onboarding") or {}
+    md = get_market_data()
+    return {"onboarded": bool(profiles), "profile": _profile_out(profiles[0], meta.get("derivation")) if profiles else None,
+            "profiles": [{"persona_id": p.persona_id, "display_name": p.display_name, "is_official": p.is_official} for p in profiles],
+            "answers": meta.get("answers"),
+            "portfolios": [p.model_dump(mode="json") for p in ps.list_portfolios(owner)],
+            "data_as_of": md.end_date.date().isoformat(), "data_start": md.start_date.date().isoformat(),
+            "dataset_origin": md.origin}
+
+
+@router.get("/reference-cases")
+def reference_cases():
+    from ..services.seed import REFERENCE_PERSONAS, REFERENCE_PORTFOLIOS
+    return {"note": "Personas fictifs de l'énoncé officiel du datathon, chargés uniquement sur demande.",
+            "cases": [{"persona_id": p.persona_id, "display_name": p.display_name, "age": p.age, "risk_profile_label": p.risk_profile_label,
+                       "horizon": f"{p.horizon_years_min:g}" + (f"–{p.horizon_years_max:g}" if p.horizon_years_max else "+") + " ans",
+                       "objective": p.objective, "example_portfolio": REFERENCE_PORTFOLIOS.get(p.persona_id)} for p in REFERENCE_PERSONAS]}
+
+
+@router.post("/reference-cases/{persona_id}/load")
+def load_reference_case(persona_id: str, owner: str = Depends(owner_id)):
+    from ..services.seed import REFERENCE_PERSONAS, REFERENCE_PORTFOLIOS
+    ref = next((p for p in REFERENCE_PERSONAS if p.persona_id == persona_id), None)
+    if not ref:
+        raise HTTPException(404, {"code": "not_found", "message": "cas de référence inconnu"})
+    profile = ps.save_persona(owner, ref.model_copy(deep=True, update={"created_at": dt.datetime.utcnow().isoformat()}))
+    pf = None
+    ex = REFERENCE_PORTFOLIOS.get(persona_id)
+    if ex:
+        pf = ps.create_portfolio(owner, PortfolioCreate(name=ex["name"], persona_id=persona_id, holdings=ex["holdings"]), is_demo=True)
+    return {"profile": _profile_out(profile), "portfolio": pf.model_dump(mode="json") if pf else None}
+
+
+# ------------------------------------------------------------------------------------------------ invest
+class InvestCheckReq(BaseModel):
+    asset_id: str = Field(min_length=1, max_length=20)
+    amount_cad: float = Field(gt=0, le=10_000_000)
+    portfolio_id: str | None = None
+    persona_id: str | None = None
+
+
+@router.post("/invest/check")
+def invest_check(req: InvestCheckReq, owner: str = Depends(owner_id)):
+    """Deterministic answer to « puis-je investir X $ dans Y ? » against the user's own profile and portfolio."""
+    from ..services.invest_service import check_investment
+    md = get_market_data()
+    pfs = ps.list_portfolios(owner)
+    pf = ps.get_portfolio(owner, req.portfolio_id) if req.portfolio_id else (pfs[0] if pfs else None)
+    persona = ps.resolve_persona(owner, req.persona_id, pf)
+    return check_investment(md, persona, pf, req.asset_id, req.amount_cad)
+
+
+@router.get("/invest/options")
+def invest_options(persona_id: str | None = None, owner: str = Depends(owner_id)):
+    from ..services.invest_service import options_for
+    return options_for(get_market_data(), ps.resolve_persona(owner, persona_id))
+
+
 # ------------------------------------------------------------------------------------------------ portfolios
 @router.get("/portfolios")
 def portfolios(owner: str = Depends(owner_id)):
@@ -227,7 +339,7 @@ class AnalysisReq(BaseModel):
 def analyze(req: AnalysisReq, owner: str = Depends(owner_id)):
     md = get_market_data()
     pf = ps.get_portfolio(owner, req.portfolio_id)
-    persona = ps.get_persona(owner, req.persona_id or pf.persona_id or "robert")
+    persona = ps.resolve_persona(owner, req.persona_id, pf)
     if req.benchmark_id and req.benchmark_id not in BENCHMARKS:
         raise HTTPException(400, {"code": "bad_benchmark", "message": "indice de référence inconnu"})
     xr = run_xray(md, pf, persona, as_of=req.as_of, lookback=req.lookback, benchmark_id=req.benchmark_id)
@@ -389,7 +501,7 @@ def scenario_compare(req: CompareReq, owner: str = Depends(owner_id)):
     from ..services.analysis_service import asset_meta, assess_persona
     md = get_market_data()
     pf = ps.get_portfolio(owner, req.portfolio_id)
-    persona = ps.get_persona(owner, req.persona_id or pf.persona_id or "robert")
+    persona = ps.resolve_persona(owner, req.persona_id, pf)
     xr = run_xray(md, pf, persona, include_series=False)
     led = MetricLedger()
     alts = compare_alternatives(md, xr, led)
@@ -615,7 +727,7 @@ class ImpactReq(BaseModel):
 def portfolio_impact(req: ImpactReq, owner: str = Depends(owner_id)):
     md = get_market_data()
     pf = ps.get_portfolio(owner, req.portfolio_id)
-    persona = ps.get_persona(owner, req.persona_id or pf.persona_id or "robert")
+    persona = ps.resolve_persona(owner, req.persona_id, pf)
     aid = req.asset_id.upper()
     res, led = hypothetical_addition(md, pf, persona, aid, req.amount_cad, md.asset(aid)["asset_class"] == "crypto")
     return res

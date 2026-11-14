@@ -13,6 +13,11 @@ export function userId(): string {
   return id;
 }
 
+/** "Recommencer": a fresh sandbox id, so the next visit starts the onboarding from scratch. */
+export function resetUser(): void {
+  localStorage.removeItem("aegis.user");
+}
+
 export class ApiError extends Error {
   status: number;
   code: string;
@@ -26,11 +31,16 @@ export class ApiError extends Error {
 }
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const res = await fetch(`${BASE}/api/v1${path}`, {
-    method,
-    headers: { "Content-Type": "application/json", "X-AEGIS-User": userId() },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}/api/v1${path}`, {
+      method,
+      headers: { "Content-Type": "application/json", "X-AEGIS-User": userId() },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+  } catch {
+    throw new ApiError(0, "network", "Impossible de joindre le serveur. Vérifiez que le backend est démarré.");
+  }
   const text = await res.text();
   let data: any = null;
   try {
@@ -39,8 +49,9 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     data = null;
   }
   if (!res.ok) {
-    const e = data?.error || {};
-    throw new ApiError(res.status, e.code || "http_error", e.message || `Erreur HTTP ${res.status}`, e);
+    const e = data?.error || data?.detail || {};
+    const msg = e.message || (res.status >= 500 || res.status === 0 ? "Le serveur ne répond pas. Vérifiez que le backend est démarré." : `Erreur HTTP ${res.status}`);
+    throw new ApiError(res.status, e.code || "http_error", msg, e);
   }
   return data as T;
 }

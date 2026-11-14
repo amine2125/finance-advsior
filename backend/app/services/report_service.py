@@ -18,7 +18,7 @@ from .snapshot_service import compare
 def generate_report(tracker, owner: str, req: dict) -> dict:
     md = get_market_data()
     pf = ps.get_portfolio(owner, req["portfolio_id"])
-    persona = ps.get_persona(owner, req.get("persona_id") or pf.persona_id or "robert")
+    persona = ps.resolve_persona(owner, req.get("persona_id"), pf)
     tracker.add("report.compute", "quant_agent", "Calcul du rapport mensuel")
     tracker.start("report.compute")
     end = pd.Timestamp(req.get("end") or md.end_date)

@@ -25,7 +25,7 @@ def _hype(tracker, owner, req):
     asset_id = req["asset_id"]
     md.asset(asset_id)
     tracker.done("market_intelligence.resolve", asset_id)
-    persona = ps.get_persona(owner, req.get("persona_id") or "robert")
+    persona = ps.resolve_persona(owner, req.get("persona_id"))
     pf = ps.get_portfolio(owner, req["portfolio_id"]) if req.get("portfolio_id") else None
     res = investigate(md, asset_id, req.get("question") or f"Pourquoi {asset_id} attire-t-il l'attention ?", persona, pf,
                       req.get("amount_cad"), use_fixture=bool(req.get("use_fixture")), progress=tracker.progress_cb("market_intelligence_agent"))

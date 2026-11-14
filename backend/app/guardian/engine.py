@@ -85,7 +85,7 @@ def notify(alert: RiskAlert, persona, no_push: bool) -> str:
 def scan_portfolio(owner: str, portfolio_id: str, persona_id: str | None = None) -> dict:
     md = get_market_data()
     pf = ps.get_portfolio(owner, portfolio_id)
-    persona = ps.get_persona(owner, persona_id or pf.persona_id or "robert")
+    persona = ps.resolve_persona(owner, persona_id, pf)
     xr = run_xray(md, pf, persona)
     research = [r for r in get_store().list(owner, "HYPE", 30) if r.get("asset_id") in {h.asset_id for h in pf.holdings} | set(persona.watchlist)]
     latest: dict[str, dict] = {}

@@ -1,200 +1,174 @@
 import clsx from "clsx";
-import { AlertTriangle, CheckCircle2, CircleDashed, Info, Loader2, MinusCircle, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronDown, Circle, Info, Loader2, MinusCircle, XCircle } from "lucide-react";
 import { ReactNode, useState } from "react";
-import { AGENT_FR, CLAIM_FR, STATUS_FR, TIER_FR } from "../lib/format";
-import type { JobStep } from "../services/api";
+import { ApiError, JobStep } from "../services/api";
 
-export function Card({ title, subtitle, actions, children, className, accent }: { title?: ReactNode; subtitle?: ReactNode; actions?: ReactNode; children: ReactNode; className?: string; accent?: "teal" | "rose" | "violet" | "amber" }) {
+export function Button({ children, variant = "primary", size = "md", className, ...p }: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "primary" | "secondary" | "ghost" | "danger"; size?: "sm" | "md" | "lg" }) {
   return (
-    <section className={clsx("rounded-2xl border border-ink-700/70 bg-ink-900/70 backdrop-blur-sm p-5 shadow-[0_1px_0_rgba(255,255,255,0.03)_inset]",
-      accent === "teal" && "border-t-2 border-t-aegis-500/70", accent === "rose" && "border-t-2 border-t-rose-500/70",
-      accent === "violet" && "border-t-2 border-t-violet-500/70", accent === "amber" && "border-t-2 border-t-amber-500/70", className)}>
-      {(title || actions) && (
-        <header className="mb-4 flex items-start justify-between gap-3">
-          <div>
-            {title && <h2 className="text-[15px] font-semibold text-slate-100 tracking-tight">{title}</h2>}
-            {subtitle && <p className="mt-0.5 text-xs text-slate-400">{subtitle}</p>}
-          </div>
-          {actions}
-        </header>
+    <button
+      {...p}
+      className={clsx(
+        "inline-flex items-center justify-center gap-2 rounded-xl font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
+        size === "sm" && "px-3 py-1.5 text-sm",
+        size === "md" && "px-4 py-2.5 text-sm",
+        size === "lg" && "px-6 py-3.5 text-base",
+        variant === "primary" && "bg-brand-600 text-white shadow-sm hover:bg-brand-700",
+        variant === "secondary" && "border border-slate-200 bg-white text-slate-800 hover:bg-slate-50",
+        variant === "ghost" && "text-slate-600 hover:bg-slate-100 hover:text-slate-900",
+        variant === "danger" && "border border-rose-200 bg-white text-rose-700 hover:bg-rose-50",
+        className,
       )}
-      {children}
-    </section>
-  );
-}
-
-export function PageHeader({ title, subtitle, children }: { title: string; subtitle?: ReactNode; children?: ReactNode }) {
-  return (
-    <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-white">{title}</h1>
-        {subtitle && <p className="mt-1 max-w-3xl text-sm text-slate-400">{subtitle}</p>}
-      </div>
-      <div className="flex flex-wrap items-center gap-2">{children}</div>
-    </div>
-  );
-}
-
-export function Button({ children, onClick, variant = "primary", disabled, className, type = "button", title }: { children: ReactNode; onClick?: () => void; variant?: "primary" | "ghost" | "danger" | "subtle"; disabled?: boolean; className?: string; type?: "button" | "submit"; title?: string }) {
-  return (
-    <button type={type} title={title} onClick={onClick} disabled={disabled}
-      className={clsx("inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-sm font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-aegis-400 disabled:cursor-not-allowed disabled:opacity-50",
-        variant === "primary" && "bg-aegis-500 text-ink-950 hover:bg-aegis-400",
-        variant === "ghost" && "border border-ink-600 text-slate-200 hover:border-aegis-500/60 hover:text-white",
-        variant === "subtle" && "bg-ink-800 text-slate-200 hover:bg-ink-700",
-        variant === "danger" && "bg-rose-500/90 text-white hover:bg-rose-500", className)}>
+    >
       {children}
     </button>
   );
 }
 
-const tierColor: Record<string, string> = {
-  LOW: "bg-emerald-500/15 text-emerald-300 ring-emerald-500/30",
-  MEDIUM: "bg-amber-500/15 text-amber-300 ring-amber-500/30",
-  HIGH: "bg-rose-500/15 text-rose-300 ring-rose-500/30",
-  UNKNOWN: "bg-slate-500/15 text-slate-300 ring-slate-500/30",
-};
-export function TierBadge({ tier, className }: { tier?: string; className?: string }) {
-  const t = tier || "UNKNOWN";
-  return <span className={clsx("inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1", tierColor[t], className)}>Risque {TIER_FR[t] || t}</span>;
-}
-
-const sevColor: Record<string, string> = {
-  critical: "bg-rose-500/15 text-rose-300 ring-rose-500/40",
-  warning: "bg-amber-500/15 text-amber-300 ring-amber-500/40",
-  informational: "bg-sky-500/15 text-sky-300 ring-sky-500/40",
-};
-const sevFR: Record<string, string> = { critical: "Critique", warning: "Avertissement", informational: "Informatif" };
-export function SeverityBadge({ severity }: { severity: string }) {
-  return <span className={clsx("inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1", sevColor[severity] || sevColor.informational)}>{sevFR[severity] || severity}</span>;
-}
-
-const claimColor: Record<string, string> = {
-  VERIFIED: "bg-emerald-500/15 text-emerald-300 ring-emerald-500/40",
-  CORROBORATED: "bg-teal-500/15 text-teal-300 ring-teal-500/40",
-  DISPUTED: "bg-orange-500/15 text-orange-300 ring-orange-500/40",
-  UNVERIFIED: "bg-amber-500/15 text-amber-300 ring-amber-500/40",
-  FALSE_AS_SUPPORTED_BY_EVIDENCE: "bg-rose-500/15 text-rose-300 ring-rose-500/40",
-  UNKNOWN: "bg-slate-500/15 text-slate-300 ring-slate-500/40",
-  REPORTED: "bg-slate-500/15 text-slate-300 ring-slate-500/40",
-};
-export function ClaimBadge({ status }: { status: string }) {
-  return <span className={clsx("inline-flex whitespace-nowrap items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1", claimColor[status] || claimColor.UNKNOWN)}>{CLAIM_FR[status] || status}</span>;
-}
-
-const lensColor: Record<string, string> = {
-  COMPUTED: "bg-emerald-500/15 text-emerald-300 ring-emerald-500/40",
-  PARTIAL: "bg-teal-500/10 text-teal-200 ring-teal-500/30",
-  UNAVAILABLE: "bg-amber-500/10 text-amber-200 ring-amber-500/30 border-dashed",
-  NOT_APPLICABLE: "bg-slate-500/10 text-slate-400 ring-slate-500/30",
-  COVERED: "bg-emerald-500/15 text-emerald-300 ring-emerald-500/40",
-  NOT_COVERED_DATA_UNAVAILABLE: "bg-amber-500/10 text-amber-200 ring-amber-500/30",
-  NOT_COVERABLE: "bg-violet-500/10 text-violet-200 ring-violet-500/30",
-  OK: "bg-emerald-500/15 text-emerald-300 ring-emerald-500/40",
-  FIXTURE: "bg-fuchsia-500/15 text-fuchsia-200 ring-fuchsia-500/40",
-  NOT_CONNECTED: "bg-slate-500/10 text-slate-400 ring-slate-500/30",
-  BREACH: "bg-rose-500/15 text-rose-300 ring-rose-500/40",
-  ABOVE_BAND: "bg-rose-500/15 text-rose-300 ring-rose-500/40",
-  BELOW_BAND: "bg-amber-500/15 text-amber-300 ring-amber-500/40",
-};
-const lensFR: Record<string, string> = {
-  COMPUTED: "Calculé", PARTIAL: "Partiel", UNAVAILABLE: "Indisponible", NOT_APPLICABLE: "Non applicable", COVERED: "Couvert",
-  NOT_COVERED_DATA_UNAVAILABLE: "Non couvert – données indisponibles", NOT_COVERABLE: "Non couvrable", OK: "OK", FIXTURE: "Fixture fictive",
-  NOT_CONNECTED: "Non connecté", BREACH: "Dépassement", ABOVE_BAND: "Au-dessus de la bande", BELOW_BAND: "Sous la bande", UNKNOWN: "Inconnu",
-};
-export function StatusPill({ status }: { status: string }) {
-  return <span className={clsx("inline-flex whitespace-nowrap items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1", lensColor[status] || "bg-slate-500/10 text-slate-300 ring-slate-500/30")}>{lensFR[status] || status}</span>;
-}
-
-export function SupervisorStatus({ status }: { status?: string }) {
-  const color = status === "research-supported" ? "from-emerald-500/30 to-emerald-500/5 text-emerald-200 ring-emerald-400/40"
-    : status === "conflicts-with-persona-constraints" ? "from-rose-500/30 to-rose-500/5 text-rose-200 ring-rose-400/40"
-    : status === "insufficient-data" ? "from-slate-500/30 to-slate-500/5 text-slate-200 ring-slate-400/40"
-    : "from-amber-500/25 to-amber-500/5 text-amber-100 ring-amber-400/40";
-  return <span className={clsx("inline-flex items-center rounded-xl bg-gradient-to-r px-3 py-1 text-xs font-semibold ring-1", color)}>{STATUS_FR[status || ""] || status}</span>;
-}
-
-export function Metric({ label, value, hint, tone, id }: { label: string; value: ReactNode; hint?: ReactNode; tone?: "good" | "bad" | "warn"; id?: string }) {
+export function Card({ title, subtitle, action, children, className, pad = true }: { title?: ReactNode; subtitle?: ReactNode; action?: ReactNode; children?: ReactNode; className?: string; pad?: boolean }) {
   return (
-    <div className="rounded-xl border border-ink-700/60 bg-ink-850/70 p-3.5" title={id ? `Identifiant de calcul : ${id}` : undefined}>
-      <div className="text-[11px] uppercase tracking-wide text-slate-400">{label}</div>
-      <div className={clsx("mt-1 text-xl font-semibold tabular-nums", tone === "good" && "text-emerald-300", tone === "bad" && "text-rose-300", tone === "warn" && "text-amber-300", !tone && "text-white")}>{value}</div>
-      {hint && <div className="mt-1 text-[11px] text-slate-500">{hint}</div>}
+    <section className={clsx("rounded-2xl border border-slate-200 bg-white shadow-card", className)}>
+      {(title || action) && (
+        <header className="flex items-start justify-between gap-4 px-5 pt-5">
+          <div>
+            {title && <h2 className="text-[15px] font-semibold text-slate-900">{title}</h2>}
+            {subtitle && <p className="mt-0.5 text-sm text-slate-500">{subtitle}</p>}
+          </div>
+          {action}
+        </header>
+      )}
+      <div className={clsx(pad && "p-5", title && pad && "pt-4")}>{children}</div>
+    </section>
+  );
+}
+
+const TONES = {
+  neutral: "bg-slate-100 text-slate-700",
+  good: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200",
+  warn: "bg-amber-50 text-amber-800 ring-1 ring-amber-200",
+  bad: "bg-rose-50 text-rose-700 ring-1 ring-rose-200",
+  info: "bg-brand-50 text-brand-700 ring-1 ring-brand-100",
+};
+export type Tone = keyof typeof TONES;
+export function Badge({ tone = "neutral", children, className }: { tone?: Tone; children: ReactNode; className?: string }) {
+  return <span className={clsx("inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium", TONES[tone], className)}>{children}</span>;
+}
+
+export function Notice({ tone = "info", title, children, className }: { tone?: "info" | "warn" | "bad" | "good"; title?: ReactNode; children?: ReactNode; className?: string }) {
+  const Icon = tone === "warn" ? AlertTriangle : tone === "bad" ? XCircle : tone === "good" ? CheckCircle2 : Info;
+  return (
+    <div className={clsx("flex gap-3 rounded-xl p-3.5 text-sm",
+      tone === "info" && "bg-brand-50 text-brand-900", tone === "warn" && "bg-amber-50 text-amber-900",
+      tone === "bad" && "bg-rose-50 text-rose-900", tone === "good" && "bg-emerald-50 text-emerald-900", className)}>
+      <Icon className="mt-0.5 h-4 w-4 shrink-0" />
+      <div>{title && <div className="font-medium">{title}</div>}{children && <div className={clsx(title && "mt-0.5", "opacity-90")}>{children}</div>}</div>
     </div>
   );
 }
 
-export function Loading({ label = "Chargement…" }: { label?: string }) {
-  return <div className="flex items-center gap-2 py-8 text-sm text-slate-400"><Loader2 className="h-4 w-4 animate-spin" /> {label}</div>;
+export function Spinner({ label }: { label?: string }) {
+  return <div className="flex items-center gap-2 py-8 text-sm text-slate-500"><Loader2 className="h-4 w-4 animate-spin" /> {label || "Chargement…"}</div>;
 }
 
-export function ErrorBox({ error }: { error: any }) {
+export function ErrorBox({ error, onRetry }: { error: ApiError | Error | null | undefined; onRetry?: () => void }) {
   if (!error) return null;
   return (
-    <div className="flex items-start gap-2 rounded-xl border border-rose-500/40 bg-rose-500/10 p-3 text-sm text-rose-200">
-      <XCircle className="mt-0.5 h-4 w-4 shrink-0" />
-      <div><div className="font-medium">{error.message || "Erreur"}</div>{error.code && <div className="text-xs text-rose-300/70">code : {error.code}</div>}</div>
-    </div>
+    <Notice tone="bad" title="Un problème est survenu">
+      {error.message}
+      {onRetry && <button onClick={onRetry} className="ml-2 font-medium underline">Réessayer</button>}
+    </Notice>
   );
 }
 
-export function Empty({ children }: { children: ReactNode }) {
-  return <div className="rounded-xl border border-dashed border-ink-600 p-6 text-center text-sm text-slate-400">{children}</div>;
-}
-
-export function Notice({ children, tone = "info" }: { children: ReactNode; tone?: "info" | "warn" | "fixture" }) {
+export function Empty({ icon, title, children, action }: { icon?: ReactNode; title: string; children?: ReactNode; action?: ReactNode }) {
   return (
-    <div className={clsx("flex items-start gap-2 rounded-xl border p-3 text-xs leading-relaxed",
-      tone === "info" && "border-sky-500/30 bg-sky-500/5 text-sky-200", tone === "warn" && "border-amber-500/30 bg-amber-500/5 text-amber-100",
-      tone === "fixture" && "border-fuchsia-500/40 bg-fuchsia-500/10 text-fuchsia-100")}>
-      {tone === "info" ? <Info className="mt-0.5 h-4 w-4 shrink-0" /> : <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />}
-      <div>{children}</div>
+    <div className="flex flex-col items-center px-6 py-10 text-center">
+      {icon && <div className="mb-3 grid h-12 w-12 place-items-center rounded-2xl bg-brand-50 text-brand-600">{icon}</div>}
+      <h3 className="font-semibold text-slate-900">{title}</h3>
+      {children && <p className="mt-1 max-w-md text-sm text-slate-500">{children}</p>}
+      {action && <div className="mt-4">{action}</div>}
     </div>
   );
 }
 
-export function MetricRef({ id, ledger }: { id: string; ledger?: Record<string, any> }) {
+export function Stat({ label, value, hint, tone }: { label: string; value: ReactNode; hint?: ReactNode; tone?: Tone }) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-card">
+      <div className="text-xs font-medium text-slate-500">{label}</div>
+      <div className={clsx("mt-1 text-2xl font-semibold tracking-tight", tone === "bad" ? "text-rose-600" : tone === "warn" ? "text-amber-600" : tone === "good" ? "text-emerald-600" : "text-slate-900")}>{value}</div>
+      {hint && <div className="mt-1 text-xs text-slate-500">{hint}</div>}
+    </div>
+  );
+}
+
+/** "Comment c'est calculé ?" – every number can be opened to see its method, window and source. */
+export function Explain({ label = "Comment c'est calculé ?", children }: { label?: string; children: ReactNode }) {
   const [open, setOpen] = useState(false);
-  const m = ledger?.[id];
   return (
-    <span className="relative inline-block">
-      <button onClick={() => setOpen(!open)} className={clsx("rounded-md px-1.5 py-0.5 font-mono text-[10px] ring-1", m ? "bg-aegis-500/10 text-aegis-300 ring-aegis-500/30" : "bg-rose-500/10 text-rose-300 ring-rose-500/30")}>
-        {id}{m ? ` = ${m.display}` : " (inexistant)"}
+    <div className="mt-2">
+      <button onClick={() => setOpen(!open)} className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:text-brand-700">
+        <ChevronDown className={clsx("h-3.5 w-3.5 transition", open && "rotate-180")} /> {label}
       </button>
-      {open && m && (
-        <span className="absolute left-0 top-6 z-30 w-80 rounded-xl border border-ink-600 bg-ink-850 p-3 text-xs text-slate-300 shadow-2xl">
-          <span className="block font-semibold text-white">{m.label}</span>
-          <span className="mt-1 block">Valeur : <b>{m.display}</b> · {m.info_class}</span>
-          <span className="block">Méthode : {m.method}</span>
-          {m.window_start && <span className="block">Fenêtre : {m.window_start} → {m.window_end}</span>}
-          <span className="block">Sources : {(m.source_ids || []).join(", ")}</span>
-          {m.quality_flags?.length > 0 && <span className="block text-amber-300">Drapeaux : {m.quality_flags.join(", ")}</span>}
-          <span className="block text-slate-500">{m.calculation_version}</span>
-        </span>
-      )}
-    </span>
+      {open && <div className="mt-2 rounded-xl bg-slate-50 p-3 text-xs leading-relaxed text-slate-600">{children}</div>}
+    </div>
   );
 }
 
-const stepIcon = (s: JobStep["status"]) =>
-  s === "done" ? <CheckCircle2 className="h-4 w-4 text-emerald-400" /> : s === "running" ? <Loader2 className="h-4 w-4 animate-spin text-aegis-400" />
-    : s === "failed" ? <XCircle className="h-4 w-4 text-rose-400" /> : s === "skipped" ? <MinusCircle className="h-4 w-4 text-slate-500" /> : <CircleDashed className="h-4 w-4 text-slate-600" />;
-
-export function ActivityTimeline({ steps, compact }: { steps: JobStep[]; compact?: boolean }) {
-  if (!steps?.length) return null;
+export function Field({ label, hint, children }: { label: string; hint?: ReactNode; children: ReactNode }) {
   return (
-    <ol className="space-y-1.5">
+    <label className="block">
+      <span className="text-sm font-medium text-slate-800">{label}</span>
+      {hint && <span className="mt-0.5 block text-xs text-slate-500">{hint}</span>}
+      <div className="mt-1.5">{children}</div>
+    </label>
+  );
+}
+
+export const inputCls = "w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-100";
+
+export function Choice({ selected, onClick, title, desc, icon }: { selected: boolean; onClick: () => void; title: ReactNode; desc?: ReactNode; icon?: ReactNode }) {
+  return (
+    <button type="button" onClick={onClick}
+      className={clsx("flex w-full items-start gap-3 rounded-2xl border p-4 text-left transition",
+        selected ? "border-brand-500 bg-brand-50 ring-4 ring-brand-100" : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50")}>
+      {icon && <div className={clsx("grid h-9 w-9 shrink-0 place-items-center rounded-xl", selected ? "bg-brand-600 text-white" : "bg-slate-100 text-slate-600")}>{icon}</div>}
+      <div className="min-w-0">
+        <div className="font-medium text-slate-900">{title}</div>
+        {desc && <div className="mt-0.5 text-sm text-slate-500">{desc}</div>}
+      </div>
+    </button>
+  );
+}
+
+export function YesNo({ value, onChange }: { value: boolean | null | undefined; onChange: (v: boolean | null) => void }) {
+  const opt = (v: boolean | null, l: string) => (
+    <button type="button" onClick={() => onChange(v)}
+      className={clsx("rounded-lg px-3 py-1.5 text-sm font-medium transition", value === v ? "bg-brand-600 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200")}>{l}</button>
+  );
+  return <div className="flex gap-1.5">{opt(true, "Oui")}{opt(false, "Non")}{opt(null, "Je ne sais pas")}</div>;
+}
+
+const AGENT_FR: Record<string, string> = {
+  supervisor: "Superviseur", data_agent: "Données", quant_agent: "Calculs", hypothesis_agent: "Validation historique",
+  market_intelligence_agent: "Recherche", opportunity_agent: "Opportunités", risk_agent: "Risques", audit_agent: "Vérification",
+  persona_agent: "Profil", copilot: "Assistant", guardian: "Surveillance",
+};
+
+/** Real agent task states from the backend job (never an animation). */
+export function AgentSteps({ steps }: { steps: JobStep[] }) {
+  if (!steps?.length) return <Spinner label="Démarrage des agents…" />;
+  return (
+    <ol className="space-y-2">
       {steps.map((s) => (
-        <li key={s.step_id} className={clsx("flex items-start gap-2 rounded-lg px-2 py-1.5 text-xs", s.status === "running" && "bg-aegis-500/5")}>
-          <span className="mt-0.5">{stepIcon(s.status)}</span>
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-x-2">
-              <span className="font-medium text-slate-200">{s.label}</span>
-              <span className="text-[10px] text-slate-500">{AGENT_FR[s.agent_id] || s.agent_id}</span>
-              {s.latency_ms > 0 && <span className="text-[10px] text-slate-500">{(s.latency_ms / 1000).toFixed(1)} s</span>}
-              {s.input_tokens > 0 && <span className="text-[10px] text-violet-300/80">Bedrock · {s.input_tokens + s.output_tokens} jetons</span>}
-            </div>
-            {!compact && s.detail && <div className="truncate text-[11px] text-slate-500" title={s.detail || ""}>{s.detail}</div>}
+        <li key={s.step_id} className="flex items-start gap-2.5 text-sm">
+          {s.status === "done" ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
+            : s.status === "running" ? <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-brand-600" />
+              : s.status === "failed" ? <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-500" />
+                : s.status === "skipped" ? <MinusCircle className="mt-0.5 h-4 w-4 shrink-0 text-slate-300" />
+                  : <Circle className="mt-0.5 h-4 w-4 shrink-0 text-slate-300" />}
+          <div className="min-w-0">
+            <span className="text-slate-800">{s.label}</span>
+            <span className="ml-1.5 text-xs text-slate-400">· {AGENT_FR[s.agent_id] || s.agent_id}</span>
+            {s.detail && s.status !== "pending" && <div className="truncate text-xs text-slate-500">{s.detail}</div>}
           </div>
         </li>
       ))}
@@ -202,37 +176,22 @@ export function ActivityTimeline({ steps, compact }: { steps: JobStep[]; compact
   );
 }
 
-export function Table({ head, rows, className }: { head: ReactNode[]; rows: ReactNode[][]; className?: string }) {
+export function Disclaimer() {
   return (
-    <div className={clsx("overflow-x-auto", className)}>
-      <table className="w-full text-left text-xs">
-        <thead><tr className="border-b border-ink-700 text-[11px] uppercase tracking-wide text-slate-400">{head.map((h, i) => <th key={i} className="px-2 py-2 font-medium">{h}</th>)}</tr></thead>
-        <tbody>{rows.map((r, i) => <tr key={i} className="border-b border-ink-800/80 last:border-0 hover:bg-ink-800/40">{r.map((c, j) => <td key={j} className="px-2 py-2 align-top text-slate-300">{c}</td>)}</tr>)}</tbody>
-      </table>
+    <p className="text-xs leading-relaxed text-slate-400">
+      Aucune transaction réelle n'est exécutée · ceci n'est pas un conseil financier personnalisé · le passé ne garantit pas l'avenir.
+    </p>
+  );
+}
+
+export function PageTitle({ title, subtitle, action }: { title: string; subtitle?: ReactNode; action?: ReactNode }) {
+  return (
+    <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">{title}</h1>
+        {subtitle && <p className="mt-1 max-w-2xl text-sm text-slate-500">{subtitle}</p>}
+      </div>
+      {action}
     </div>
   );
-}
-
-export function Select({ value, onChange, options, className, label }: { value: string; onChange: (v: string) => void; options: { value: string; label: string }[]; className?: string; label?: string }) {
-  return (
-    <label className={clsx("flex flex-col gap-1 text-xs text-slate-400", className)}>
-      {label}
-      <select value={value} onChange={(e) => onChange(e.target.value)} className="rounded-xl border border-ink-600 bg-ink-850 px-3 py-2 text-sm text-slate-100 focus:border-aegis-500 focus:outline-none">
-        {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-      </select>
-    </label>
-  );
-}
-
-export function Input({ value, onChange, label, type = "text", placeholder, className, step }: { value: string | number; onChange: (v: string) => void; label?: string; type?: string; placeholder?: string; className?: string; step?: string }) {
-  return (
-    <label className={clsx("flex flex-col gap-1 text-xs text-slate-400", className)}>
-      {label}
-      <input type={type} step={step} value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} className="rounded-xl border border-ink-600 bg-ink-850 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600 focus:border-aegis-500 focus:outline-none" />
-    </label>
-  );
-}
-
-export function Disclaimer() {
-  return <p className="text-[11px] leading-relaxed text-slate-500">Simulation et éducation uniquement. AEGIS n'exécute aucune transaction, ne fournit pas de conseil en placement personnalisé et ne prédit pas les rendements futurs.</p>;
 }

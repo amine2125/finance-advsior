@@ -1,4 +1,6 @@
-"""Seed data: the three official datathon personas and the demonstration portfolios (fictional)."""
+"""Reference cases from the official datathon brief (fictional personas). NEVER auto-loaded: the app starts empty and
+builds the profile from the user's own answers. These are only loaded when the user explicitly asks for a reference
+case (POST /api/v1/reference-cases/{id}/load), e.g. to compare two contrasting investors in a demo, and in tests."""
 from __future__ import annotations
 
 from ..models import InvestorProfile, RiskBudget
@@ -6,7 +8,7 @@ from ..models import InvestorProfile, RiskBudget
 TOLERANCE_NOTE = ("valeur de démonstration dérivée du profil de risque déclaré dans le cas officiel; "
                   "modifiable dans Paramètres")
 
-OFFICIAL_PERSONAS: list[InvestorProfile] = [
+REFERENCE_PERSONAS: list[InvestorProfile] = [
     InvestorProfile(
         persona_id="amira", display_name="Amira", age=26, risk_profile_label="Élevé",
         horizon_years_min=15, horizon_years_max=None, objective="Croissance du capital à long terme",
@@ -30,7 +32,7 @@ OFFICIAL_PERSONAS: list[InvestorProfile] = [
         budget=RiskBudget(growth_min=0.55, growth_max=0.70, max_single_issuer=0.10, max_single_sector=0.30,
                           max_speculative=0.05, drawdown_review=-0.20,
                           binding_constraint_note="Filtre ESG et équilibre"),
-        watchlist=["ESGU", "XESG.TO"], is_official=True),
+        watchlist=["ESGV", "XBB.TO"], is_official=True),
     InvestorProfile(
         persona_id="robert", display_name="Robert", age=59, risk_profile_label="Faible à modéré",
         horizon_years_min=3, horizon_years_max=5, objective="Préservation du capital avec un peu de croissance",
@@ -45,20 +47,19 @@ OFFICIAL_PERSONAS: list[InvestorProfile] = [
         watchlist=["BTC-USD", "NVDA", "TSLA"], is_official=True),
 ]
 
-# Demo portfolios are defined by CAD amounts converted to simulated (fractional) quantities at the dataset end date.
-DEMO_PORTFOLIOS = [
-    {"demo_id": "demo1_tech", "name": "Démo 1 – « Quatre placements » (concentration cachée)", "persona_id": "robert",
-     "holdings": [{"asset_id": "NVDA", "amount_cad": 3000}, {"asset_id": "MSFT", "amount_cad": 2500},
-                  {"asset_id": "QQQ", "amount_cad": 2500}, {"asset_id": "SPY", "amount_cad": 2000}]},
-    {"demo_id": "demo2_growth", "name": "Démo 2 – Portefeuille croissance (Amira vs Robert)", "persona_id": "amira",
-     "holdings": [{"asset_id": "NVDA", "amount_cad": 2000}, {"asset_id": "MSFT", "amount_cad": 1500},
-                  {"asset_id": "SHOP.TO", "amount_cad": 1000}, {"asset_id": "QQQ", "amount_cad": 2500},
-                  {"asset_id": "VEA", "amount_cad": 1500}, {"asset_id": "XIU.TO", "amount_cad": 800},
-                  {"asset_id": "BTC-USD", "amount_cad": 700}],
-     "target_weights": {"NVDA": 0.15, "MSFT": 0.15, "SHOP.TO": 0.10, "QQQ": 0.25, "VEA": 0.15, "XIU.TO": 0.12, "BTC-USD": 0.08}},
-    {"demo_id": "demo3_robert", "name": "Démo 3 – Portefeuille prudent de Robert", "persona_id": "robert",
-     "holdings": [{"asset_id": "XBB.TO", "amount_cad": 35000}, {"asset_id": "AGG", "amount_cad": 20000},
-                  {"asset_id": "XIU.TO", "amount_cad": 20000}, {"asset_id": "SPY", "amount_cad": 15000},
-                  {"asset_id": "RY.TO", "amount_cad": 4000}, {"asset_id": "JNJ", "amount_cad": 3000},
-                  {"asset_id": "GLD", "amount_cad": 3000}]},
-]
+# Example fictional portfolios for the reference cases (official starter universe tickers only; CAD amounts are
+# converted to simulated quantities at the dataset end date).
+REFERENCE_PORTFOLIOS = {
+    "robert": {"name": "Exemple – quatre placements « populaires »",
+               "holdings": [{"asset_id": "NVDA", "amount_cad": 3000}, {"asset_id": "MSFT", "amount_cad": 2500},
+                            {"asset_id": "QQQ", "amount_cad": 2500}, {"asset_id": "SPY", "amount_cad": 2000}]},
+    "amira": {"name": "Exemple – portefeuille croissance",
+              "holdings": [{"asset_id": "NVDA", "amount_cad": 2000}, {"asset_id": "MSFT", "amount_cad": 1500},
+                           {"asset_id": "SHOP.TO", "amount_cad": 1000}, {"asset_id": "QQQ", "amount_cad": 2500},
+                           {"asset_id": "XIU.TO", "amount_cad": 1500}, {"asset_id": "ESGV", "amount_cad": 800},
+                           {"asset_id": "BTC-USD", "amount_cad": 700}]},
+    "mateo": {"name": "Exemple – portefeuille équilibré",
+              "holdings": [{"asset_id": "ESGV", "amount_cad": 3500}, {"asset_id": "XIU.TO", "amount_cad": 1500},
+                           {"asset_id": "XBB.TO", "amount_cad": 2500}, {"asset_id": "AGG", "amount_cad": 1500},
+                           {"asset_id": "FTS.TO", "amount_cad": 500}, {"asset_id": "CNR.TO", "amount_cad": 500}]},
+}

@@ -19,7 +19,7 @@ export const SECTOR_FR: Record<string, string> = {
   "Communication Services": "Services de communication",
   Materials: "Matériaux",
   "Real Estate": "Immobilier",
-  Diversified: "FNB diversifiés (non reclassés)",
+  Diversified: "Fonds indiciels (FNB) diversifiés",
   "Fixed Income": "Revenu fixe",
   Commodities: "Matières premières (or)",
   Cryptoassets: "Cryptoactifs",

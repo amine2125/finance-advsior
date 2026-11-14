@@ -2,14 +2,13 @@
 @tailwind components;
 @tailwind utilities;
 
-html { color-scheme: dark; }
-::selection { background: rgba(45, 212, 191, 0.35); }
-::-webkit-scrollbar { width: 10px; height: 10px; }
-::-webkit-scrollbar-thumb { background: #1e2a47; border-radius: 8px; }
-.prose-aegis p { margin: 0.45rem 0; }
-.prose-aegis ul { list-style: disc; padding-left: 1.2rem; margin: 0.4rem 0; }
-.prose-aegis ol { list-style: decimal; padding-left: 1.2rem; margin: 0.4rem 0; }
-.prose-aegis table { width: 100%; font-size: 12px; margin: 0.5rem 0; border-collapse: collapse; }
-.prose-aegis th, .prose-aegis td { border-bottom: 1px solid #1e2a47; padding: 4px 6px; text-align: left; }
-.prose-aegis strong { color: #fff; }
-.prose-aegis h3, .prose-aegis h4 { color: #e2e8f0; font-weight: 600; margin-top: 0.6rem; }
+html { color-scheme: light; }
+body { font-feature-settings: "cv11", "ss01"; }
+::selection { background: #dbe6fe; }
+.prose-chat p { margin: 0.4rem 0; }
+.prose-chat ul { list-style: disc; padding-left: 1.2rem; margin: 0.35rem 0; }
+.prose-chat ol { list-style: decimal; padding-left: 1.2rem; margin: 0.35rem 0; }
+.prose-chat strong { color: #0f172a; font-weight: 600; }
+.prose-chat h3, .prose-chat h4 { font-weight: 600; margin-top: 0.6rem; }
+.prose-chat table { width: 100%; font-size: 13px; margin: 0.5rem 0; border-collapse: collapse; }
+.prose-chat th, .prose-chat td { border-bottom: 1px solid #e2e8f0; padding: 4px 6px; text-align: left; }

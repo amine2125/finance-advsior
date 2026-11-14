@@ -18,7 +18,12 @@ def env(md, fresh_store):
     stub = ScriptedLLM()
     llm_mod.set_llm(stub)
     from app.main import app
-    yield TestClient(app), stub
+    client = TestClient(app)
+    from app.services.seed import REFERENCE_PERSONAS
+    for hdr in (H, H2):  # the app is empty by default: tests create their profiles explicitly
+        for p in REFERENCE_PERSONAS:
+            assert client.post("/api/v1/personas", headers=hdr, json=p.model_dump(mode="json")).status_code == 200
+    yield client, stub
     llm_mod.set_llm(None)
     registry.reset_market_data(None)
 

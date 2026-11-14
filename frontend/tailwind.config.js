@@ -5,10 +5,9 @@ export default {
     extend: {
       fontFamily: { sans: ["Inter", "ui-sans-serif", "system-ui", "-apple-system", "Segoe UI", "Roboto", "sans-serif"] },
       colors: {
-        ink: { 950: "#070b14", 900: "#0b1220", 850: "#0f172a", 800: "#141d33", 700: "#1e2a47", 600: "#2a3a5f" },
-        aegis: { 400: "#5eead4", 500: "#2dd4bf", 600: "#14b8a6" },
+        brand: { 50: "#eef4ff", 100: "#dbe6fe", 200: "#bfd3fe", 500: "#3b6cf6", 600: "#2552e0", 700: "#1d42b8", 900: "#152a6b" },
       },
-      boxShadow: { glow: "0 0 0 1px rgba(45,212,191,.25), 0 8px 30px -12px rgba(45,212,191,.35)" },
+      boxShadow: { card: "0 1px 2px rgba(16,24,40,.04), 0 1px 3px rgba(16,24,40,.06)", lift: "0 8px 24px -8px rgba(16,24,40,.14)" },
     },
   },
   plugins: [],

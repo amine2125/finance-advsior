@@ -64,6 +64,28 @@ METHODOLOGY: dict = {
                      "interest_coverage_fragile": 2.0, "altman_safe": 2.99, "altman_distress": 1.81,
                      "altman_zpp_safe": 2.6, "altman_zpp_distress": 1.1, "beneish_flag": -1.78,
                      "kind": "practitioner conventions, configurable"},
+    "profile_builder": {
+        "kind": "heuristic mapping from the investor's own answers; demonstration only, not a suitability assessment",
+        "levels": ["prudent", "low_moderate", "moderate", "high"],
+        # stated bearable decline: <=10 % prudent, <=20 % low_moderate, <=30 % moderate, >30 % high
+        "decline_cutoffs": [0.10, 0.20, 0.30],
+        "reaction_adjustment": {"sell_all": -1, "sell_some": 0, "hold": 0, "buy_more": 0},
+        "objective_cap": {"preserve": 0, "income": 1, "balanced": 2, "growth": 3},
+        # horizon: <3 y prudent max, 3-7 y low_moderate max, 7-12 y moderate max, >=12 y high allowed
+        "horizon_cutoffs_years": [3, 7, 12],
+        "budgets": {
+            "prudent": {"growth_min": 0.10, "growth_max": 0.30, "max_single_issuer": 0.05, "max_single_sector": 0.20,
+                        "max_speculative": 0.0, "drawdown_review": -0.08},
+            "low_moderate": {"growth_min": 0.30, "growth_max": 0.45, "max_single_issuer": 0.05, "max_single_sector": 0.25,
+                             "max_speculative": 0.02, "drawdown_review": -0.10},
+            "moderate": {"growth_min": 0.55, "growth_max": 0.70, "max_single_issuer": 0.10, "max_single_sector": 0.30,
+                         "max_speculative": 0.05, "drawdown_review": -0.20},
+            "high": {"growth_min": 0.80, "growth_max": 0.95, "max_single_issuer": 0.15, "max_single_sector": 0.40,
+                     "max_speculative": 0.10, "drawdown_review": -0.30},
+        },
+        "benchmark": {"prudent": "BLEND_CONSERVATIVE", "low_moderate": "BLEND_CONSERVATIVE", "moderate": "BLEND_BALANCED",
+                      "high": "BLEND_GROWTH"},
+    },
     "sharpe_overfit_flag": 1.5,
     "debate": {"max_rounds": 2, "permitted_followup_tests": [
         "stress_shock", "stressed_correlation", "rolling_correlation", "risk_contribution",

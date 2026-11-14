@@ -20,10 +20,8 @@ from . import rules
 from .engine import candidates_to_alerts
 
 GUIDED = {
-    "tech_2022": {"title": "Concentration technologique pendant le repli de 2022", "start": "2022-03-01", "end": "2022-12-30",
-                  "portfolio_id": "demo1_tech"},
-    "growth_2022_personas": {"title": "Même portefeuille croissance: Amira vs Robert (2022)", "start": "2022-03-01", "end": "2022-12-30",
-                             "portfolio_id": "demo2_growth"},
+    "bear_2022": {"title": "Le repli de 2022 : actions et obligations en baisse ensemble", "start": "2022-03-01", "end": "2022-12-30"},
+    "recovery_2023": {"title": "La reprise de 2023", "start": "2023-01-02", "end": "2023-12-29"},
 }
 
 
@@ -32,10 +30,10 @@ def run_replay(tracker, owner: str, req: dict) -> dict:
     guided = GUIDED.get(req.get("guided") or "")
     start = req.get("start") or (guided or {}).get("start") or "2022-03-01"
     end = req.get("end") or (guided or {}).get("end") or "2022-12-30"
-    pid = req.get("portfolio_id") or (guided or {}).get("portfolio_id") or "demo1_tech"
+    pid = req.get("portfolio_id")
     step_days = int(req.get("step_days") or METHODOLOGY["guardian"]["scan_step_days"])
-    pf = ps.get_portfolio(owner, pid)
-    persona = ps.get_persona(owner, req.get("persona_id") or pf.persona_id or "robert")
+    pf = ps.resolve_portfolio(owner, pid)
+    persona = ps.resolve_persona(owner, req.get("persona_id"), pf)
     replay_id = new_id("rpl")
     tracker.add("guardian.replay", "guardian", f"Rejeu historique {start} → {end}")
     tracker.start("guardian.replay")

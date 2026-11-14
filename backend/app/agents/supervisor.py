@@ -78,7 +78,7 @@ def run_debate(tracker: JobTracker, owner: str, req: dict) -> dict:
     # 1. plan
     tracker.start("supervisor.plan")
     pf = ps.get_portfolio(owner, req["portfolio_id"])
-    persona = ps.get_persona(owner, req.get("persona_id") or pf.persona_id or "robert")
+    persona = ps.resolve_persona(owner, req.get("persona_id"), pf)
     asset_id = (req.get("asset_id") or "").upper() or None
     if asset_id and not md.has_asset(asset_id):
         raise ValueError(f"actif {asset_id} absent de l'univers")

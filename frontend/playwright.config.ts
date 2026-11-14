@@ -7,7 +7,7 @@ export default defineConfig({
   testMatch: /.*\.spec\.ts/,
   timeout: 300_000,
   expect: { timeout: 30_000 },
-  use: { baseURL: process.env.AEGIS_URL || "http://127.0.0.1:5173", viewport: { width: 1600, height: 1000 }, screenshot: "only-on-failure" },
+  use: { baseURL: process.env.AEGIS_URL || "http://127.0.0.1:5173", viewport: { width: 1280, height: 860 }, screenshot: "only-on-failure" },
   reporter: [["list"]],
   workers: 1,
 });

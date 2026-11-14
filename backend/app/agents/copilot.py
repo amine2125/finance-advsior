@@ -29,6 +29,8 @@ from .prompts import COPILOT_SYSTEM
 from .quant_agent import compare_alternatives
 
 TOOLS = [
+    {"name": "check_investment", "description": "À utiliser EN PREMIER pour toute question « puis-je / devrais-je investir X $ dans Y ? ». Verdict déterministe de compatibilité avec le profil de l'utilisateur et son portefeuille (compatible / compatible jusqu'à un montant maximal / non adapté) avec les raisons chiffrées (préférences, horizon, limites du profil).",
+     "schema": {"type": "object", "properties": {"asset_id": {"type": "string"}, "amount_cad": {"type": "number"}}, "required": ["asset_id", "amount_cad"]}},
     {"name": "portfolio_xray", "description": "Radiographie du portefeuille simulé actif: valeur, poids, secteurs, concentration, volatilité, perte max, VaR, corrélations, budget de risque du profil.",
      "schema": {"type": "object", "properties": {}, "required": []}},
     {"name": "asset_analysis", "description": "Analyse d'un actif de l'univers (asset_id = symbole, ex. NVDA, BTC-USD, XIU.TO): niveau de risque calculé, lentilles 1 à 6 (statuts honnêtes), matrice de couverture des modes d'échec.",
@@ -133,6 +135,20 @@ class ToolBox:
         return {"scenario": SHOCK_PRESETS[preset]["name"], "metrics": self._m([f"scn.{n}.return", f"scn.{n}.pnl"]), "label": r["label"],
                 "_summary": f"{r['return'] * 100:.1f} %"}
 
+    def t_check_investment(self, asset_id: str, amount_cad: float):
+        from ..services.invest_service import check_investment
+        asset_id = self._resolve(asset_id).upper()
+        r = check_investment(self.md, self.persona, self.pf, asset_id, float(amount_cad))
+        self.led.add("inv.amount", "Montant envisagé", float(amount_cad), "cad", "saisie de l'utilisateur", info_class="HYPOTHETICAL")
+        self.led.add("inv.max_amount", f"Montant maximal compatible avec le profil – {asset_id}", r["max_amount_cad"], "cad",
+                     "recherche dichotomique: plus grand montant sans nouvelle limite dépassée", info_class="HYPOTHETICAL")
+        if r.get("after") and r["after"].get("weight") is not None:
+            self.led.add(f"inv.weight_after.{asset_id}", f"Poids de {asset_id} après l'ajout envisagé", r["after"]["weight"], "pct", "valeur_i / total", info_class="HYPOTHETICAL")
+        self.cards.append({"type": "invest_check", "asset_id": asset_id, "amount_cad": amount_cad, "verdict": r["verdict"]})
+        return {"verdict": r["verdict"], "headline": r["headline"], "reasons": [x["text"] for x in r["reasons"]],
+                "metrics": self._m(["inv.amount", "inv.max_amount", f"inv.weight_after.{asset_id}"]), "allowed_tier": r["allowed_tier"],
+                "asset_tier": r["asset_tier"]["tier"], "existing_breaches": r["existing_breaches"], "_summary": r["verdict"]}
+
     def t_hypothetical_addition(self, asset_id: str, amount_cad: float):
         asset_id = self._resolve(asset_id)
         imp, led = hypothetical_addition(self.md, self.pf, self.persona, asset_id.upper(), float(amount_cad),
@@ -184,8 +200,8 @@ def run_chat(tracker: JobTracker, owner: str, req: dict) -> dict:
     s = get_settings()
     md = get_market_data()
     message = (req.get("message") or "").strip()[:2000]
-    pf = ps.get_portfolio(owner, req.get("portfolio_id") or "demo1_tech")
-    persona = ps.get_persona(owner, req.get("persona_id") or pf.persona_id or "robert")
+    pf = ps.resolve_portfolio(owner, req.get("portfolio_id"))
+    persona = ps.resolve_persona(owner, req.get("persona_id"), pf)
     conv_id = req.get("conversation_id") or new_id("conv")
     conv = get_store().get(owner, "CONV", conv_id) or {"conversation_id": conv_id, "messages": [], "created_at": utcnow()}
     tracker.add("copilot.understand", "copilot", "Compréhension de la question")

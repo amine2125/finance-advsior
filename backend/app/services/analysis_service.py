@@ -253,10 +253,18 @@ def build_findings(led: MetricLedger, weights, meta, ex, pairs, pos, h) -> list[
                                         title="Lignes en double : " + ", ".join(dup), detail="Même actif saisi plusieurs fois; regroupé.",
                                         assets=dup, metric_ids=[f"pf.weight.{a}" for a in dup]))
     if h >= cfg["hhi_warning"]:
-        out.append(ConcentrationFinding(finding_id="f.hhi", kind="hhi", severity=Severity.WARNING if h < cfg["hhi_critical"] else Severity.CRITICAL,
-                                        title=f"HHI {h:.3f} – {1 / h:.1f} positions effectives".replace(".", ","),
-                                        detail="Le nombre effectif de positions mesure la diversification réelle des poids.", assets=list(weights),
-                                        metric_ids=["pf.hhi", "pf.effective_n"]))
+        # HHI over line weights only signals concentration when the big lines are single issuers or crypto: a broad index
+        # fund already holds hundreds of companies, so a few large fund lines are reported as information, not a warning.
+        big = max(weights, key=weights.get)
+        concentrated = meta[big]["is_single_issuer"] or meta[big]["asset_class"] == "crypto"
+        sev = (Severity.WARNING if h < cfg["hhi_critical"] else Severity.CRITICAL) if concentrated else Severity.INFO
+        detail = ("Indice de concentration HHI " + f"{h:.3f}".replace(".", ",") + " : vos plus grosses lignes sont des titres individuels, "
+                  "donc une mauvaise nouvelle sur une seule entreprise pèserait lourd.") if concentrated else (
+                  "Indice de concentration HHI " + f"{h:.3f}".replace(".", ",") + " : vos plus grosses lignes sont des fonds diversifiés, "
+                  "qui contiennent eux-mêmes de nombreux titres.")
+        out.append(ConcentrationFinding(finding_id="f.hhi", kind="hhi", severity=sev,
+                                        title=f"Votre argent est réparti sur l'équivalent de {1 / h:.1f} placements de même poids".replace(".", ","),
+                                        detail=detail, assets=list(weights), metric_ids=["pf.hhi", "pf.effective_n"]))
     usd = ex["currency"].get("USD", 0)
     if usd >= 0.5:
         out.append(ConcentrationFinding(finding_id="f.currency", kind="currency", severity=Severity.INFO,

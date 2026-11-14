@@ -196,12 +196,14 @@ def rolling_avg_corr(returns: pd.DataFrame, weights: dict[str, float], window: i
 def risk_free_rate(md: MarketData, start: str, end: str) -> dict:
     if md.macro.empty:
         return {"value": 0.0, "source_id": None, "note": "taux sans risque indisponible: 0 utilisé"}
-    m = md.macro[(md.macro["series_id"] == "CA_TBILL_3M") & (md.macro["date"] >= start) & (md.macro["date"] <= end)
-                 & (md.macro["pit_safe"] == 1)]
-    if m.empty:
-        return {"value": 0.0, "source_id": None, "note": "taux sans risque indisponible: 0 utilisé"}
-    return {"value": float(m["value"].mean()) / 100, "source_id": str(m["source_id"].iloc[0]),
-            "note": "moyenne du bon du Trésor canadien 3 mois sur la fenêtre"}
+    labels = {"CA_TBILL_3M": "bon du Trésor canadien 3 mois", "CA_POLICY_RATE": "taux directeur de la Banque du Canada"}
+    for sid, label in labels.items():  # first available, point-in-time safe series wins
+        m = md.macro[(md.macro["series_id"] == sid) & (md.macro["date"] >= start) & (md.macro["date"] <= end)
+                     & (md.macro["pit_safe"] == 1)]
+        if not m.empty:
+            return {"value": float(m["value"].mean()) / 100, "source_id": str(m["source_id"].iloc[0]),
+                    "note": f"moyenne du {label} sur la fenêtre", "series_id": sid}
+    return {"value": 0.0, "source_id": None, "note": "taux sans risque indisponible: 0 utilisé"}
 
 
 def portfolio_risk_metrics(md: MarketData, weights: dict[str, float], as_of: pd.Timestamp,
