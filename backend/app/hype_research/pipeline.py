@@ -56,6 +56,14 @@ def resolve_asset(md: MarketData, query: str) -> dict:
             "message": f"« {q} » n'est pas dans l'univers du jeu de données; aucune analyse de risque ne peut être calculée sans historique."}
 
 
+def _relevance_terms(md: MarketData, asset_id: str) -> list[str]:
+    row = md.asset(asset_id)
+    base = re.sub(r"\b(inc|corp|corporation|class a|ltd|plc|co)\b\.?", "", str(row["name"]), flags=re.IGNORECASE).strip(" .,&").lower()
+    terms = {base, base.split(" ")[0], asset_id.split(".")[0].split("-")[0].lower()}
+    terms |= {a.strip().lower() for a in str(row.get("aliases") or "").split(";") if a.strip()}
+    return sorted(t for t in terms if len(t) >= 3)
+
+
 def _news_query(name: str, asset_id: str) -> str:
     base = re.sub(r"\b(inc|corp|corporation|class a|ltd|plc|co)\b\.?", "", name, flags=re.IGNORECASE).strip(" .,&")
     return f'"{base}"'
@@ -95,6 +103,12 @@ def run_research(md: MarketData, asset_id: str, question: str, persona: Investor
         timeline = tool.news_timeline(_news_query(name, asset_id), days=90) if articles is not None else None
     news_status = "fixture" if use_fixture else ("ok" if articles is not None else "unavailable")
     articles = articles or []
+    off_topic = 0
+    if not use_fixture and articles:
+        terms = _relevance_terms(md, asset_id)
+        kept = [a for a in articles if any(t in (a.get("title") or "").lower() for t in terms)]
+        off_topic = len(articles) - len(kept)
+        articles = kept
     evidence += articles
     step("market_intelligence.sources", "done", f"{len(evidence)} éléments de preuve")
     step("market_intelligence.dedup", "running", "Déduplication des reprises et extraction des affirmations")
@@ -180,7 +194,7 @@ def run_research(md: MarketData, asset_id: str, question: str, persona: Investor
         "is_fixture": use_fixture, "fixture_label": FIXTURE_LABEL if use_fixture else None,
         "identity": {"asset_id": asset_id, "name": name, "exchange": meta.get("exchange"), "currency": meta["currency"],
                      "cik": meta.get("cik") or None, "coingecko_id": meta.get("coingecko_id") or None},
-        "evidence": evidence, "clusters": clusters, "independence": indep, "claims": claims, "extraction": extraction, "events": events,
+        "evidence": evidence, "clusters": clusters, "independence": indep | {"off_topic_filtered": off_topic}, "claims": claims, "extraction": extraction, "events": events,
         "attention": att, "search_trending": trending, "divergence": divergence, "market_live": cg_snap,
         "lenses": lenses["lenses"], "tier": lenses["tier"], "coverage_matrix": coverage, "status_rule": rule, "stop_flags": flags,
         "portfolio_impact": impact, "biases": biases, "forecast_policy": forecast, "tool_calls": calls,

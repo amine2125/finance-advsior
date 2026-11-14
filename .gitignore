@@ -34,3 +34,9 @@ infrastructure/lib/*.js
 .DS_Store
 .idea/
 .vscode/
+
+# Test artefacts and deploy outputs
+frontend/test-results/
+frontend/playwright-report/
+infrastructure/cdk-outputs.json
+infrastructure/cdk-ts-out/

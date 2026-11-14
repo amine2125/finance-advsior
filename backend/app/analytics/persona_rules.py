@@ -1,6 +1,7 @@
 """Sections 7A.3, 7A.4, 7A.6: horizon rule, persona risk budgets and error checks (inspectable rules)."""
 from __future__ import annotations
 
+from ..i18n import sector_fr
 from ..methodology import METHODOLOGY
 from ..models import TIER_ORDER, BudgetCheck, InvestorProfile, RiskTier
 
@@ -103,9 +104,9 @@ def budget_checks(p: InvestorProfile, weights: dict[str, float], meta: dict[str,
         top_s = max(sectors, key=sectors.get)
         st = "BREACH" if sectors[top_s] > b.max_single_sector + 1e-9 else "OK"
         checks.append(BudgetCheck(rule_id="budget.single_sector", label="Secteur unique maximal (titres directs)",
-                                  limit=_pct(b.max_single_sector), measured=f"{_pct(sectors[top_s])} ({top_s})",
+                                  limit=_pct(b.max_single_sector), measured=f"{_pct(sectors[top_s])} ({sector_fr(top_s)})",
                                   measured_value=sectors[top_s], status=st,
-                                  message=(f"Exposition directe {top_s} {_pct(sectors[top_s])} > plafond {_pct(b.max_single_sector)}; "
+                                  message=(f"Exposition directe {sector_fr(top_s)} {_pct(sectors[top_s])} > plafond {_pct(b.max_single_sector)}; "
                                            "les FNB ne sont pas inclus (composition non vérifiée)" if st == "BREACH"
                                            else "Sous le plafond (exposition directe; FNB exclus faute de composition vérifiée)")))
     spec = sum(w for a, w in weights.items() if meta[a]["asset_class"] == "crypto" or a in speculative_extra)

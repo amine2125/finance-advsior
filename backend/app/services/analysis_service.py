@@ -9,6 +9,7 @@ from ..analytics.persona_rules import TIER_FR, allowed_tier, budget_checks, erro
 from ..analytics.portfolio import (asset_correlation_pairs, exposures, hhi, portfolio_risk_metrics, value_holdings)
 from ..analytics.tiers import classify_risk_tier, tier_from_stats
 from ..data.loader import MarketData
+from ..i18n import sector_fr
 from ..ids import new_id
 from ..methodology import CALCULATION_VERSION, METHODOLOGY, methodology_hash
 from ..models import (AnalysisSnapshot, ConcentrationFinding, InfoClass, InvestorProfile, PersonaAssessment, Portfolio,
@@ -227,7 +228,7 @@ def build_findings(led: MetricLedger, weights, meta, ex, pairs, pos, h) -> list[
         if direct_sectors[s] >= cfg["sector_warning_default"]:
             out.append(ConcentrationFinding(finding_id="f.sector", kind="sector",
                                             severity=Severity.WARNING if direct_sectors[s] < 0.5 else Severity.CRITICAL,
-                                            title=f"Secteur {s} : {_pct(direct_sectors[s])} en détention directe",
+                                            title=f"Secteur {sector_fr(s)} : {_pct(direct_sectors[s])} en détention directe",
                                             detail="Exposition sectorielle directe uniquement; les FNB ne sont pas reclassés sans composition vérifiée.",
                                             assets=[a for a in weights if meta[a]["sector"] == s], metric_ids=[f"pf.sector.{s.replace(' ', '_')}"]))
     eq_etfs = [a for a in weights if meta[a]["sub_class"] in ("equity_etf", "esg_equity_etf")]

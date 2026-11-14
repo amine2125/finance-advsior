@@ -4,6 +4,7 @@ from __future__ import annotations
 import numpy as np
 
 from ..analytics.risk import simple_returns
+from ..i18n import sector_fr
 from ..methodology import METHODOLOGY
 from ..models import InvestorProfile, Severity
 
@@ -28,7 +29,7 @@ def evaluate(md, xr: dict, persona: InvestorProfile | None, target_weights: dict
         s, w = max(sectors.items(), key=lambda kv: kv[1])
         if w > b.max_single_sector:
             out.append({"rule_id": "sector_concentration", "severity": Severity.CRITICAL if w > 1.5 * b.max_single_sector else Severity.WARNING,
-                        "title": f"Concentration sectorielle : {s} {_pct(w)}", "trigger": f"{_pct(w)} > plafond {_pct(b.max_single_sector)} du profil",
+                        "title": f"Concentration sectorielle : {sector_fr(s)} {_pct(w)}", "trigger": f"{_pct(w)} > plafond {_pct(b.max_single_sector)} du profil",
                         "assets": [a for a, p in ((p["asset_id"], p) for p in xr["positions"]) if p["sector"] == s], "key": s,
                         "metrics": {"sector_weight": w, "limit": b.max_single_sector}, "constraint": f"Secteur max. {_pct(b.max_single_sector)}",
                         "explanation": "Exposition directe (titres individuels); les FNB ne sont pas reclassés sans composition vérifiée."})

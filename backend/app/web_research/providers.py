@@ -52,9 +52,9 @@ def sec_filings(cik: str, since: dt.date, until: dt.date) -> list[dict]:
 
 
 # ------------------------------------------------------------------------------------------- GDELT
-def _gdelt(params: dict) -> dict:
+def _gdelt(params: dict, retries: int = 1) -> dict:
     data = fetch_json("gdelt", "https://api.gdeltproject.org/api/v2/doc/doc", params={**params, "format": "json"}, ttl_s=1800,
-                      retries=1)
+                      retries=retries)
     if not isinstance(data, dict):
         raise ResearchError("gdelt", "réponse inattendue")
     return data
@@ -87,7 +87,7 @@ def gdelt_articles(query: str, days: int = 14, max_records: int = 75) -> list[di
 
 
 def gdelt_timeline(query: str, days: int = 90) -> list[dict]:
-    data = _gdelt({"query": query, "mode": "timelinevolraw", "timespan": f"{days}d"})
+    data = _gdelt({"query": query, "mode": "timelinevolraw", "timespan": f"{days}d"}, retries=3)
     tl = (data.get("timeline") or [{}])[0].get("data", [])
     out = []
     for p in tl:
