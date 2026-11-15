@@ -23,7 +23,7 @@ def run_advocate(llm: LLMClient, agent_id: str, prefix: str, system: str, packet
             user += "\n\nRÉSULTAT DE L'AUDIT DÉTERMINISTE (tour 1):\n" + audit_notes
         if test_results_text:
             user += "\n\nRÉSULTATS DES TESTS COMPLÉMENTAIRES EXÉCUTÉS PAR L'AGENT QUANTITATIF:\n" + test_results_text
-    data, usage = json_call(llm, system=sys, user=user, model_id=s.agent_model_id, max_tokens=max_tokens or s.agent_max_tokens,
+    data, usage = json_call(llm, system=sys, user=user, model_id=s.reasoning_model_id, max_tokens=max_tokens or s.agent_max_tokens,
                             agent_id=f"{agent_id}.r{round_no}", temperature=0.3)
     claims = []
     for i, c in enumerate(data.get("claims", [])[:8]):

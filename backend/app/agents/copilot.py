@@ -262,7 +262,7 @@ def run_chat(tracker: JobTracker, owner: str, req: dict) -> dict:
         tracker.add("copilot.reasoning", "copilot", "Choix des outils et rédaction")
         tracker.start("copilot.reasoning")
         for _ in range(5):
-            r = llm.converse(system=system, messages=msgs, model_id=s.agent_model_id, max_tokens=1800, temperature=0.2, tool_config=tool_cfg,
+            r = llm.converse(system=system, messages=msgs, model_id=s.reasoning_model_id, max_tokens=1800, temperature=0.2, tool_config=tool_cfg,
                              agent_id="copilot")
             usage_tot["input_tokens"] += r["usage"]["input_tokens"]
             usage_tot["output_tokens"] += r["usage"]["output_tokens"]
@@ -293,7 +293,7 @@ def run_chat(tracker: JobTracker, owner: str, req: dict) -> dict:
             corrections.append({"stage": "audit de la réponse", "issues": issues})
             msgs.append({"role": "user", "content": [{"text": "AUDIT: ta réponse contient des éléments non traçables ou interdits: " + "; ".join(issues) +
                                                       ". Réécris la réponse en retirant ou corrigeant ces éléments, sans appeler d'outil."}]})
-            r2 = llm.converse(system=system, messages=msgs, model_id=s.agent_model_id, max_tokens=1500, temperature=0.0, agent_id="copilot.correction",
+            r2 = llm.converse(system=system, messages=msgs, model_id=s.reasoning_model_id, max_tokens=1500, temperature=0.0, agent_id="copilot.correction",
                               tool_config=tool_cfg)
             usage_tot["calls"] += 1
             fixed = r2["text"] or answer

@@ -96,6 +96,10 @@ class EvidencePacket:
     def metrics_text(self, limit: int = 160) -> str:
         recs = [r for r in self.ledger.records() if r.value is not None and not r.metric_id.startswith("pf.value.")]
         recs = [r for r in recs if r.metric_id.startswith(self.priority_metric_prefixes)]
+        # Order by prefix priority (stable within a prefix) so that the cut at `limit` drops the least important metrics,
+        # never the proposal's own numbers (mnd.*), which are registered last in the ledger.
+        rank = {p: i for i, p in enumerate(self.priority_metric_prefixes)}
+        recs.sort(key=lambda r: next(rank[p] for p in self.priority_metric_prefixes if r.metric_id.startswith(p)))
         lines = []
         for r in recs[:limit]:
             win = f" [{r.window_start}→{r.window_end}]" if r.window_start else ""

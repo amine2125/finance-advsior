@@ -58,6 +58,7 @@ class Settings:
     bedrock_region: str
     agent_model_id: str
     supervisor_model_id: str
+    reasoning_model_id: str  # advocates (pros/cons) and Léa: the calls that reason, not just reformat
     llm_enabled: bool
     llm_timeout_s: int
     agent_max_tokens: int
@@ -107,6 +108,8 @@ def get_settings() -> Settings:
         bedrock_region=os.getenv("AEGIS_BEDROCK_REGION", os.getenv("AWS_REGION", "us-east-1")),
         agent_model_id=os.getenv("AEGIS_AGENT_MODEL_ID", "us.anthropic.claude-haiku-4-5-20251001-v1:0"),
         supervisor_model_id=os.getenv("AEGIS_SUPERVISOR_MODEL_ID", "us.anthropic.claude-haiku-4-5-20251001-v1:0"),
+        reasoning_model_id=os.getenv("AEGIS_REASONING_MODEL_ID")
+        or os.getenv("AEGIS_AGENT_MODEL_ID", "us.anthropic.claude-haiku-4-5-20251001-v1:0"),
         llm_enabled=_bool("AEGIS_LLM_ENABLED", True),
         llm_timeout_s=_int("AEGIS_LLM_TIMEOUT_S", 60, 5, 300),
         agent_max_tokens=_int("AEGIS_AGENT_MAX_TOKENS", 2600, 200, 6000),

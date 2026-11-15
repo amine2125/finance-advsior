@@ -56,6 +56,7 @@ STEPS = [
     ("audit.claims", "audit_agent", "Agent Gouvernance : vérifie chaque chiffre cité"),
     ("supervisor.explain", "supervisor", "Agent Explicabilité : rédige la décision"),
 ]
+NOT_AN_AMOUNT = r"\s*(?:%|ans?\b|années?\b|mois\b|jours?\b|semaines?\b|actions?\b|parts?\b|titres?\b|unités?\b|fois\b)"
 REVIEW_WORDS = r"r[ée][ée]quilibr|r[ée]organis|analys|revoi[sr]|corrige|diversifi|mon portefeuille|mes placements|v[ée]rifie"
 STRESS_KEYS = ["broad_bear", "rates_up_100bp", "tech_crash_30"]
 BEAR_2022 = {"title": "Le repli de 2022 : actions et obligations en baisse ensemble", "start": "2022-03-01", "end": "2022-12-30"}
@@ -88,14 +89,19 @@ def parse_request(md, text: str, override: dict | None = None) -> dict:
     """Amount, asset and intent from plain French. Explicit fields from the UI win over the text."""
     override = override or {}
     t = text.lower().replace(" ", " ").replace("\xa0", " ")
-    amount = None
+    # A number with a currency or a multiplier is an amount. A bare number is only a fallback, and never a year
+    # (« depuis 2023 »), a duration (« 60 mois ») or a share count (« 100 actions »).
+    with_unit, bare = [], []
     for m in re.finditer(r"(\d{1,3}(?:[ ,.]\d{3})+|\d+(?:[.,]\d+)?)\s*(k\b|mille\b|000\b)?\s*(\$|dollars?|cad)?", t):
         raw, mult, cur = m.group(1), m.group(2), m.group(3)
         val = float(re.sub(r"[ ,.](?=\d{3}\b)", "", raw).replace(",", "."))
         if mult in ("k", "mille"):
             val *= 1000
-        if cur or mult or val >= 50:
-            amount = max(amount or 0, val)
+        if cur or mult:
+            with_unit.append(val)
+        elif val >= 50 and not re.fullmatch(r"(?:19|20)\d{2}", raw) and not re.match(NOT_AN_AMOUNT, t[m.end():]):
+            bare.append(val)
+    amount = max(with_unit) if with_unit else (max(bare) if bare else None)
     assets = mentioned_assets(md, text)
     asset = override.get("asset_id") or (assets[0] if assets else None)
     amount = float(override.get("amount_cad") or 0) or amount
