@@ -10,6 +10,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+import math
 
 from . import __version__
 from .agents.llm import LLMError
@@ -22,7 +23,23 @@ logging.basicConfig(level=logging.INFO, format="%(message)s")
 log = logging.getLogger("aegis.api")
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
-app = FastAPI(title="AEGIS API", version=__version__,
+def _finite(x):
+    """NaN/inf are not valid JSON: a missing number is sent as null ("indisponible"), never as a crash."""
+    if isinstance(x, float):
+        return x if math.isfinite(x) else None
+    if isinstance(x, dict):
+        return {k: _finite(v) for k, v in x.items()}
+    if isinstance(x, (list, tuple)):
+        return [_finite(v) for v in x]
+    return x
+
+
+class SafeJSONResponse(JSONResponse):
+    def render(self, content) -> bytes:
+        return json.dumps(_finite(content), ensure_ascii=False, allow_nan=False, separators=(",", ":")).encode("utf-8")
+
+
+app = FastAPI(title="AEGIS API", version=__version__, default_response_class=SafeJSONResponse,
               description="AEGIS – intelligence de portefeuille multi-agents. Simulation et éducation uniquement: aucune transaction, aucun conseil personnalisé.")
 s = get_settings()
 app.add_middleware(CORSMiddleware, allow_origins=s.cors_origins, allow_methods=["GET", "POST", "PUT", "DELETE"],

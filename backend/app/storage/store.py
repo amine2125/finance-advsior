@@ -17,7 +17,7 @@ from typing import Protocol
 
 from ..config import get_settings
 
-KINDS = {"PORTFOLIO", "PERSONA", "ANALYSIS", "SNAPSHOT", "DEBATE", "ALERT", "JOB", "REPORT", "CONV", "HYPE", "HYP", "RESEARCH", "REPLAY", "META"}
+KINDS = {"PORTFOLIO", "PERSONA", "ANALYSIS", "SNAPSHOT", "DEBATE", "ALERT", "JOB", "REPORT", "CONV", "HYPE", "HYP", "RESEARCH", "REPLAY", "META", "GOAL", "MANDATE"}
 _SAFE = re.compile(r"^[A-Za-z0-9_.\-]{1,80}$")
 
 

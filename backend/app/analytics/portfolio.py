@@ -259,9 +259,12 @@ def portfolio_risk_metrics(md: MarketData, weights: dict[str, float], as_of: pd.
             "excess_return": float(pidx.iloc[-1] - bidx.iloc[-1]), "tracking_error": te,
             "n_obs": int(len(common)), "note": "même devise (CAD), même fenêtre, rendements totaux (adj_close)",
         }
-        bmap = {d: float(v) for d, v in bidx.items()}
+        # Crypto trades every day, the benchmark only on market days: carry the last known index value over
+        # weekends/holidays (no change on a closed market). Before the first common day there is no value (null).
+        bfull = bidx.reindex(value_index.index).ffill()
         for row in series:
-            row["benchmark"] = round(bmap.get(pd.Timestamp(row["date"]), np.nan), 5)
+            v = bfull.get(pd.Timestamp(row["date"]))
+            row["benchmark"] = round(float(v), 5) if v is not None and np.isfinite(v) else None
     out["series"] = series
     return out
 

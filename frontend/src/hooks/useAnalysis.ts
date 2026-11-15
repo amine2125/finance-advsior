@@ -32,11 +32,11 @@ export function checkText(c: { rule_id: string; status: string }): string {
   const over = c.status !== "OK" && c.status !== "UNKNOWN";
   switch (c.rule_id) {
     case "budget.growth_band":
-      if (c.status === "ABOVE_BAND") return "Plus d'actions que votre profil ne le prévoit : en cas de baisse des marchés, vous pourriez perdre plus que ce que vous avez dit pouvoir supporter.";
+      if (c.status === "ABOVE_BAND") return "Plus d'actions ou de cryptos que votre profil ne le prévoit : en cas de baisse des marchés, vous pourriez perdre plus que ce que vous avez dit pouvoir supporter.";
       if (c.status === "BELOW_BAND") return "Moins d'actions que prévu : votre argent pourrait croître moins vite que votre objectif.";
       return "La part en actions correspond à votre profil.";
     case "budget.single_issuer":
-      return over ? "Trop d'argent dans une seule entreprise : une mauvaise nouvelle la concernant pèserait lourd." : "Aucune entreprise ne pèse trop lourd.";
+      return over ? "Trop d'argent dans un seul placement : une mauvaise nouvelle le concernant pèserait lourd." : "Aucun placement ne pèse trop lourd à lui seul.";
     case "budget.single_sector":
       return over ? "Trop concentré dans un seul secteur : ces titres ont tendance à baisser ensemble." : "Pas de secteur trop dominant.";
     case "budget.speculative":
@@ -50,8 +50,8 @@ export function checkText(c: { rule_id: string; status: string }): string {
 export const SINGLE_SECTOR = (s: string) => !["Diversified", "Fixed Income", "Commodities", "Cryptoassets"].includes(s);
 
 export const CHECK_LABEL: Record<string, string> = {
-  "budget.growth_band": "Part en actions",
-  "budget.single_issuer": "Poids d'une seule entreprise",
+  "budget.growth_band": "Part en actions et cryptos",
+  "budget.single_issuer": "Poids d'un seul placement",
   "budget.single_sector": "Poids d'un seul secteur",
   "budget.speculative": "Part spéculative (crypto)",
   "budget.drawdown_review": "Baisses passées vs votre seuil",

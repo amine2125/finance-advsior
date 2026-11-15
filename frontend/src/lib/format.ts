@@ -1,7 +1,7 @@
 export const pct = (v: number | null | undefined, d = 1) =>
   v === null || v === undefined || Number.isNaN(v) ? "n/d" : `${(v * 100).toLocaleString("fr-CA", { minimumFractionDigits: d, maximumFractionDigits: d })} %`;
 export const cad = (v: number | null | undefined, d = 0) =>
-  v === null || v === undefined || Number.isNaN(v) ? "n/d" : `${v.toLocaleString("fr-CA", { minimumFractionDigits: d, maximumFractionDigits: d })} $`;
+  v === null || v === undefined || Number.isNaN(v) ? "n/d" : `${v.toLocaleString("fr-CA", { minimumFractionDigits: d, maximumFractionDigits: d })}\u00a0$`;
 export const num = (v: number | null | undefined, d = 2) =>
   v === null || v === undefined || Number.isNaN(v) ? "n/d" : v.toLocaleString("fr-CA", { minimumFractionDigits: d, maximumFractionDigits: d });
 export const date = (s?: string | null) => (s ? new Date(s.length <= 10 ? s + "T12:00:00Z" : s).toLocaleDateString("fr-CA", { year: "numeric", month: "short", day: "numeric" }) : "n/d");

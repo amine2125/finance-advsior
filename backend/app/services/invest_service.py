@@ -86,6 +86,10 @@ def check_investment(md: MarketData, persona: InvestorProfile, pf: Portfolio | N
     if tier["tier"] == "HIGH" and persona.horizon_years_min < METHODOLOGY["horizon_rule"]["low_below_years"]:
         return stop(f"Vous aurez besoin de cet argent dans {persona.horizon_years_min:g} an(s) : un placement qui a déjà perdu "
                     f"{_pct(-tier['max_drawdown'])} n'aurait peut-être pas le temps de remonter.")
+    # 2b. the asset itself: two risk levels above what the profile allows is never suitable (same rule as options_for),
+    #     whatever the rest of the portfolio looks like.
+    if tier["tier"] in ORDER and ORDER[tier["tier"]] < 3 and ORDER[tier["tier"]] > ORDER[allowed] + 1:
+        return stop(f"Son risque est {TIER_FR[tier['tier']]}, alors que votre profil ne permet qu'un risque {TIER_FR[allowed]}.")
     if tier["tier"] == "UNKNOWN":
         reasons.append({"tone": "warn", "text": "Historique trop court pour mesurer le risque de façon fiable."})
 
@@ -103,8 +107,28 @@ def check_investment(md: MarketData, persona: InvestorProfile, pf: Portfolio | N
         def after_for(x: float) -> dict:
             return run_xray(md, _with_addition(md, pf, asset_id, x), persona, include_series=False, speculative_extra=extra)
 
+    single = bool(int(meta.get("is_single_issuer", 1))) and not crypto
+
+    def own_limits(x: dict) -> list[dict]:
+        """The new line's own weight vs the profile's caps. An existing breach elsewhere (e.g. 100 % in one asset) must not
+        hide a new one: comparing only the portfolio maximum would let any second concentrated line through."""
+        w_ = (x.get("ledger") or {}).get(f"pf.weight.{asset_id}", {}).get("value")
+        if w_ is None:
+            return []
+        if single and w_ > persona.budget.max_single_issuer + 1e-9:
+            return [{"rule_id": "budget.single_issuer", "kind": "new", "label": "Poids d'un seul placement",
+                     "message": f"{asset_id} pèserait {_pct(w_)} de votre portefeuille, au-delà du maximum de {_pct(persona.budget.max_single_issuer)} par entreprise"}]
+        if crypto and w_ > persona.budget.max_speculative + 1e-9:
+            return [{"rule_id": "budget.speculative", "kind": "new", "label": "Part spéculative",
+                     "message": f"{asset_id} pèserait {_pct(w_)} de votre portefeuille, au-delà de votre part spéculative maximale de {_pct(persona.budget.max_speculative)}"}]
+        return []
+
+    def problems(x: dict) -> list[dict]:
+        found = _problems(before, x)
+        return found + [o for o in own_limits(x) if o["rule_id"] not in {f["rule_id"] for f in found}]
+
     after = after_for(amount_cad)
-    probs = _problems(before, after)
+    probs = problems(after)
     existing = [c["message"] for c in ((before or {}).get("persona_assessment") or {}).get("budget_checks", [])
                 if c["status"] not in ("OK", "UNKNOWN")]
 
@@ -137,7 +161,7 @@ def check_investment(md: MarketData, persona: InvestorProfile, pf: Portfolio | N
         mid = (lo + hi) / 2
         if mid < 1:
             break
-        if _problems(before, after_for(mid)):
+        if problems(after_for(mid)):
             hi = mid
         else:
             lo = mid

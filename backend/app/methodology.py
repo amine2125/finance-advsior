@@ -64,6 +64,9 @@ METHODOLOGY: dict = {
                      "interest_coverage_fragile": 2.0, "altman_safe": 2.99, "altman_distress": 1.81,
                      "altman_zpp_safe": 2.6, "altman_zpp_distress": 1.1, "beneish_flag": -1.78,
                      "kind": "practitioner conventions, configurable"},
+    # Index funds whose holdings are dominated by one sector (no verified look-through): counted in full toward that
+    # sector's exposure, reported as « jusqu'à ». Nasdaq-100 (QQQ) is known as technology-dominated.
+    "thematic_etfs": {"QQQ": "Information Technology"},
     "profile_builder": {
         "kind": "heuristic mapping from the investor's own answers; demonstration only, not a suitability assessment",
         "levels": ["prudent", "low_moderate", "moderate", "high"],
@@ -85,6 +88,28 @@ METHODOLOGY: dict = {
         },
         "benchmark": {"prudent": "BLEND_CONSERVATIVE", "low_moderate": "BLEND_CONSERVATIVE", "moderate": "BLEND_BALANCED",
                       "high": "BLEND_GROWTH"},
+        # « Connaître son client » (KYC) v2: final level = min(tolérance, capacité, objectif, connaissances).
+        "kyc": {
+            "version": 2,
+            # stated tolerance components → level 0..3 (mean, rounded half up)
+            "portfolio_choice": {"A": 0, "B": 1, "C": 2, "D": 3},
+            "gamble": {"sure": 0, "small_risk": 1.5, "big_risk": 3},
+            # revealed behaviour caps the stated tolerance (what people do beats what they say)
+            "behaviour_cap": {"drop_reaction": {"sell_all": 0, "sell_some": 1, "hold": 3, "buy_more": 3},
+                              "volatility_feeling": {"anxious": 0, "uneasy": 1, "ok": 3, "excited": 3},
+                              "past_behavior": {"sold": 0, "held": 3, "bought": 3}},
+            "inconsistency_gap": 2,
+            # capacity deductions (start at 3, floor 0)
+            "emergency_months_low": 3, "emergency_months_critical": 1,
+            "debt_to_income_high": 0.40, "unstable_employment": ["contract", "self_employed", "student", "unemployed"],
+            "dependants_savings_months": 6,
+            # a cushion this large (in months of expenses) neutralises an unstable or uncertain income
+            "unstable_offset_months": 6,
+            # knowledge: quiz (3 questions) + products → novice / intermediate / advanced; novice caps at « Modéré », no crypto
+            "quiz_answers": {"quiz_diversification": "b", "quiz_bonds": "a", "quiz_inflation": "c"},
+            "novice_cap": 2,
+            "credit_card_rate_assumption": 0.2099,
+        },
     },
     "sharpe_overfit_flag": 1.5,
     "debate": {"max_rounds": 2, "permitted_followup_tests": [

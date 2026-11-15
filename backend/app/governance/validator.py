@@ -33,7 +33,7 @@ _forbidden = [(k, re.compile(p, re.IGNORECASE)) for k, p in FORBIDDEN]
 _causal = re.compile(CAUSAL, re.IGNORECASE)
 NUM_RE = re.compile(r"(?<![\w.])([-−+]?\d{1,3}(?:[  ]\d{3})+(?:[.,]\d+)?|[-−+]?\d+(?:[.,]\d+)?)\s*(%|\$|x\b|×|pb\b|bps\b|pts?\b)?",
                     re.IGNORECASE)
-ID_RE = re.compile(r"\b(?:asset|pf|persona|bench|scn|hyp|test|alt|hype|guard|fx|data)\.[A-Za-z0-9_.\-]+")
+ID_RE = re.compile(r"\b(?:asset|pf|persona|bench|scn|hyp|test|alt|hype|guard|fx|data|mnd)\.[A-Za-z0-9_.\-]+")
 
 
 def _parse_num(raw: str) -> float:
@@ -111,7 +111,9 @@ def methodology_constants() -> list[float]:
 
     def walk(o):
         if isinstance(o, dict):
-            for v in o.values():
+            for key, v in o.items():
+                if key == "kyc":  # internal questionnaire scoring weights: never a number an agent may cite
+                    continue
                 walk(v)
         elif isinstance(o, list):
             for v in o:
@@ -176,6 +178,13 @@ def verify_arguments(args: list[AgentArgument], led: MetricLedger, source_ids: s
 def strip_sentences(text: str, bad_fragments: list[str]) -> str:
     if not bad_fragments:
         return text
-    parts = re.split(r"(?<=[.!?])\s+", text)
-    keep = [p for p in parts if not any(b and b in p for b in bad_fragments)]
-    return " ".join(keep)
+    out = []
+    for line in text.split("\n"):
+        # keep markdown structure: a list marker ("1.", "-") is not a sentence; a list item emptied by the removal disappears
+        m = re.match(r"^(\s*(?:\d+[.)]|[-*•])\s+)", line)
+        marker, body = (m.group(1), line[m.end():]) if m else ("", line)
+        parts = re.split(r"(?<=[.!?])\s+", body)
+        keep = " ".join(p for p in parts if not any(b and b in p for b in bad_fragments)).strip()
+        if keep or not line.strip():
+            out.append(marker + keep)
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(out)).strip()

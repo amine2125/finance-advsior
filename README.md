@@ -3,8 +3,7 @@
 Application d'investissement agentique (Datathon PolyFinances 2026 · AlphaForge AI). L'utilisateur s'inscrit comme à la banque
 (objectif, horizon, baisse tolérable, situation, préférences). AEGIS en déduit son profil et ses limites, puis répond à
 « puis-je investir X $ dans Y ? » par **oui**, **oui jusqu'à tel montant** ou **non**, avec les raisons chiffrées.
-Rien n'est pré-chargé : aucun persona ni portefeuille n'est codé en dur. Les trois personas de l'énoncé (Amira, Mateo, Robert)
-restent disponibles en « mode démo », uniquement sur demande explicite.
+Rien n'est pré-chargé : aucun persona ni portefeuille n'est codé en dur. Les personas de l'énoncé (Amira, Mateo, Robert) servent d'exemples de test : chaque utilisateur entre son profil et ses placements.
 
 ## Démarrage local
 
@@ -24,14 +23,22 @@ Pour activer l'assistant IA et le débat des agents (Amazon Bedrock) : copiez `.
 Sans elles, tout le reste fonctionne (profil, analyse du portefeuille, verdict « Investir », recherche SEC) et l'interface
 indique clairement que l'IA générative n'est pas connectée.
 
-## Parcours
+## Parcours : un mandat d'investissement agentique
 
-1. **Accueil** : explique comment ça marche en 3 étapes.
-2. **Inscription** (9 écrans, une question à la fois) → profil calculé, avec le « pourquoi » de chaque règle, à confirmer.
-3. **Placements** : saisie, import CSV, ou départ de zéro.
-4. **Investir** : verdict pour le profil + liste des placements adaptés / possibles en partie / non adaptés.
-5. **Mon portefeuille** : limites respectées ou non (en langage clair), répartition, risque mesuré, historique.
-6. **Assistant** : chat relié aux outils de calcul + débat Opportunités vs Risques, vérifié, puis conclusion du Superviseur.
+1. **Connaître son client** (~20 questions) : tolérance, capacité, connaissances; la plus basse fixe le profil.
+2. **Vos placements** : chaque personne entre son propre portefeuille (aucun profil ni portefeuille n'est pré-chargé).
+3. **« Que voulez-vous faire ? »** en français libre : « J'ai 10 000 $ à investir », « Je veux 2 000 $ de NVIDIA »,
+   « Analyse et rééquilibre mon portefeuille ». Les agents travaillent en direct (`backend/app/agents/mandate.py`) :
+   Profil → Superviseur (comprend la demande) → Données → Recherche (SEC EDGAR, nouvelles, si un titre est demandé) →
+   Analyste (ordres concrets) → Gouvernance (vérifie chaque ordre, ajuste ou bloque) → Scénarios (rejeu 2022 + chocs) →
+   Opportunités / Risques (Bedrock, en parallèle) → Gouvernance (audit de chaque chiffre cité) → Explicabilité (Bedrock, audité).
+4. **La proposition** : ordres d'achat/vente, demande initiale acceptée / réduite / refusée et pourquoi, avant/après, contrôles,
+   scénarios, arguments vérifiés (✓/✗), explication dont chaque chiffre est relié à sa méthode, sources, trace des agents.
+5. **Point de contrôle humain** : Approuver (simulation) · Modifier · Refuser. Léa (bulle) connaît la dernière proposition.
+
+Règles notables : l'argent neuf comble d'abord ce qui manque (stabilité ou croissance) sans rien vendre; une demande trop
+grosse pour une limite de taille est combinée avec des fonds diversifiés (ex. crypto ≤ 10 % du total); un dépassement qui ne
+se corrige qu'en vendant est signalé.
 
 ## Comment le verdict est calculé (déterministe, `backend/app/services/invest_service.py`)
 
@@ -54,7 +61,7 @@ Python testés ; les LLM rédigent et argumentent, un validateur rejette tout ch
 ## Tests
 
 ```bash
-cd backend && .venv/bin/python -m pytest -q          # 58 tests (formules, profils, verdicts, API, gouvernance)
+cd backend && .venv/bin/python -m pytest -q          # 67 tests (formules, profils KYC, verdicts, mandats agentiques, API, gouvernance)
 cd frontend && npx playwright install chromium && AEGIS_URL=http://localhost:5173 npx playwright test   # parcours complet
 ```
 

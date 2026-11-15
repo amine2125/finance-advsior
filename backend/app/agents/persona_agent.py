@@ -21,7 +21,29 @@ def persona_text(p: InvestorProfile | None) -> str:
             f"{p.emergency_reserve}; besoins de liquidité: {p.liquidity_needs}; ESG: {p.esg_preference}.\n"
             f"Budget de risque (ids persona.{p.persona_id}.*): croissance {b.growth_min * 100:.0f}–{b.growth_max * 100:.0f} %, émetteur max "
             f"{b.max_single_issuer * 100:.0f} %, secteur max {b.max_single_sector * 100:.0f} %, poche spéculative ≤ {b.max_speculative * 100:.0f} %, "
-            f"revue si perte {b.drawdown_review * 100:.0f} %. Contrainte déterminante: {b.binding_constraint_note}.")
+            f"revue si perte {b.drawdown_review * 100:.0f} %. Contrainte déterminante: {b.binding_constraint_note}."
+            + _kyc_text(p))
+
+
+def _kyc_text(p: InvestorProfile) -> str:
+    k = p.kyc or {}
+    if not k:
+        return ""
+    snap = k.get("snapshot") or {}
+    bits = [f"tolérance {k['tolerance']['level']}", f"capacité {k['capacity']['level']}", f"limite fixée par: {k['binding']}"]
+    if k.get("knowledge", {}).get("level"):
+        bits.append(f"connaissances {k['knowledge']['level']}")
+    if k["tolerance"].get("inconsistent"):
+        bits.append("réponses contradictoires sur le risque (la plus prudente est retenue)")
+    if "emergency_months" in snap:
+        bits.append(f"épargne d'urgence {snap['emergency_months']:g} mois de dépenses")
+    if "monthly_margin" in snap:
+        bits.append(f"marge mensuelle {snap['monthly_margin']:.0f} $")
+    steps = [s["title"] for s in k.get("before_investing", [])]
+    out = "\nCONNAISSANCE DU CLIENT: " + "; ".join(bits) + "."
+    if steps:
+        out += " AVANT D'INVESTIR EN BOURSE, recommande d'abord: " + "; ".join(steps) + "."
+    return out
 
 
 def assess(llm: LLMClient | None, packet: EvidencePacket, deterministic: dict | None, opp: AgentArgument | None,

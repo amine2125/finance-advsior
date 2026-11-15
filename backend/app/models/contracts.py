@@ -106,6 +106,7 @@ class InvestorProfile(BaseModel):
     excluded_sectors: list[str] = []
     benchmark_id: str = "BLEND_BALANCED"
     budget: RiskBudget
+    kyc: dict | None = None  # « Connaître son client » : tolérance, capacité, connaissances, bilan financier, étapes avant d'investir
     watchlist: list[str] = []
     notifications_opt_in: bool = False
     quiet_hours: str | None = None
@@ -384,7 +385,7 @@ class AgentTraceStep(BaseModel):
 class Job(BaseModel):
     job_id: str
     owner_id: str
-    kind: Literal["debate", "chat", "hype", "replay", "report", "investigate"]
+    kind: Literal["debate", "chat", "hype", "replay", "report", "investigate", "mandate"]
     status: Literal["queued", "running", "done", "failed"] = "queued"
     steps: list[AgentTraceStep] = []
     request: dict[str, Any] = {}

@@ -5,11 +5,13 @@ import Layout from "./components/Layout";
 import { ErrorBox, Spinner } from "./components/ui";
 import { AppProvider, useApp } from "./hooks/useApp";
 import "./index.css";
-import Assistant from "./pages/Assistant";
+import About from "./pages/About";
+import AssetPage from "./pages/Asset";
+import { Decisions, MandateResult, MandateRun } from "./pages/Mandate";
 import Home from "./pages/Home";
-import Invest from "./pages/Invest";
+import Holdings from "./pages/Holdings";
+import Connect from "./pages/Connect";
 import Onboarding from "./pages/Onboarding";
-import PortfolioPage from "./pages/Portfolio";
 import Profile from "./pages/Profile";
 import Welcome from "./pages/Welcome";
 
@@ -25,6 +27,7 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { err
 function Shell() {
   const { me, error, reload } = useApp();
   if (error && !me) return <div className="mx-auto max-w-lg p-8"><ErrorBox error={error} onRetry={reload} /></div>;
+  // Old links (assistant page, per-asset invest page) land on the new screens.
   if (!me) return <div className="grid min-h-screen place-items-center"><Spinner label="Chargement…" /></div>;
   if (!me.onboarded) {
     // Not registered yet: only the welcome screen and the onboarding are reachable.
@@ -44,11 +47,16 @@ function Shell() {
           <ErrorBoundary>
             <Routes>
               <Route path="/" element={<Home />} />
-              <Route path="/portefeuille" element={<PortfolioPage />} />
-              <Route path="/assistant" element={<Assistant />} />
-              <Route path="/investir" element={<Invest />} />
-              <Route path="/investir/:assetId" element={<Invest />} />
+              <Route path="/placements" element={<Holdings />} />
+              <Route path="/connecter" element={<Connect />} />
+              <Route path="/decisions" element={<Decisions />} />
+              <Route path="/mandats/en-cours/:jobId" element={<MandateRun />} />
+              <Route path="/mandats/:id" element={<MandateResult />} />
+              <Route path="/portefeuille" element={<Navigate to="/placements" replace />} />
+              <Route path="/placement/:id" element={<AssetPage />} />
+              <Route path="/a-propos" element={<About />} />
               <Route path="/profil" element={<Profile />} />
+              <Route path="/assistant" element={<Navigate to="/" replace />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </ErrorBoundary>

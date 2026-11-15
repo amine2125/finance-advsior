@@ -278,6 +278,333 @@ def invest_options(persona_id: str | None = None, owner: str = Depends(owner_id)
     return options_for(get_market_data(), ps.resolve_persona(owner, persona_id))
 
 
+class PlanReq(BaseModel):
+    amount_cad: float = Field(gt=0, le=10_000_000)
+    portfolio_id: str | None = None
+    persona_id: str | None = None
+
+
+@router.post("/invest/plan")
+def invest_plan(req: PlanReq, owner: str = Depends(owner_id)):
+    """The model portfolio recommended for the user's profile, for a given amount (with what it would have done historically)."""
+    from ..services.plan_service import recommended_plan
+    pf = ps.get_portfolio(owner, req.portfolio_id) if req.portfolio_id else None
+    return recommended_plan(get_market_data(), ps.resolve_persona(owner, req.persona_id, pf), req.amount_cad, pf)
+
+
+# ------------------------------------------------------------------------------------------------ holdings / history / activity
+def _user_holdings(owner: str, portfolio_id: str | None) -> list[dict]:
+    pfs = [ps.get_portfolio(owner, portfolio_id)] if portfolio_id else ps.list_portfolios(owner)
+    return [h.model_dump() for pf in pfs for h in pf.holdings]
+
+
+@router.get("/holdings")
+def holdings(portfolio_id: str | None = None, owner: str = Depends(owner_id)):
+    """What the user holds, like a brokerage list: price, day change (native currency), value in CAD, weight, 1-year change."""
+    md = get_market_data()
+    hs = _user_holdings(owner, portfolio_id)
+    if not hs:
+        return {"total_value_cad": 0.0, "day_change_cad": 0.0, "holdings": [], "as_of": md.end_date.date().isoformat()}
+    pos = value_holdings(md, hs, md.end_date)
+    cost: dict[str, float] = {}
+    accounts: dict[str, set] = {}
+    for x in hs:
+        if x.get("acquisition_price") and x.get("acquisition_date"):
+            fx_a, _ = md.fx_factor(md.asset(x["asset_id"])["currency"], x["acquisition_date"])
+            cost[x["asset_id"]] = cost.get(x["asset_id"], 0.0) + float(x["quantity"]) * float(x["acquisition_price"]) * fx_a
+        if (x.get("note") or "").startswith("Compte "):
+            accounts.setdefault(x["asset_id"], set()).add(x["note"][len("Compte "):].split(" ••••")[0])
+    rows, day_cad = [], 0.0
+    for aid, r in pos.iterrows():
+        close = md.native_series(aid, "close").dropna()
+        adj = md.native_series(aid, "adj_close").dropna()
+        prev = float(close.iloc[-2]) if len(close) > 1 else None
+        last = float(close.iloc[-1])
+        dchg = last - prev if prev else None
+        yr = adj[adj.index <= adj.index[-1] - pd.Timedelta(days=365)]
+        chg_1y = float(adj.iloc[-1] / yr.iloc[-1] - 1) if len(yr) else None
+        fx = r["fx_usdcad"] if r["fx_usdcad"] == r["fx_usdcad"] and r["fx_usdcad"] else 1.0  # NaN-safe: CAD rows have no FX
+        if dchg is not None:
+            day_cad += dchg * r["quantity"] * fx
+        meta = md.asset(aid)
+        rows.append({"asset_id": aid, "name": r["name"], "asset_class": r["asset_class"], "sub_class": r["sub_class"], "sector": r["sector"],
+                     "currency": r["currency"], "quantity": r["quantity"], "price": last, "price_date": r["price_date"],
+                     "day_change": dchg, "day_change_pct": (dchg / prev) if prev else None, "value_cad": r["value_cad"], "weight": r["weight"],
+                     "change_1y_pct": chg_1y, "is_single_issuer": bool(int(meta.get("is_single_issuer", 1))),
+                     "cost_cad": cost.get(aid), "gain_cad": (r["value_cad"] - cost[aid]) if aid in cost else None,
+                     "gain_pct": (r["value_cad"] / cost[aid] - 1) if cost.get(aid) else None, "accounts": sorted(accounts.get(aid, []))})
+    total = float(pos["value_cad"].sum())
+    tot_cost = sum(cost.values()) if len(cost) == len(pos) else None
+    return {"total_value_cad": total, "cost_cad": tot_cost, "gain_cad": (total - tot_cost) if tot_cost else None,
+            "gain_pct": (total / tot_cost - 1) if tot_cost else None, "day_change_cad": day_cad, "day_change_pct": day_cad / (total - day_cad) if total - day_cad else None,
+            "holdings": sorted(rows, key=lambda x: -x["value_cad"]), "as_of": md.end_date.date().isoformat()}
+
+
+@router.get("/history")
+def history(portfolio_id: str | None = None, days: int = Query(default=365, ge=30, le=2000), owner: str = Depends(owner_id)):
+    """Value of the CURRENT holdings over time (quantities held constant), in CAD: « si vous les aviez détenus »."""
+    md = get_market_data()
+    hs = _user_holdings(owner, portfolio_id)
+    if not hs:
+        return {"series": []}
+    qty: dict[str, float] = {}
+    for h in hs:
+        qty[h["asset_id"]] = qty.get(h["asset_id"], 0.0) + float(h["quantity"])
+    panel, _ = md.cad_panel(list(qty), field="adj_close")
+    panel = panel[panel.index >= md.end_date - pd.Timedelta(days=days)].ffill().dropna(how="any")
+    val = (panel * pd.Series(qty)).sum(axis=1)
+    # scale so that the last point equals today's value at the last close (adj_close vs close differ by past dividends)
+    today = float(value_holdings(md, hs, md.end_date)["value_cad"].sum())
+    if len(val):
+        val = val * (today / float(val.iloc[-1]))
+    step = max(1, len(val) // 260)
+    pts = [{"date": d.date().isoformat(), "value": round(float(v), 2)} for d, v in val.iloc[::step].items()]
+    if len(val) and pts[-1]["date"] != val.index[-1].date().isoformat():
+        pts.append({"date": val.index[-1].date().isoformat(), "value": round(float(val.iloc[-1]), 2)})
+    return {"series": pts, "change_cad": (pts[-1]["value"] - pts[0]["value"]) if pts else None,
+            "change_pct": (pts[-1]["value"] / pts[0]["value"] - 1) if pts and pts[0]["value"] else None,
+            "label": "Valeur de vos placements actuels s'ils avaient été détenus sur la période (quantités constantes, dividendes réinvestis, en $ CA)."}
+
+
+@router.get("/diagnosis")
+def diagnosis(portfolio_id: str | None = None, owner: str = Depends(owner_id)):
+    """Does the portfolio match the investor's profile? Plain-language problems, most serious first."""
+    from ..services.diagnosis import diagnose
+    md = get_market_data()
+    pfs = [ps.get_portfolio(owner, portfolio_id)] if portfolio_id else ps.list_portfolios(owner)
+    pf = next((p for p in pfs if p.holdings), None)
+    if pf is None:
+        return {"fits": None, "problems": [], "headline": None}
+    persona = ps.resolve_persona(owner, None, pf)
+    return diagnose(run_xray(md, pf, persona, include_series=False), persona) | {"portfolio_id": pf.portfolio_id}
+
+
+@router.get("/activity")
+def activity(owner: str = Depends(owner_id)):
+    """Feed of what happened: agent proposals and decisions, account creation."""
+    store = get_store()
+    items = []
+    for m in store.list(owner, "MANDATE", 50):
+        buys = sum(o["amount_cad"] for o in m.get("orders", []) if o["side"] == "buy")
+        if m["status"] == "approved":
+            items.append({"at": m.get("approved_at") or m["created_at"], "kind": "approved", "title": f"Proposition approuvée : {m['label']}",
+                          "detail": f"{len(m['orders'])} ordre(s) · achats {buys:,.0f} $".replace(",", " "), "mandate_id": m["mandate_id"]})
+        items.append({"at": m["created_at"], "kind": "proposed" if m["status"] == "proposed" else "rejected" if m["status"] == "rejected" else "analysed",
+                      "title": ("En attente de votre décision : " if m["status"] == "proposed" else "Les agents ont analysé : ") + f"« {m['request']} »",
+                      "detail": m["headline"], "mandate_id": m["mandate_id"]})
+    for pf in ps.list_portfolios(owner):
+        items.append({"at": pf.created_at, "kind": "account", "title": f"Compte ouvert : {pf.name}", "detail": "Portefeuille simulé"})
+    meta = store.get(owner, "META", "onboarding")
+    if meta:
+        items.append({"at": meta.get("at"), "kind": "profile", "title": "Profil d'investisseur établi", "detail": "Questionnaire « Connaître son client »"})
+    items = [i for i in items if i.get("at")]
+    return {"items": sorted(items, key=lambda x: x["at"], reverse=True)[:30]}
+
+
+# ------------------------------------------------------------------------------------------------ connections (simulated)
+@router.get("/connections/institutions")
+def institutions():
+    from ..services.connection_service import INSTITUTIONS
+    return {"institutions": INSTITUTIONS, "mode": "simulation"}
+
+
+@router.get("/connections/{institution_id}/preview")
+def connection_preview(institution_id: str, owner: str = Depends(owner_id)):
+    from ..services.connection_service import preview
+    return preview(get_market_data(), owner, institution_id)
+
+
+class ConnectReq(BaseModel):
+    institution_id: str = Field(min_length=1, max_length=40)
+    accounts: list[str] = Field(min_length=1, max_length=6)
+
+
+@router.post("/connections")
+def connect_accounts(req: ConnectReq, owner: str = Depends(owner_id)):
+    """Imports the (simulated) existing accounts as the user's portfolio. No credential is ever requested."""
+    from ..services.connection_service import connect
+    persona = ps.resolve_persona(owner)
+    pf = connect(get_market_data(), owner, persona.persona_id, req.institution_id, req.accounts)
+    get_store().put(owner, "PORTFOLIO", pf.portfolio_id, pf.model_dump(mode="json"))
+    return pf.model_dump(mode="json")
+
+
+# ------------------------------------------------------------------------------------------------ mandates (agentic workflow)
+class MandateReq(BaseModel):
+    request: str = Field(default="", max_length=500)
+    portfolio_id: str | None = None
+    structured: dict | None = None  # optional explicit {kind, amount_cad, asset_id} from the UI
+
+
+@router.post("/mandates")
+def create_mandate(req: MandateReq, owner: str = Depends(owner_id)):
+    """Starts the agentic workflow on the user's own request, profile and portfolio. Poll /jobs/{id} for live agent steps."""
+    if not req.request.strip() and not req.structured:
+        raise HTTPException(400, {"code": "empty", "message": "Dites-moi ce que vous voulez faire."})
+    rate_limit(owner, "mandate", 10)
+    return _job_out(jobs.submit(owner, "mandate", req.model_dump()))
+
+
+@router.get("/mandates")
+def list_mandates(owner: str = Depends(owner_id)):
+    items = get_store().list(owner, "MANDATE", 30)
+    return {"mandates": [{k: m.get(k) for k in ("mandate_id", "status", "created_at", "request", "headline", "label")} for m in
+                         sorted(items, key=lambda x: x["created_at"], reverse=True)]}
+
+
+@router.get("/mandates/{mandate_id}")
+def get_mandate(mandate_id: str, owner: str = Depends(owner_id)):
+    m = get_store().get(owner, "MANDATE", mandate_id)
+    if not m:
+        raise HTTPException(404, {"code": "not_found", "message": "mandat introuvable"})
+    job = get_store().get(owner, "JOB", m.get("job_id") or "-") if m.get("job_id") else None
+    return m | {"trace": (job or {}).get("steps", [])}
+
+
+@router.post("/mandates/{mandate_id}/approve")
+def approve_mandate(mandate_id: str, owner: str = Depends(owner_id)):
+    from ..agents.mandate import approve
+    return approve(owner, mandate_id)
+
+
+@router.post("/mandates/{mandate_id}/reject")
+def reject_mandate(mandate_id: str, owner: str = Depends(owner_id)):
+    from ..agents.mandate import reject
+    return reject(owner, mandate_id)
+
+
+# ------------------------------------------------------------------------------------------------ goals
+class GoalReq(BaseModel):
+    type: str = Field(pattern="^(maison|retraite|etudes|projet|urgence|fructifier)$")
+    name: str = Field(min_length=1, max_length=60)
+    target_cad: float | None = Field(default=None, gt=0, le=10_000_000)
+    years: float = Field(gt=0, le=60)
+    initial_cad: float = Field(default=0, ge=0, le=10_000_000)
+    monthly_cad: float = Field(default=0, ge=0, le=100_000)
+
+
+class GoalUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=60)
+    target_cad: float | None = Field(default=None, gt=0, le=10_000_000)
+    years: float | None = Field(default=None, gt=0, le=60)
+    monthly_cad: float | None = Field(default=None, ge=0, le=100_000)
+    add_cad: float | None = Field(default=None, gt=0, le=10_000_000)
+
+
+def _pf_value(md, owner: str, portfolio_id: str | None) -> float:
+    if not portfolio_id:
+        return 0.0
+    try:
+        pf = ps.get_portfolio(owner, portfolio_id)
+    except Exception:  # noqa: BLE001 - deleted account: the goal simply has no money yet
+        return 0.0
+    if not pf.holdings:
+        return 0.0
+    return float(value_holdings(md, [h.model_dump() for h in pf.holdings], md.end_date)["value_cad"].sum())
+
+
+def _goal_out(md, owner: str, persona, g: dict) -> dict:
+    from ..services.goal_service import evaluate
+    value = _pf_value(md, owner, g.get("portfolio_id"))
+    return {**g, "current_value_cad": value, "evaluation": evaluate(md, persona, g, current_value=value)}
+
+
+@router.post("/goals/preview")
+def goal_preview(req: GoalReq, owner: str = Depends(owner_id)):
+    """Plan for a goal before saving it: account, mix, monthly amount needed, projection, what to do."""
+    from ..services.goal_service import evaluate
+    return evaluate(get_market_data(), ps.resolve_persona(owner), req.model_dump())
+
+
+@router.get("/goals")
+def goals(owner: str = Depends(owner_id)):
+    md = get_market_data()
+    items = get_store().list(owner, "GOAL", 50)
+    if not items:
+        return {"goals": []}
+    persona = ps.resolve_persona(owner)
+    return {"goals": [_goal_out(md, owner, persona, g) for g in sorted(items, key=lambda x: x["created_at"])]}
+
+
+def _invest_for_goal(md, owner: str, persona, g: dict, amount: float) -> str:
+    """Buy the goal's recommended mix for `amount` in the goal's own account (a portfolio named after the goal and its account)."""
+    from ..services.goal_service import evaluate
+    ev = evaluate(md, persona, g | {"initial_cad": amount}, current_value=amount)
+    holdings = [{"asset_id": h["asset_id"], "amount_cad": round(amount * h["share"], 2)} for s in ev["plan"]["sleeves"] for h in s["holdings"]]
+    if g.get("portfolio_id"):
+        try:
+            ps.add_holdings(owner, g["portfolio_id"], holdings)
+            return g["portfolio_id"]
+        except Exception:  # noqa: BLE001 - account was deleted: open a new one
+            pass
+    pf = ps.create_portfolio(owner, PortfolioCreate(name=f"{g['name']} · {ev['account']['name']}", persona_id=persona.persona_id, holdings=holdings))
+    return pf.portfolio_id
+
+
+@router.post("/goals")
+def create_goal(req: GoalReq, owner: str = Depends(owner_id)):
+    from ..services.goal_service import new_goal
+    md = get_market_data()
+    persona = ps.resolve_persona(owner)
+    g = new_goal(req.model_dump() | {"portfolio_id": None})
+    if req.initial_cad > 0:
+        g["portfolio_id"] = _invest_for_goal(md, owner, persona, g, req.initial_cad)
+    get_store().put(owner, "GOAL", g["goal_id"], g)
+    return _goal_out(md, owner, persona, g)
+
+
+@router.get("/goals/{goal_id}")
+def get_goal(goal_id: str, owner: str = Depends(owner_id)):
+    g = get_store().get(owner, "GOAL", goal_id)
+    if not g:
+        raise HTTPException(404, {"code": "not_found", "message": "objectif introuvable"})
+    return _goal_out(get_market_data(), owner, ps.resolve_persona(owner), g)
+
+
+@router.put("/goals/{goal_id}")
+def update_goal(goal_id: str, req: GoalUpdate, owner: str = Depends(owner_id)):
+    md = get_market_data()
+    g = get_store().get(owner, "GOAL", goal_id)
+    if not g:
+        raise HTTPException(404, {"code": "not_found", "message": "objectif introuvable"})
+    persona = ps.resolve_persona(owner)
+    for k in ("name", "target_cad", "years", "monthly_cad"):
+        v = getattr(req, k)
+        if v is not None:
+            g[k] = v
+    if req.add_cad:
+        g["portfolio_id"] = _invest_for_goal(md, owner, persona, g, req.add_cad)
+    get_store().put(owner, "GOAL", goal_id, g)
+    return _goal_out(md, owner, persona, g)
+
+
+@router.delete("/goals/{goal_id}")
+def delete_goal(goal_id: str, owner: str = Depends(owner_id)):
+    get_store().delete(owner, "GOAL", goal_id)
+    return {"deleted": goal_id}
+
+
+@router.get("/overview")
+def overview(owner: str = Depends(owner_id)):
+    """Every account (portfolio) with its value and the goal it serves: the « Mes comptes » list of a bank app."""
+    md = get_market_data()
+    goal_by_pf = {g.get("portfolio_id"): g for g in get_store().list(owner, "GOAL", 50) if g.get("portfolio_id")}
+    accounts = []
+    for pf in ps.list_portfolios(owner):
+        v = _pf_value(md, owner, pf.portfolio_id)
+        g = goal_by_pf.get(pf.portfolio_id)
+        accounts.append({"portfolio_id": pf.portfolio_id, "name": pf.name, "value_cad": v, "n_holdings": len({h.asset_id for h in pf.holdings}),
+                         "goal_id": g["goal_id"] if g else None, "goal_name": g["name"] if g else None})
+    return {"total_value_cad": sum(a["value_cad"] for a in accounts), "accounts": accounts, "data_as_of": md.end_date.date().isoformat()}
+
+
+@router.get("/about")
+def about():
+    """Sources and method, for the « À propos » page (kept out of the client screens)."""
+    from ..services.goal_service import SOURCES
+    return {"goal_sources": SOURCES}
+
+
 # ------------------------------------------------------------------------------------------------ portfolios
 @router.get("/portfolios")
 def portfolios(owner: str = Depends(owner_id)):

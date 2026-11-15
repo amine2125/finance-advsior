@@ -42,6 +42,14 @@ def _chat(tracker, owner, req):
     return out, out.get("message_id")
 
 
+@handler("mandate")
+def _mandate(tracker, owner, req):
+    from ..agents.mandate import run_mandate
+
+    out = run_mandate(tracker, owner, req)
+    return {"mandate_id": out["mandate_id"]}, out["mandate_id"]
+
+
 @handler("replay")
 def _replay(tracker, owner, req):
     from ..guardian.replay import run_replay

@@ -38,6 +38,9 @@ def persona_numbers(p: InvestorProfile | None) -> list[float]:
     b = p.budget
     vals = [b.growth_min, b.growth_max, b.max_single_issuer, b.max_single_sector, b.max_speculative, b.drawdown_review,
             p.stated_max_decline or 0, p.horizon_years_min, p.horizon_years_max or 0]
+    snap = (p.kyc or {}).get("snapshot") or {}
+    vals += [float(v) for v in snap.values() if isinstance(v, (int, float))]
+    vals += [float(s_.get("amount_cad") or 0) for s_ in (p.kyc or {}).get("before_investing", [])]
     return [v * 100 for v in vals] + vals
 
 
