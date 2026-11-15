@@ -10,7 +10,7 @@ from .prompts import REBUTTAL_ADDENDUM
 
 def run_advocate(llm: LLMClient, agent_id: str, prefix: str, system: str, packet: EvidencePacket, round_no: int,
                  permitted_tests: list[str], opponent: AgentArgument | None = None, audit_notes: str = "",
-                 test_results_text: str = "") -> AgentArgument:
+                 test_results_text: str = "", max_tokens: int | None = None) -> AgentArgument:
     s = get_settings()
     user = packet.render(permitted_tests)
     sys = system
@@ -23,7 +23,7 @@ def run_advocate(llm: LLMClient, agent_id: str, prefix: str, system: str, packet
             user += "\n\nRÉSULTAT DE L'AUDIT DÉTERMINISTE (tour 1):\n" + audit_notes
         if test_results_text:
             user += "\n\nRÉSULTATS DES TESTS COMPLÉMENTAIRES EXÉCUTÉS PAR L'AGENT QUANTITATIF:\n" + test_results_text
-    data, usage = json_call(llm, system=sys, user=user, model_id=s.agent_model_id, max_tokens=s.agent_max_tokens,
+    data, usage = json_call(llm, system=sys, user=user, model_id=s.agent_model_id, max_tokens=max_tokens or s.agent_max_tokens,
                             agent_id=f"{agent_id}.r{round_no}", temperature=0.3)
     claims = []
     for i, c in enumerate(data.get("claims", [])[:8]):

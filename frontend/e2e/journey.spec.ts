@@ -9,7 +9,11 @@ test("investor states a request, agents propose verified orders, risky request c
   await page.goto("/");
   await expect(page.getByText("Investir, avec quelqu'un")).toBeVisible();
   await shot(page, "01-welcome");
-  await page.getByTestId("start").click();
+  // Accounts (Amazon Cognito): a fresh account each run, then straight to the questionnaire.
+  await page.getByTestId("auth-mode").getByText("Créer un compte").click();
+  await page.getByTestId("auth-email").fill(`e2e.${Date.now()}@exemple.ca`);
+  await page.getByTestId("auth-password").fill("Parcours2026ok");
+  await page.getByTestId("auth-submit").click();
 
   // « Connaître son client » : a bold tolerance but a thin cushion and a credit card balance.
   await page.getByTestId("name").fill("Sarah");
@@ -109,4 +113,9 @@ test("investor states a request, agents propose verified orders, risky request c
   await page.goto("/");
   await expect(page.getByTestId("mandate-input")).toBeVisible({ timeout: 30_000 });
   await shot(page, "14-mobile-home");
+
+  // Sign out: back to the sign-in screen, nothing of the account is reachable any more.
+  await page.goto("/profil");
+  await page.getByTestId("profile-sign-out").click();
+  await expect(page.getByTestId("auth-form")).toBeVisible();
 });

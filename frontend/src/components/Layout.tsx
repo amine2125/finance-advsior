@@ -1,7 +1,7 @@
 import clsx from "clsx";
-import { Home, LayoutList, Sparkles, UserRound } from "lucide-react";
-import { ReactNode } from "react";
-import { motion } from "framer-motion";
+import { Home, LayoutList, LogOut, Sparkles, UserRound } from "lucide-react";
+import { ReactNode, useEffect, useRef, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { Link, NavLink, useLocation } from "react-router-dom";
 import { spring } from "./motion";
 import { useApp } from "../hooks/useApp";
@@ -28,6 +28,42 @@ export function Logo({ light }: { light?: boolean }) {
   );
 }
 
+/** Avatar menu: who is signed in, the profile, and sign-out (Cognito accounts). */
+function AccountMenu({ name }: { name: string }) {
+  const { me, authConfig, signOut } = useApp();
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [open]);
+  const accounts = authConfig?.mode === "cognito";
+  return (
+    <div className="relative" ref={ref}>
+      <button onClick={() => setOpen(!open)} className="flex items-center gap-2 rounded-full py-1 pl-1 pr-3 text-sm font-medium text-ink hover:bg-ink/[0.04]" data-testid="account-menu" aria-expanded={open}>
+        <span className="grid h-8 w-8 place-items-center rounded-full bg-white text-xs font-semibold text-ink shadow-card">{(name[0] || "?").toUpperCase()}</span>
+        <span className="hidden max-w-[120px] truncate sm:inline">{name || "Profil"}</span>
+      </button>
+      <AnimatePresence>
+        {open && (
+          <motion.div initial={{ opacity: 0, y: -6, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6, scale: 0.98 }} transition={spring}
+            className="absolute right-0 top-12 z-40 w-64 origin-top-right overflow-hidden rounded-[20px] bg-surface p-1.5 shadow-lift hairline">
+            {accounts && me?.email && <div className="truncate px-3 pb-2 pt-2 text-xs text-ink-muted">Connecté : <span className="text-ink-soft">{me.email}</span></div>}
+            <Link to="/profil" onClick={() => setOpen(false)} className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-ink hover:bg-ink/[0.04]"><UserRound className="h-4 w-4" /> Mon profil</Link>
+            {accounts && (
+              <button onClick={() => { setOpen(false); signOut(); }} className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-sm text-ink hover:bg-ink/[0.04]" data-testid="sign-out">
+                <LogOut className="h-4 w-4" /> Se déconnecter
+              </button>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 function TopBar() {
   const { me } = useApp();
   const { setOpen } = useAdvisor();
@@ -50,10 +86,7 @@ function TopBar() {
           <motion.button whileTap={{ scale: 0.97 }} onClick={() => setOpen(true)} className="hidden items-center gap-2 rounded-full py-1 pl-1 pr-3 text-sm font-medium text-ink hover:bg-ink/[0.04] sm:flex" data-testid="topbar-advisor">
             <AdvisorAvatar size={28} /> Demander à Léa
           </motion.button>
-          <Link to="/profil" className="flex items-center gap-2 rounded-full py-1 pl-1 pr-3 text-sm font-medium text-ink hover:bg-ink/[0.04]" title="Mon profil">
-            <span className="grid h-8 w-8 place-items-center rounded-full bg-white text-xs font-semibold text-ink shadow-card">{(name[0] || "?").toUpperCase()}</span>
-            <span className="hidden max-w-[120px] truncate sm:inline">{name || "Profil"}</span>
-          </Link>
+          <AccountMenu name={name} />
         </div>
       </div>
     </header>

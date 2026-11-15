@@ -15,6 +15,7 @@ import Connect from "./pages/Connect";
 import Onboarding from "./pages/Onboarding";
 import Profile from "./pages/Profile";
 import Welcome from "./pages/Welcome";
+import Login from "./pages/Login";
 
 class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { error: Error | null }> {
   state = { error: null as Error | null };
@@ -26,7 +27,9 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { err
 }
 
 function Shell() {
-  const { me, error, reload } = useApp();
+  const { me, error, reload, auth } = useApp();
+  if (auth === "loading") return <div className="grid min-h-screen place-items-center"><Spinner label="Chargement…" /></div>;
+  if (auth === "signedOut") return <Login />;
   if (error && !me) return <div className="mx-auto max-w-lg p-8"><ErrorBox error={error} onRetry={reload} /></div>;
   // Old links (assistant page, per-asset invest page) land on the new screens.
   if (!me) return <div className="grid min-h-screen place-items-center"><Spinner label="Chargement…" /></div>;

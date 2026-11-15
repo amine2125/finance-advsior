@@ -71,6 +71,11 @@ class Settings:
     alert_sns_topic_arn: str | None
     cors_origins: list[str] = field(default_factory=list)
     live_mode_enabled: bool = False
+    auth_mode: str = "header"  # "header" = sandbox id (tests, offline demo) · "cognito" = Amazon Cognito accounts
+    cognito_region: str | None = None
+    cognito_user_pool_id: str | None = None
+    cognito_client_id: str | None = None
+    demo_accounts_enabled: bool = False
 
 
 @lru_cache(maxsize=1)
@@ -85,6 +90,11 @@ def get_settings() -> Settings:
     if storage == "dynamodb" and not table:
         raise ValueError("AEGIS_DYNAMODB_TABLE is required when AEGIS_STORAGE_BACKEND=dynamodb")
     max_rounds = _int("AEGIS_MAX_DEBATE_ROUNDS", 2, 1, 2)
+    auth = os.getenv("AEGIS_AUTH", "header")
+    if auth not in {"header", "cognito"}:
+        raise ValueError("AEGIS_AUTH must be 'header' or 'cognito'")
+    if auth == "cognito" and not (os.getenv("AEGIS_COGNITO_USER_POOL_ID") and os.getenv("AEGIS_COGNITO_CLIENT_ID")):
+        raise ValueError("AEGIS_COGNITO_USER_POOL_ID and AEGIS_COGNITO_CLIENT_ID are required when AEGIS_AUTH=cognito")
     return Settings(
         app_name=os.getenv("AEGIS_APP_NAME", "AEGIS"),
         env=os.getenv("AEGIS_ENV", "local"),
@@ -111,4 +121,9 @@ def get_settings() -> Settings:
         alert_sns_topic_arn=os.getenv("AEGIS_ALERT_TOPIC_ARN") or None,
         cors_origins=[o.strip() for o in os.getenv("AEGIS_CORS_ORIGINS", "http://localhost:5173").split(",") if o.strip()],
         live_mode_enabled=_bool("AEGIS_LIVE_MODE", False),
+        auth_mode=auth,
+        cognito_region=os.getenv("AEGIS_COGNITO_REGION") or os.getenv("AWS_REGION", "us-east-1"),
+        cognito_user_pool_id=os.getenv("AEGIS_COGNITO_USER_POOL_ID") or None,
+        cognito_client_id=os.getenv("AEGIS_COGNITO_CLIENT_ID") or None,
+        demo_accounts_enabled=_bool("AEGIS_DEMO_ACCOUNTS", False),
     )

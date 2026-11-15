@@ -3,7 +3,21 @@
 Application d'investissement agentique (Datathon PolyFinances 2026 · AlphaForge AI). L'utilisateur s'inscrit comme à la banque
 (objectif, horizon, baisse tolérable, situation, préférences). AEGIS en déduit son profil et ses limites, puis répond à
 « puis-je investir X $ dans Y ? » par **oui**, **oui jusqu'à tel montant** ou **non**, avec les raisons chiffrées.
-Rien n'est pré-chargé : aucun persona ni portefeuille n'est codé en dur. Les personas de l'énoncé (Amira, Mateo, Robert) servent d'exemples de test : chaque utilisateur entre son profil et ses placements.
+Chacun crée son compte (Amazon Cognito), répond au questionnaire et connecte ses placements. Pour le jury, trois comptes de
+démonstration reprennent les investisseurs de l'énoncé, avec leurs réponses et un portefeuille déjà connectés.
+
+## Comptes de démonstration (jury)
+
+Version en ligne : https://d2p220whqnshao.cloudfront.net — boutons « Entrer » sur la page de connexion, ou :
+
+| Compte | Courriel | Mot de passe | Ce qu'on y voit |
+|---|---|---|---|
+| Amira | `amira@demo.aegis-finance.ca` | `AegisDemo2026!` | profil élevé, trop concentré en technologie et en NVIDIA |
+| Mateo | `mateo@demo.aegis-finance.ca` | `AegisDemo2026!` | profil modéré, portefeuille conforme : « rien à changer » + idées |
+| Robert | `robert@demo.aegis-finance.ca` | `AegisDemo2026!` | profil faible à modéré, trop d'actions populaires : rééquilibrage |
+
+Ce sont de vrais comptes ordinaires (mêmes écrans, mêmes agents, réponses modifiables). Leurs données sont recréées à la première
+connexion et après « Tout effacer et recommencer » (Profil). On peut aussi créer son propre compte : il est confirmé tout de suite.
 
 ## Démarrage local
 
@@ -19,9 +33,12 @@ cd backend && python3.11 -m venv .venv && .venv/bin/pip install -r requirements-
 cd ../frontend && npm install && npm run dev
 ```
 
-Pour activer l'assistant IA et le débat des agents (Amazon Bedrock) : copiez `.env.example` en `.env` et remplissez les clés AWS.
-Sans elles, tout le reste fonctionne (profil, analyse du portefeuille, verdict « Investir », recherche SEC) et l'interface
-indique clairement que l'IA générative n'est pas connectée.
+Copiez `.env.example` en `.env` et remplissez les clés AWS (les lignes `export KEY=…` copiées d'un portail AWS sont acceptées).
+Avec la section « Comptes et base de données » remplie, le serveur local utilise les mêmes comptes Cognito et la même table
+DynamoDB que la version déployée. Sans elle, il démarre en mode bac à sable (sans connexion, fichiers JSON locaux).
+
+Les clés temporaires d'un atelier AWS expirent après quelques heures : si les agents ou la connexion échouent, recollez-en de
+nouvelles dans `.env` et redémarrez l'API.
 
 ## Parcours : un mandat d'investissement agentique
 
@@ -61,13 +78,26 @@ Python testés ; les LLM rédigent et argumentent, un validateur rejette tout ch
 ## Tests
 
 ```bash
-cd backend && .venv/bin/python -m pytest -q          # 67 tests (formules, profils KYC, verdicts, mandats agentiques, API, gouvernance)
+cd backend && .venv/bin/python -m pytest -q          # 70 tests (formules, profils KYC, verdicts, mandats agentiques, API, gouvernance)
 cd frontend && npx playwright install chromium && AEGIS_URL=http://localhost:5173 npx playwright test   # parcours complet
 ```
 
 ## AWS
 
-`infrastructure/` (CDK TypeScript) : S3 + CloudFront (interface), API Gateway + Lambda (API et agents), DynamoDB, Bedrock,
-EventBridge, SNS. `scripts/build_lambda.sh` puis `cd infrastructure && npx cdk deploy`.
+`infrastructure/` (CDK TypeScript) : S3 + CloudFront (interface), API Gateway + Lambda (API et agents), **Cognito** (comptes),
+**DynamoDB** (toutes les données des utilisateurs : profils, réponses, portefeuilles, mandats, conversations), Bedrock,
+EventBridge, SNS, CloudWatch.
+
+- Comptes : l'interface parle directement à Cognito ; l'API ne reçoit que le jeton d'accès, qu'elle fait valider par Cognito
+  à chaque requête (mis en cache 5 min). Les mots de passe ne passent jamais par nos serveurs. Un compte = une partition
+  DynamoDB (`PK = USER#u-<sub Cognito>`) : personne ne lit les données d'un autre.
+- Déployer :
+
+```bash
+PATH="$PWD/backend/.venv/bin:$PATH" bash scripts/build_lambda.sh        # paquet Lambda (uv requis : pip install uv)
+cd frontend && npm run build && cd ../infrastructure && npm ci
+npx cdk deploy --outputs-file cdk-outputs.json                          # avec les clés AWS dans l'environnement
+cd .. && backend/.venv/bin/python scripts/seed_demo_accounts.py         # crée les 3 comptes de démonstration
+```
 
 Simulation uniquement : aucune transaction réelle, pas un conseil financier personnalisé.

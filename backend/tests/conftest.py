@@ -17,6 +17,10 @@ sys.path.insert(0, str(ROOT))
 os.environ.setdefault("AEGIS_LLM_ENABLED", "false")
 os.environ.setdefault("AEGIS_JOB_RUNNER", "inline")
 os.environ.setdefault("AEGIS_WEB_RESEARCH_ENABLED", "false")
+# Never touch real AWS resources from tests, whatever the local .env says.
+os.environ["AEGIS_STORAGE_BACKEND"] = "local"
+os.environ["AEGIS_AUTH"] = "header"
+os.environ["AEGIS_DEMO_ACCOUNTS"] = "false"
 os.environ["AEGIS_LOCAL_STORE"] = str(Path(os.environ.get("TMPDIR", "/tmp")) / f"aegis-pytest-{os.getpid()}")
 
 REAL_DATA = ROOT.parent / "data" / "active"

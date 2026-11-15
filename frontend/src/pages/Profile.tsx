@@ -1,6 +1,6 @@
 import clsx from "clsx";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowRight, Check, ChevronRight, Pencil, RotateCcw, X } from "lucide-react";
+import { ArrowRight, Check, ChevronRight, LogOut, Pencil, RotateCcw, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { PageIn, softSpring, spring, Stagger, StaggerItem } from "../components/motion";
@@ -50,7 +50,7 @@ const ROWS: { id: string; section: string; label: string; show: (a: A) => string
 
 /** The client's profile: the level and why, then every answer in one line — change only what changed in their life. */
 export default function Profile() {
-  const { me, restart } = useApp();
+  const { me, restart, authConfig, signOut } = useApp();
   const nav = useNavigate();
   const [editing, setEditing] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -105,6 +105,9 @@ export default function Profile() {
       )}
       <div className="mt-12 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-6 text-sm">
         <Link to="/a-propos" className="font-medium text-ink-soft hover:text-ink">Comment ces calculs sont faits</Link>
+        {authConfig?.mode === "cognito" && (
+          <button onClick={signOut} className="inline-flex items-center gap-1.5 font-medium text-ink-soft hover:text-ink" data-testid="profile-sign-out"><LogOut className="h-4 w-4" /> Se déconnecter{me?.email ? ` (${me.email})` : ""}</button>
+        )}
         <button onClick={() => { if (confirm("Tout effacer (profil, objectifs, placements) et recommencer ?")) restart(); }} className="inline-flex items-center gap-1.5 font-medium text-accent-700 hover:underline">
           <RotateCcw className="h-4 w-4" /> Tout effacer et recommencer
         </button>

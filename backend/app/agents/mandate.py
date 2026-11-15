@@ -18,7 +18,9 @@ Nothing is executed until the person approves (simulation only). Numbers come fr
 from __future__ import annotations
 
 import re
+import time
 from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FuturesTimeout
 
 from ..analytics.ledger import MetricLedger
 from ..analytics.portfolio import value_holdings
@@ -57,6 +59,11 @@ STEPS = [
 ]
 REVIEW_WORDS = r"r[ée][ée]quilibr|r[ée]organis|analys|revoi[sr]|corrige|diversifi|mon portefeuille|mes placements|v[ée]rifie"
 STRESS_KEYS = ["broad_bear", "rates_up_100bp", "tech_crash_30"]
+DEBATE_MAX_TOKENS = 1200     # the mandate only shows a position and 3 claims per side
+DEBATE_BUDGET_S = 75         # past this, the proposal is shown without the pros/cons rather than making the client wait
+RESEARCH_BUDGET_S = 30       # live news sources (SEC, GDELT) can be slow: the analysis continues without them
+COMPACT = ("\n\nFORMAT POUR CETTE DÉCISION: position de 40 mots maximum; exactement 3 claims de 30 mots maximum; "
+           "assumptions, counterarguments et uncertainties: 1 élément maximum chacun; aucun test proposé.")
 EXPLAINER_SYSTEM = """Tu es l'Agent Explicabilité d'AEGIS. Tu reçois une proposition d'investissement DÉJÀ calculée et vérifiée
 (ordres, contrôles de gouvernance, scénarios, arguments vérifiés). Tu l'expliques à une personne qui n'y connaît rien, en français simple.
 Règles: n'écris AUCUN chiffre toi-même : à la place de chaque valeur, écris son identifiant entre crochets et l'interface affichera
@@ -377,8 +384,14 @@ def run_mandate(tracker: JobTracker, owner: str, req: dict) -> dict:
     research = None
     if intent["kind"] == "buy_asset":
         try:
-            research = market_intelligence_agent.investigate(md, intent["asset_id"], request or label, persona,
-                                                             pf if pf and pf.holdings else None, intent["amount_cad"])
+            rex = ThreadPoolExecutor(max_workers=1)
+            fut = rex.submit(market_intelligence_agent.investigate, md, intent["asset_id"], request or label, persona,
+                             pf if pf and pf.holdings else None, intent["amount_cad"])
+            rex.shutdown(wait=False)
+            try:
+                research = fut.result(timeout=RESEARCH_BUDGET_S)
+            except FuturesTimeout:
+                raise RuntimeError(f"sources trop lentes (> {RESEARCH_BUDGET_S} s)") from None
             led.merge(MetricLedger.from_dict(research["ledger"]))
             n_ver = sum(1 for e in research["events"] if e.get("primary_source"))
             tracker.done("market_intelligence.research", f"{n_ver} fait(s) vérifié(s) de sources officielles · {len(research['claims'])} affirmation(s) examinée(s) · "
@@ -590,7 +603,7 @@ def run_mandate(tracker: JobTracker, owner: str, req: dict) -> dict:
         extra += f"\n\nDEMANDE INITIALE: {requested['name']} pour [mnd.amount]; verdict {requested['verdict']}; max compatible [mnd.request.max]."
     packet = EvidencePacket(question=f"Cette proposition répond-elle bien à « {request or label} » pour ce profil ?",
                             persona_text=persona_agent.persona_text(persona), ledger=led, findings=after_xr["findings"] if after_xr else [],
-                            source_ids=source_ids, event_ids=event_ids, events_text=events_text, claims_text=claims_text, extra_text=extra,
+                            source_ids=source_ids, event_ids=event_ids, events_text=events_text, claims_text=claims_text, extra_text=extra + COMPACT,
                             priority_metric_prefixes=("mnd.", "pf.", "persona.", "asset.", "hype."))
     args: dict = {"opp": None, "risk": None}
 
@@ -600,7 +613,7 @@ def run_mandate(tracker: JobTracker, owner: str, req: dict) -> dict:
         try:
             if llm is None:
                 raise LLMError("IA générative non connectée")
-            a = (opportunity_agent if key == "opp" else risk_agent).argue(llm, packet, 1, [])
+            a = (opportunity_agent if key == "opp" else risk_agent).argue(llm, packet, 1, [], max_tokens=DEBATE_MAX_TOKENS)
             usages.append(a.usage)
             tracker.done(sid, a.position[:180], a.usage)
             return a
@@ -608,9 +621,16 @@ def run_mandate(tracker: JobTracker, owner: str, req: dict) -> dict:
             tracker.fail(sid, f"Indisponible : {str(exc)[:120]}")
             return None
 
-    with ThreadPoolExecutor(max_workers=2) as ex:
-        fo, fr = ex.submit(advocate, "opp"), ex.submit(advocate, "risk")
-        args["opp"], args["risk"] = fo.result(), fr.result()
+    ex = ThreadPoolExecutor(max_workers=2)
+    futs = {"opp": ex.submit(advocate, "opp"), "risk": ex.submit(advocate, "risk")}
+    ex.shutdown(wait=False)  # never block the client on a slow model: a late answer is simply ignored
+    deadline = time.time() + DEBATE_BUDGET_S
+    for key, fut in futs.items():
+        try:
+            args[key] = fut.result(timeout=max(0.1, deadline - time.time()))
+        except FuturesTimeout:
+            args[key] = None
+            tracker.fail("opportunity.r1" if key == "opp" else "risk.r1", f"Délai dépassé ({DEBATE_BUDGET_S} s) : proposition présentée sans cet avis")
 
     # 10. audit claims
     tracker.start("audit.claims")

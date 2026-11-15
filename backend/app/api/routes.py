@@ -34,7 +34,7 @@ from ..services.snapshot_service import compare, list_snapshots
 from ..storage.store import get_store
 from ..web_research.http import provider_status
 from ..web_research.tool import WebResearchTool
-from .deps import owner_id, rate_limit
+from .deps import Account, current_account, owner_id, rate_limit
 
 router = APIRouter(prefix="/api/v1")
 
@@ -216,9 +216,28 @@ def onboarding(answers: OnboardingAnswers, owner: str = Depends(owner_id)):
     return _profile_out(saved, derivation)
 
 
+@router.get("/auth/config")
+def auth_config():
+    """Public sign-in settings (no secret: a Cognito app client id and pool id are meant to be public) and the demo accounts."""
+    from ..services import demo_accounts
+    s = get_settings()
+    return {"mode": s.auth_mode, "region": s.cognito_region, "user_pool_id": s.cognito_user_pool_id, "client_id": s.cognito_client_id,
+            "demo_accounts": demo_accounts.public_list() if s.demo_accounts_enabled and s.auth_mode == "cognito" else []}
+
+
+@router.delete("/me")
+def delete_me(owner: str = Depends(owner_id)):
+    """« Tout effacer » : removes every record of this account. A demo account is re-created at its next sign-in."""
+    from ..storage.store import delete_owner
+    return {"deleted": delete_owner(owner)}
+
+
 @router.get("/me")
-def me(owner: str = Depends(owner_id)):
+def me(owner: str = Depends(owner_id), acct: Account | None = Depends(current_account)):
     """Everything the home screen needs: the user's profile (if onboarded) and portfolios. Empty until onboarding."""
+    if acct is not None and get_settings().demo_accounts_enabled:
+        from ..services import demo_accounts
+        demo_accounts.seed_if_empty(owner, acct.email)
     profiles = ps.list_personas(owner)
     meta = get_store().get(owner, "META", "onboarding") or {}
     md = get_market_data()
@@ -227,7 +246,7 @@ def me(owner: str = Depends(owner_id)):
             "answers": meta.get("answers"),
             "portfolios": [p.model_dump(mode="json") for p in ps.list_portfolios(owner)],
             "data_as_of": md.end_date.date().isoformat(), "data_start": md.start_date.date().isoformat(),
-            "dataset_origin": md.origin}
+            "dataset_origin": md.origin, "email": acct.email if acct else None}
 
 
 @router.get("/reference-cases")

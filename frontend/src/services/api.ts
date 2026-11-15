@@ -1,4 +1,7 @@
-// API client. Same-origin "/api" (Vite proxy locally, CloudFront behaviour on AWS). No credentials live in the browser.
+// API client. Same-origin "/api" (Vite proxy locally, CloudFront behaviour on AWS).
+// Cognito mode: each call carries the account's short-lived access token. Sandbox mode: a random id (tests, offline demo).
+import { accessToken, authMode, signOut } from "./auth";
+
 const BASE = (import.meta as any).env?.VITE_API_BASE || "";
 
 export function userId(): string {
@@ -18,6 +21,11 @@ export function resetUser(): void {
   localStorage.removeItem("aegis.user");
 }
 
+/** Tells the app the session ended (expired or revoked): it shows the sign-in screen. */
+function signedOutEverywhere() {
+  window.dispatchEvent(new Event("aegis:signedout"));
+}
+
 export class ApiError extends Error {
   status: number;
   code: string;
@@ -32,10 +40,18 @@ export class ApiError extends Error {
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   let res: Response;
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (authMode() === "cognito") {
+    const t = await accessToken();
+    if (!t) { signedOutEverywhere(); throw new ApiError(401, "unauthenticated", "Connectez-vous pour continuer."); }
+    headers.Authorization = `Bearer ${t}`;
+  } else {
+    headers["X-AEGIS-User"] = userId();
+  }
   try {
     res = await fetch(`${BASE}/api/v1${path}`, {
       method,
-      headers: { "Content-Type": "application/json", "X-AEGIS-User": userId() },
+      headers,
       body: body === undefined ? undefined : JSON.stringify(body),
     });
   } catch {
@@ -48,6 +64,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   } catch {
     data = null;
   }
+  if (res.status === 401 && authMode() === "cognito") { await signOut(); signedOutEverywhere(); }
   if (!res.ok) {
     const e = data?.error || data?.detail || {};
     const msg = e.message || (res.status >= 500 || res.status === 0 ? "Le serveur ne répond pas. Vérifiez que le backend est démarré." : `Erreur HTTP ${res.status}`);
