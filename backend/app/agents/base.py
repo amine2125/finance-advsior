@@ -24,10 +24,10 @@ class JobTracker:
         self.job.updated_at = utcnow()
         get_store().put(self.job.owner_id, "JOB", self.job.job_id, self.job.model_dump(mode="json"), ttl_s=7 * 24 * 3600)
 
-    def add(self, step_id: str, agent_id: str, label: str) -> None:
+    def add(self, step_id: str, agent_id: str, label: str, engine: str | None = None) -> None:
         with self._lock:
             if step_id not in self._steps:
-                s = AgentTraceStep(step_id=step_id, agent_id=agent_id, label=label)
+                s = AgentTraceStep(step_id=step_id, agent_id=agent_id, label=label, engine=engine)
                 self.job.steps.append(s)
                 self._steps[step_id] = s
             self._save()

@@ -85,6 +85,7 @@ export type JobStep = {
   agent_id: string;
   label: string;
   status: "pending" | "running" | "done" | "failed" | "skipped";
+  engine?: "calcul" | "ia" | "mixte" | null;
   detail?: string | null;
   latency_ms: number;
   input_tokens: number;

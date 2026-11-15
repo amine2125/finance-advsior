@@ -38,7 +38,7 @@ def _kyc_text(p: InvestorProfile) -> str:
     steps = [s["title"] for s in k.get("before_investing", [])]
     out = "\nCONNAISSANCE DU CLIENT: " + "; ".join(bits) + "."
     if steps:
-        out += " AVANT D'INVESTIR EN BOURSE, recommande d'abord: " + "; ".join(steps) + "."
+        out += " AVANT D'INVESTIR EN BOURSE, signale que ces étapes sont habituellement prioritaires: " + "; ".join(steps) + "."
     return out
 
 

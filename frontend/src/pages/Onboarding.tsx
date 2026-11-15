@@ -110,6 +110,11 @@ export default function Onboarding() {
       </div>
       <div className="flex flex-1 flex-col">
         <div className="mx-auto w-full max-w-2xl px-5 pt-6 text-sm text-ink-muted">{SECTIONS[secIndex].label}</div>
+        {step.section === "finances" && (
+          <p className="mx-auto mt-2 w-full max-w-2xl px-5 text-xs text-ink-muted" data-testid="fictional-data-note">
+            Simulation éducative : des montants approximatifs ou fictifs suffisent. N'entrez aucun numéro de compte ni renseignement bancaire.
+          </p>
+        )}
         <div className="mx-auto w-full max-w-2xl flex-1 px-5 pb-32 pt-3">
           <StepView id={step.id} a={a} set={set} preview={preview} error={error} />
         </div>
@@ -192,7 +197,7 @@ export function StepView({ id, a, set, preview, error }: { id: string; a: A; set
         <Q title="Combien avez-vous de côté, disponible rapidement ?" why="C'est votre coussin de sécurité. Sans lui, une dépense imprévue (perte d'emploi, réparation) pourrait vous forcer à vendre vos placements au pire moment.">
           <L label="Compte d'épargne, compte chèques, CELI en liquidités…"><Money value={a.savings_cad} onChange={(v) => set({ savings_cad: v })} testid="savings" /></L>
           {months !== null && (
-            <Insight tone={months >= 3 ? "good" : "warn"}>Cela représente <b>{months.toFixed(1).replace(".", ",")} mois</b> de dépenses. {months >= 3 ? "Bon coussin." : "On recommande au moins 3 à 6 mois avant d'investir en bourse."}</Insight>
+            <Insight tone={months >= 3 ? "good" : "warn"}>Cela représente <b>{months.toFixed(1).replace(".", ",")} mois</b> de dépenses. {months >= 3 ? "Bon coussin." : "Les guides d'éducation financière citent souvent 3 à 6 mois avant d'investir en bourse."}</Insight>
           )}
         </Q>
       );

@@ -1,6 +1,7 @@
 """Paths and global constants. Everything configurable by environment variable."""
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 
@@ -27,6 +28,12 @@ SEED = 20261114                 # every random procedure is seeded with this
 # Generic, non-personal user agent for public APIs (Wikimedia asks for an identifiable UA)
 USER_AGENT = os.environ.get("ULYSSE_USER_AGENT", "ULYSSE-datathon-prototype/0.1 (educational, non-commercial)")
 
-# The app's "today" (fixed for reproducible demos; data end on 2026-11-12, issuer snapshots of that day
-# become usable the next business day).
-DEFAULT_ASOF = os.environ.get("ULYSSE_ASOF", "2026-11-14")
+# The app's "today". Default: two days after the datapack's last day (2026-11-14 for the official kit), so that the
+# Wikipedia views and issuer snapshots of that last day are usable. ULYSSE_ASOF pins it for a reproducible demo.
+DEFAULT_ASOF = os.environ.get("ULYSSE_ASOF") or None
+
+
+def kit_end() -> str:
+    """Last day of the kit in use: KIT_END for the official kit, later for a kit extended by scripts/extend_kit.py."""
+    ext = KIT_DIR / "EXTENSION.json"
+    return json.loads(ext.read_text())["extended_to"] if ext.exists() else KIT_END

@@ -56,7 +56,10 @@ def test_master_calendar(dp):
     assert (pd.DatetimeIndex(cal).day_of_week < 5).all()
     # contains a Canadian-only holiday (Civic Holiday, US open) and a US-only holiday (Independence Day, TSX open)
     assert np.datetime64("2022-08-01") in cal and np.datetime64("2022-07-04") in cal
-    assert str(cal[0]) == "2016-01-04" and str(cal[-1]) == "2026-11-12"
+    # ends on the kit's last weekday: 2026-11-12 for the official kit, later for a kit extended by scripts/extend_kit.py
+    kit_last = dp.meta.get("kit", {}).get("end", "2026-11-12")
+    last_weekday = np.busday_offset(np.datetime64(kit_last), 0, roll="backward")
+    assert str(cal[0]) == "2016-01-04" and cal[-1] == last_weekday
 
 
 def test_prices_filled_after_inception_and_traded_mask(dp):

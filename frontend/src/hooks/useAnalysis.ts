@@ -27,7 +27,7 @@ export function checkText(c: { rule_id: string; status: string }): string {
   const over = c.status !== "OK" && c.status !== "UNKNOWN";
   switch (c.rule_id) {
     case "budget.growth_band":
-      if (c.status === "ABOVE_BAND") return "Plus d'actions ou de cryptos que votre profil ne le prévoit : en cas de baisse des marchés, vous pourriez perdre plus que ce que vous avez dit pouvoir supporter.";
+      if (c.status === "ABOVE_BAND") return "Plus d'actions ou de cryptos que votre profil ne le prévoit : en cas de baisse des marchés, les pertes dépasseraient ce que votre profil prévoit.";
       if (c.status === "BELOW_BAND") return "Moins d'actions que prévu : votre argent pourrait croître moins vite que votre objectif.";
       return "La part en actions correspond à votre profil.";
     case "budget.single_issuer":

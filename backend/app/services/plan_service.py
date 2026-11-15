@@ -1,4 +1,4 @@
-"""« Combien voulez-vous investir ? » → the portfolio we recommend for THIS profile, like a bank's managed portfolio.
+"""« Combien voulez-vous investir ? » → a simulated model portfolio that fits THIS declared profile (an example to compare, not advice).
 
 Deterministic and explainable:
   1. growth share = middle of the profile's growth band (actions), rounded to 5 %; the rest is the stability sleeve (bonds);
@@ -60,7 +60,7 @@ def _mix(persona: InvestorProfile, growth: float, allowed: str, stable_override:
 
 def _portfolio(persona: InvestorProfile, weights: dict[str, float], amount: float) -> Portfolio:
     holdings, _ = _build_holdings([{"asset_id": a, "amount_cad": amount * w} for a, w in weights.items()], None)
-    return Portfolio(portfolio_id="plan", owner_id="-", name="Plan recommandé", persona_id=persona.persona_id, holdings=holdings)
+    return Portfolio(portfolio_id="plan", owner_id="-", name="Portefeuille modèle (simulation)", persona_id=persona.persona_id, holdings=holdings)
 
 
 def _fits(xr: dict, below_band_ok: bool = False) -> bool:

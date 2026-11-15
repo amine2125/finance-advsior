@@ -102,7 +102,7 @@ export default function Profile() {
 
       {!me!.profile.kyc && (
         <div className="mt-6 rounded-[20px] bg-primary-50 p-5 text-sm text-ink">
-          Votre profil a été créé avec l'ancien questionnaire, plus court. <button className="font-semibold underline" onClick={() => nav("/inscription")}>Répondez au nouveau</button> pour des conseils plus justes.
+          Votre profil a été créé avec l'ancien questionnaire, plus court. <button className="font-semibold underline" onClick={() => nav("/inscription")}>Répondez au nouveau</button> pour des vérifications plus justes.
         </div>
       )}
       <div className="mt-12 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-6 text-sm">

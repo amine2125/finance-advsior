@@ -11,6 +11,7 @@ export type Me = {
   data_as_of: string;
   data_start: string;
   dataset_origin: string;
+  official_end?: string | null;
   email?: string | null;
   cash?: { cash_cad: number; start_cad?: number; moves: { at: string; kind: string; amount_cad: number; label: string }[] } | null;
   guide?: { tour_done: boolean; lessons: string[]; dismissed: boolean };

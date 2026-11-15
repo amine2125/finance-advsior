@@ -104,6 +104,16 @@ def test_forecast_blocker_and_negation():
     assert not find_forbidden("Le portefeuille ne va pas forcément baisser.")
 
 
+@pytest.mark.parametrize("text", ["**Je vous le conseille.**", "Je ne vous le conseille pas.", "Je vous recommande ce fonds.",
+                                  "Nous vous conseillons de vendre.", "Vous devriez investir 2 000 $ dans Apple."])
+def test_personal_advice_is_rejected(text):
+    assert any(h["kind"] == "personal_advice" for h in find_forbidden(text))
+
+
+def test_compatibility_wording_is_allowed():
+    assert not find_forbidden("**Compatible jusqu'à 1 000 $.** Hors de vos limites au-delà ; AEGIS ne vous conseille pas.")
+
+
 def test_numbers_must_match_ledger():
     led = _led()
     ok = check_free_text("NVDA pèse 30,0 % et la volatilité est de 24,8 % pour 10 000 $.", led)

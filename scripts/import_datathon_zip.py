@@ -27,7 +27,7 @@ from bootstrap_public_data import ALIASES, COINGECKO_IDS, UNIVERSE  # noqa: E402
 
 KNOWN_META = {u[0]: u for u in UNIVERSE}
 FILES = ["assets_universe.csv", "prices_daily.csv", "corporate_actions.csv", "fx_usdcad_daily.csv", "macro_rates.csv",
-         "sources_metadata.csv", "data_quality_warnings.txt", "README.md", "build_dataset.py"]
+         "sources_metadata.csv", "data_quality_warnings.txt", "README.md", "build_dataset.py", "EXTENSION.json"]
 
 
 def norm(c: str) -> str:
@@ -239,11 +239,14 @@ def main() -> int:
         if "source_id" not in s.columns:
             s.insert(0, "source_id", [f"official_{i}" for i in range(len(s))])
         s["dataset_origin"] = "official_datathon_zip"
+        if "processing" in s.columns:  # rows added by scripts/extend_kit.py are the team's, not the organizers'
+            s.loc[s["processing"].astype(str).str.startswith("Extension by the team"), "dataset_origin"] = "team_extension"
         s.to_csv(out / "sources_metadata.csv", index=False)
     warnings = raw.get("data_quality_warnings.txt", b"").decode("utf-8", "replace")
     (out / "data_quality_warnings.txt").write_text(warnings + "\n# AEGIS import notes\n" + "\n".join(report) + "\n")
+    ext = json.loads(raw["EXTENSION.json"]) if "EXTENSION.json" in raw else None
     (out / "DATASET_ORIGIN.json").write_text(json.dumps({"origin": "official_datathon_zip", "official_datathon_zip": True, "imported_at": now,
-                                                         "source": str(a.source), "import_notes": report}, indent=2))
+                                                         "source": str(a.source), "import_notes": report, "extension": ext}, indent=2))
     print("\n".join(report) or "no issues")
     print(f"imported {len(uni)} assets, {len(pr)} price rows -> {out}")
     return 0

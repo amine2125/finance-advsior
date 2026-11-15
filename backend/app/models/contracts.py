@@ -269,6 +269,7 @@ class AgentTraceStep(BaseModel):
     agent_id: str
     label: str
     status: Literal["pending", "running", "done", "failed", "skipped"] = "pending"
+    engine: Literal["calcul", "ia", "mixte"] | None = None  # deterministic Python, a language model, or both (shown in the trace)
     started_at: str | None = None
     ended_at: str | None = None
     model_id: str | None = None

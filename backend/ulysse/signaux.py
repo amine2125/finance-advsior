@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from functools import lru_cache
 
+import numpy as np
+
 from ulysse.analytics import core, hype, regime
 from ulysse.config import DEFAULT_ASOF
 from ulysse.data.datapack import get_datapack
@@ -18,7 +20,7 @@ REGIME_FR = {"calme": "calme", "tendu": "tendu", "agité": "agité"}
 
 def _view(as_of: str | None):
     dp = get_datapack()
-    return dp, dp.asof(as_of or DEFAULT_ASOF)
+    return dp, dp.asof(as_of or DEFAULT_ASOF or str(dp.last_day + np.timedelta64(2, "D")))
 
 
 @lru_cache(maxsize=4)

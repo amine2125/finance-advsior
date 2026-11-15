@@ -2,7 +2,7 @@
 
 > Datathon PolyFinances 2026 · défi **AlphaForge AI** (Banque Nationale × AWS)
 > Une solution **agentique et auto-explicative** : vous dites en français ce que vous voulez faire de votre argent, des agents
-> analysent votre profil, vos placements et le marché, vérifient chaque chiffre et vous proposent quoi faire. Vous décidez.
+> analysent votre profil, vos placements et le marché, vérifient chaque chiffre et proposent une simulation. Vous décidez.
 
 **Essayer en ligne : https://d2p220whqnshao.cloudfront.net** — trois comptes de démonstration sont prêts (voir plus bas).
 
@@ -133,6 +133,7 @@ le dit clairement.
 git clone https://github.com/amine2125/finance-advsior.git && cd finance-advsior && git checkout fusion
 make setup      # environnement Python (AEGIS + ULYSSE), dépendances de l'interface et de l'infrastructure
 make data       # jeu de données officiel (data/active) + datapack ULYSSE (data/build), à partir du kit dans context/
+                # ou : make data-refresh  (même jeu, prolongé jusqu'à hier avec le script et les sources du kit, docs/donnees.md S10)
 make test       # tests backend, sans AWS ni réseau
 make api        # API sur http://127.0.0.1:8000
 make web        # interface sur http://localhost:5173 (dans un autre terminal)
@@ -172,6 +173,8 @@ make deploy
 
 Cette commande :
 
+0. prolonge les prix jusqu'à la veille avec le script officiel du kit (`make data-refresh`), pour que prix et nouvelles partagent
+   la même date (énoncé p. 14) ; la page « À propos » indique la date de fin officielle et la prolongation ;
 1. construit le paquet Lambda sans Docker (bibliothèques Linux + code + signaux ULYSSE précalculés) ;
 2. compile l'interface ;
 3. lance `cdk deploy` : CDK génère un modèle CloudFormation, dépose les paquets dans S3, puis CloudFormation crée ou met à
@@ -183,7 +186,8 @@ Les clés AWS sont lues dans `.env`. L'adresse du site est affichée à la fin (
 ## 9. Tests
 
 ```bash
-make test       # 88 tests : formules financières, profils, verdicts, mandats, solde, signaux ULYSSE, API, gouvernance
+make test       # 108 tests (dont 10 qui demandent le datapack : make data d'abord) : formules, profils, verdicts, mandats,
+                # solde, signaux ULYSSE, API, gouvernance (conseil personnalisé, chiffres non traçables), ESG
 make e2e        # parcours complet dans un navigateur (make api + make web lancés) : inscription, questionnaire, visite guidée,
                 # deux demandes aux agents, approbation, leçon, déconnexion
 ```
@@ -197,8 +201,9 @@ backend/ulysse/          moteur ULYSSE : datapack « à date », climat de march
 backend/tests_aegis/     tests de l'API et des agents
 backend/tests/           tests du moteur ULYSSE
 infrastructure/          AWS CDK (TypeScript) : la stack complète
-scripts/                 import du jeu de données, build Lambda, comptes de démonstration
-docs/                    les deux diagrammes de ce document
+scripts/                 import et prolongation du jeu de données, build Lambda, comptes de démonstration
+docs/                    technique.md (documentation technique), donnees.md (sources), hypotheses.md, one-pager.md,
+                         video-script.md, et les deux diagrammes de ce document
 context/Datathon2026/    énoncé et kit de départ officiels
 ```
 
@@ -208,5 +213,10 @@ context/Datathon2026/    énoncé et kit de départ officiels
 - **Pas un conseil personnalisé** : AEGIS vérifie la cohérence entre une idée et le profil déclaré ; il ne remplace pas un
   conseiller.
 - **Le passé ne prédit pas l'avenir** : rejeux et scénarios décrivent ce qui s'est passé ou une hypothèse explicite.
-- **Données datées** : le jeu officiel s'arrête en novembre 2026 ; une donnée manquante est signalée, jamais inventée.
+- **Données datées** : le jeu officiel s'arrête le 12 novembre 2026 ; `make deploy` le prolonge avec son propre script, et l'écran
+  indique quand les nouvelles lues sont plus récentes que les prix. Une donnée manquante est signalée, jamais inventée.
+- **ESG** : filtre par secteur tiré de la règle publiée de l'indice suivi par ESGV ; pas de note ESG ni de vérification des
+  controverses par entreprise.
+- **Seuils** : les limites par profil et les niveaux de risque sont des heuristiques documentées (`docs/hypotheses.md`), pas des
+  règles réglementaires.
 - **Comptes de démonstration partagés** : leurs identifiants sont publics par conception, pour le jury.

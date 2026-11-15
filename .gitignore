@@ -1,7 +1,9 @@
 # Data: raw downloads and built artefacts are re-creatable (data/manual stays committed)
 data/active/
+data/active_backup_*/
 data/cache/
 data/build/
+data/kit/
 *.zip
 
 # Python

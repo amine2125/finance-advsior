@@ -78,3 +78,12 @@ def test_bias_and_prediction_detection():
 def test_domain_allow_list_blocks_arbitrary_fetch():
     with pytest.raises(ResearchError):
         fetch_json("gdelt", "https://evil.example.com/x")
+
+
+def test_research_dates_warn_only_when_live_sources_are_newer_than_prices():
+    import datetime as dt
+    from app.hype_research.pipeline import research_dates
+    d = research_dates(dt.date(2026, 11, 12), dt.date(2026, 11, 15))
+    assert d["gap_days"] == 3 and "2026-11-12" in d["note"] and "2026-11-15" in d["note"]
+    assert research_dates(dt.date(2026, 11, 12), dt.date(2026, 11, 15), nothing_live=True)["note"] is None
+    assert research_dates(dt.date(2026, 11, 15), dt.date(2026, 11, 15))["note"] is None

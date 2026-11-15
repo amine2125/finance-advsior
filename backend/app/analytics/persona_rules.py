@@ -14,6 +14,16 @@ def _pct(x: float | None) -> str:
     return "n/d" if x is None else f"{x * 100:.1f} %".replace(".", ",")
 
 
+def esg_conflict(p: InvestorProfile, meta: dict) -> str | None:
+    """Why a single stock fails the public ESG screen when the person asked for ESG criteria (methodology « esg_screen »), else None."""
+    cfg = METHODOLOGY["esg_screen"]
+    if not p.esg_preference or meta.get("asset_class") != "equity" or meta.get("sector") not in cfg["excluded_sectors"]:
+        return None
+    return (f"Vous avez demandé de tenir compte de critères ESG : {meta.get('name', 'cette société')} (secteur « {sector_fr(meta['sector'])} », "
+            f"combustibles fossiles) est exclue par le {cfg['label'][0].lower() + cfg['label'][1:]}. Filtre par secteur, pas une note ESG "
+            f"ni une controverse avérée : à vous de juger.")
+
+
 def horizon_tier(years: float) -> RiskTier:
     cfg = METHODOLOGY["horizon_rule"]
     if years < cfg["low_below_years"]:

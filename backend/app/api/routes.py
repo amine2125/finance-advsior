@@ -170,7 +170,7 @@ def me(owner: str = Depends(owner_id), acct: Account | None = Depends(current_ac
             "answers": meta.get("answers"),
             "portfolios": [p.model_dump(mode="json") for p in ps.list_portfolios(owner)],
             "data_as_of": md.end_date.date().isoformat(), "data_start": md.start_date.date().isoformat(),
-            "dataset_origin": md.origin, "email": acct.email if acct else None,
+            "dataset_origin": md.origin, "official_end": md.official_end if md.extended else None, "email": acct.email if acct else None,
             "cash": _wallet_out(wallet.get(owner)) if profiles else None,
             "guide": get_store().get(owner, "META", "guide") or {"tour_done": False, "lessons": [], "dismissed": False}}
 
@@ -426,7 +426,7 @@ def about():
     """References behind the projections and the profile, for the « À propos » page (kept out of the client screens)."""
     return {"references": [
         {"label": "Normes d'hypothèses de projection 2026 (FP Canada et Institut de planification financière)", "url": "https://institutpf.org/en/projection-assumption-guidelines"},
-        {"label": "Connaître son client : Règle 3200 de l'OCRI (convenance des recommandations)", "url": "https://www.ciro.ca/"},
+        {"label": "Inspiration du questionnaire (AEGIS n'est pas un service réglementé) : Règle 3200 de l'OCRI, « Connaître son client »", "url": "https://www.ciro.ca/"},
     ]}
 
 

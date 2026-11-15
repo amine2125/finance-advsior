@@ -25,6 +25,10 @@ FORBIDDEN = [
     ("expected_return", r"rendement (attendu|esp[ée]r[ée]|pr[ée]vu) de\s*[-−]?\d|expected return of\s*[-−]?\d"),
     ("trade_instruction", r"\b(achetez|vendez|ach[eè]te maintenant|vends maintenant|buy now|sell now|you should buy|you should sell|"
                           r"vous devriez (acheter|vendre)|il faut (acheter|vendre))\b"),
+    # Énoncé p. 17: never presented as personalised financial advice, whether the verdict is yes or no.
+    ("personal_advice", r"\b(je (ne )?vous (le |la |les |l')?(conseille|recommande)|nous (ne )?vous (le |la |les |l')?(conseillons|recommandons)|"
+                        r"je vous sugg[eè]re d'(acheter|vendre|investir)|vous devriez (investir|placer|mettre)|"
+                        r"i (would )?(recommend|advise) you)\b"),
     ("certainty", r"\b(garanti|garantie|guaranteed|certain(e)? de (monter|baisser)|sans aucun risque|risk[- ]free return|"
                   r"effondrement certain|perte garantie|guaranteed loss|will certainly)\b"),
 ]

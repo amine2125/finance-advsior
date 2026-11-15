@@ -23,6 +23,7 @@ from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FuturesTimeout
 
 from ..analytics.ledger import MetricLedger
+from ..analytics.persona_rules import esg_conflict
 from ..analytics.portfolio import value_holdings
 from ..analytics.scenarios import SHOCK_PRESETS, apply_shock, historical_replay
 from ..config import get_settings
@@ -43,18 +44,20 @@ from .base import EvidencePacket, JobTracker, compact_json
 from .copilot import mentioned_assets
 from .llm import LLMError, get_llm, json_call
 
+# engine: "calcul" = deterministic Python only; "ia" = a language model writes (its numbers are audited); "mixte" = both
+# (rules first, the model only resolves a misspelled name or extracts claims from articles). Shown in the trace (énoncé p. 8).
 STEPS = [
-    ("profile.read", "persona_agent", "Agent Profil : lit vos limites"),
-    ("supervisor.understand", "supervisor", "Superviseur : comprend votre demande"),
-    ("data.collect", "data_agent", "Agent Données : valide prix, devises et taux"),
-    ("market_intelligence.research", "market_intelligence_agent", "Agent Recherche : sources officielles et nouvelles"),
-    ("quant.proposal", "quant_agent", "Agent Analyste : construit la proposition"),
-    ("governance.orders", "audit_agent", "Agent Gouvernance : vérifie chaque ordre"),
-    ("scenario.stress", "hypothesis_agent", "Agent Scénarios : met la proposition à l'épreuve"),
-    ("opportunity.r1", "opportunity_agent", "Agent Opportunités : arguments pour"),
-    ("risk.r1", "risk_agent", "Agent Risques : arguments contre"),
-    ("audit.claims", "audit_agent", "Agent Gouvernance : vérifie chaque chiffre cité"),
-    ("supervisor.explain", "supervisor", "Agent Explicabilité : rédige la décision"),
+    ("profile.read", "persona_agent", "Agent Profil : lit vos limites", "calcul"),
+    ("supervisor.understand", "supervisor", "Superviseur : comprend votre demande", "mixte"),
+    ("data.collect", "data_agent", "Agent Données : valide prix, devises et taux", "calcul"),
+    ("market_intelligence.research", "market_intelligence_agent", "Agent Recherche : sources officielles et nouvelles", "mixte"),
+    ("quant.proposal", "quant_agent", "Agent Analyste : construit la proposition", "calcul"),
+    ("governance.orders", "audit_agent", "Agent Gouvernance : vérifie chaque ordre", "calcul"),
+    ("scenario.stress", "hypothesis_agent", "Agent Scénarios : met la proposition à l'épreuve", "calcul"),
+    ("opportunity.r1", "opportunity_agent", "Agent Opportunités : arguments pour", "ia"),
+    ("risk.r1", "risk_agent", "Agent Risques : arguments contre", "ia"),
+    ("audit.claims", "audit_agent", "Agent Gouvernance : vérifie chaque chiffre cité", "calcul"),
+    ("supervisor.explain", "supervisor", "Agent Explicabilité : rédige la décision", "ia"),
 ]
 NOT_AN_AMOUNT = r"\s*(?:%|ans?\b|années?\b|mois\b|jours?\b|semaines?\b|actions?\b|parts?\b|titres?\b|unités?\b|fois\b)"
 REVIEW_WORDS = r"r[ée][ée]quilibr|r[ée]organis|analys|revoi[sr]|corrige|diversifi|mon portefeuille|mes placements|v[ée]rifie"
@@ -307,8 +310,8 @@ def run_mandate(tracker: JobTracker, owner: str, req: dict) -> dict:
     s = get_settings()
     md = get_market_data()
     llm = get_llm()
-    for sid, ag, label in STEPS:
-        tracker.add(sid, ag, label)
+    for sid, ag, label, engine in STEPS:
+        tracker.add(sid, ag, label, engine)
     led = MetricLedger()
     usages: list[dict] = []
     request = (req.get("request") or "").strip()[:500]
@@ -401,7 +404,9 @@ def run_mandate(tracker: JobTracker, owner: str, req: dict) -> dict:
                 raise RuntimeError(f"sources trop lentes (> {RESEARCH_BUDGET_S} s)") from None
             led.merge(MetricLedger.from_dict(research["ledger"]))
             n_ver = sum(1 for e in research["events"] if e.get("primary_source"))
+            d = research.get("dates") or {}
             tracker.done("market_intelligence.research", f"{n_ver} fait(s) vérifié(s) de sources officielles · {len(research['claims'])} affirmation(s) examinée(s) · "
+                         + (f"prix au {d['prices_as_of']}, nouvelles lues le {d['researched_on']} · " if d.get("gap_days") else "")
                          + ", ".join(f"{c['tool']}={c['status']}" for c in research.get("tool_calls", [])[:4]))
         except Exception as exc:  # noqa: BLE001 - research is optional: say so, continue
             research = None
@@ -535,6 +540,8 @@ def run_mandate(tracker: JobTracker, owner: str, req: dict) -> dict:
         meta = md.asset(o["asset_id"])
         if o["side"] == "buy" and meta["sector"] in persona.excluded_sectors:
             gov.append({"status": "blocked", "label": f"{o['asset_id']} : secteur exclu", "detail": f"Vous avez exclu « {sector_fr(meta['sector'])} »."})
+        elif o["side"] == "buy" and (esg := esg_conflict(persona, meta)):
+            gov.append({"status": "warn", "label": f"{o['asset_id']} : filtre ESG", "detail": esg})
         if o["side"] == "buy" and meta["asset_class"] == "crypto" and b.max_speculative <= 0:
             gov.append({"status": "blocked", "label": f"{o['asset_id']} : crypto non permise", "detail": "Votre profil ne prévoit aucune part spéculative."})
     if requested and requested["verdict"] != "suitable":
@@ -665,7 +672,8 @@ def run_mandate(tracker: JobTracker, owner: str, req: dict) -> dict:
 
     # 11. explain
     tracker.start("supervisor.explain")
-    headline = _headline(intent, requested, orders, plan, persona, B)
+    esg_note = bool(intent.get("asset_id") and esg_conflict(persona, md.asset(intent["asset_id"])))
+    headline = _headline(intent, requested, orders, plan, persona, B, diagnosis, esg_note)
     explanation = {"why": [], "watch": [], "limits": []}
     extra_nums = persona_numbers(persona) + [amt]
     if llm is not None:
@@ -694,6 +702,8 @@ def run_mandate(tracker: JobTracker, owner: str, req: dict) -> dict:
         explanation = _fallback_explanation(intent, requested, B, Af, rp)
     explanation["limits"] = (explanation["limits"] or []) + ["Simulation éducative : aucune transaction réelle, pas un conseil financier personnalisé.",
                                                              "Les scénarios décrivent le passé ou des chocs hypothétiques ; ce ne sont pas des prévisions."]
+    if research and (research.get("dates") or {}).get("note"):
+        explanation["limits"].append(research["dates"]["note"])
 
     mid = new_id("mnd")
     out = {
@@ -706,7 +716,7 @@ def run_mandate(tracker: JobTracker, owner: str, req: dict) -> dict:
         "research": ({"events": [{"title": e["title"], "url": e.get("url"), "published_at": e.get("published_at"), "provider": e.get("provider")}
                                  for e in research["events"] if e.get("primary_source")][:5],
                       "unverified": [c["proposition"][:200] for c in research["claims"] if c["status"] in ("UNVERIFIED", "DISPUTED")][:4],
-                      "attention": research.get("attention", {}).get("band")} if research else None),
+                      "attention": research.get("attention", {}).get("band"), "dates": research.get("dates")} if research else None),
         "assumptions": intent["assumptions"] + ["Montants convertis au dernier cours connu, en $ CA.", "Frais et impôts non inclus."],
         "sources": [{"label": r.get("file") or r.get("source_id"), "detail": r.get("source") or r.get("provider")} for r in md.source_references()][:6],
         "data_as_of": md.end_date.date().isoformat(), "metrics": led.as_dict(),
@@ -753,28 +763,34 @@ def _ideas(persona, B: dict | None) -> list[dict]:
     return out[:3]
 
 
-def _headline(intent, requested, orders, plan, persona, B) -> str:
+def _headline(intent, requested, orders, plan, persona, B, diagnosis=None, esg_note=False) -> str:
+    esg = " Attention : ce titre ne passe pas votre filtre ESG (voir les raisons)." if esg_note else ""
     lvl = persona.risk_profile_label.lower()
     if intent["kind"] == "invest":
         if B:
-            return (f"Je vous propose d'investir {_cad(intent['amount_cad'])} en complétant ce qui manque à votre portefeuille, "
+            return (f"Simulation : {_cad(intent['amount_cad'])} investis en complétant ce qui manque à votre portefeuille, "
                     f"pour le rapprocher d'un portefeuille {lvl} ({_pct(plan['stable_share'])} stabilité, {_pct(plan['growth_share'])} croissance).")
-        return (f"Je vous propose d'investir {_cad(intent['amount_cad'])} dans un portefeuille {lvl} : "
+        return (f"Simulation : {_cad(intent['amount_cad'])} répartis comme un portefeuille {lvl} : "
                 f"{_pct(plan['stable_share'])} pour la stabilité, {_pct(plan['growth_share'])} pour la croissance.")
     if intent["kind"] == "buy_asset":
         v, n = requested["verdict"], requested["name"]
         if v == "suitable" and requested.get("tier") == "HIGH":
-            return (f"C'est possible : {_cad(requested['amount_cad'])} dans {n} reste dans vos limites. Mais c'est un placement très risqué : "
-                    f"n'y mettez que de l'argent dont vous pouvez accepter une forte baisse.")
+            return (f"Compatible avec vos limites : {_cad(requested['amount_cad'])} dans {n}. Placement très risqué : "
+                    f"une forte baisse de cette somme reste possible.{esg}")
         if v == "suitable":
-            return f"Je vous le conseille : {_cad(requested['amount_cad'])} dans {n} respecte vos limites."
+            return f"Compatible avec votre profil : {_cad(requested['amount_cad'])} dans {n} respecte vos limites.{esg}"
         if v == "partial":
-            return f"Oui, mais pas plus de {_cad(requested['max_amount_cad'])} dans {n}. Je place le reste dans des fonds diversifiés."
-        return f"Je ne vous le conseille pas. À la place, je vous propose de placer {_cad(requested['amount_cad'])} dans un portefeuille {lvl}."
+            return (f"Compatible jusqu'à {_cad(requested['max_amount_cad'])} dans {n}. "
+                    f"Au-delà, vos limites seraient dépassées : la simulation place le reste dans des fonds diversifiés.{esg}")
+        return (f"Hors de vos limites : {_cad(requested['amount_cad'])} dans {n} ne respecte pas votre profil. "
+                f"Alternative simulée : la même somme dans un portefeuille {lvl}.")
+    if not orders and diagnosis and any(pb["rule_id"] == "esg.screen" for pb in diagnosis.get("problems", [])):
+        return (f"Votre portefeuille reste dans les limites de risque d'un profil {lvl}, mais certains placements ne passent pas "
+                f"votre filtre ESG : voir les points signalés.")
     if not orders:
         return f"Votre portefeuille respecte votre profil {lvl}. Rien à corriger : voici seulement quelques idées, si vous le souhaitez."
     sold = sum(o["amount_cad"] for o in orders if o["side"] == "sell")
-    return (f"Pour revenir à un portefeuille {lvl}, je propose de déplacer {_cad(sold)} des placements les plus risqués vers des placements stables, "
+    return (f"Simulation : pour revenir à un portefeuille {lvl}, {_cad(sold)} passent des placements les plus risqués vers des placements stables, "
             f"sans changer le montant investi.")
 
 

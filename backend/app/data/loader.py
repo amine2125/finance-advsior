@@ -46,6 +46,8 @@ class MarketData:
     def __init__(self, universe: pd.DataFrame, prices_long: pd.DataFrame, fx: pd.Series | pd.DataFrame,
                  macro: pd.DataFrame, actions: pd.DataFrame, sources: pd.DataFrame, warnings: list[str],
                  origin: str, dataset_version: str):
+        self.official_end: str | None = None  # set by load_dataset when the kit was extended (scripts/extend_kit.py)
+        self.extended = False
         u = universe.copy()
         if "asset_id" in u.columns:
             u = u.set_index("asset_id")
@@ -237,6 +239,7 @@ class MarketData:
             macro = macro[macro["available_date"] <= _iso(ts)].drop(columns=["available_date"])
         view = MarketData(self.universe.reset_index().rename(columns={"index": "asset_id"}), p, self.fx[self.fx.index <= ts],
                           macro, self.actions, self.sources, self.warnings, self.origin, self.dataset_version)
+        view.official_end, view.extended = self.official_end, self.extended and ts.date().isoformat() > (self.official_end or "")
         return view
 
     # ------------------------------------------------------------------ quality
@@ -305,13 +308,18 @@ def load_dataset(path: str | Path) -> MarketData:
     sources = _read(path, "sources_metadata.csv", required=False)
     wfile = path / "data_quality_warnings.txt"
     warnings = [l for l in wfile.read_text().splitlines() if l.strip()] if wfile.exists() else []
-    origin = "unknown"
+    origin, extension = "unknown", None
     ofile = path / "DATASET_ORIGIN.json"
     if ofile.exists():
-        origin = json.loads(ofile.read_text()).get("origin", "unknown")
+        o = json.loads(ofile.read_text())
+        origin, extension = o.get("origin", "unknown"), o.get("extension")
     h = hashlib.sha256()
     for name in ("assets_universe.csv", "prices_daily.csv", "fx_usdcad_daily.csv", "macro_rates.csv"):
         f = path / name
         if f.exists():
             h.update(f.read_bytes())
-    return MarketData(universe, prices, fx, macro, actions, sources, warnings, origin, "ds-" + h.hexdigest()[:12])
+    md = MarketData(universe, prices, fx, macro, actions, sources, warnings, origin, "ds-" + h.hexdigest()[:12])
+    # Official kit window and, when scripts/extend_kit.py was used, the days the team added after it (énoncé p. 14).
+    md.official_end = (extension or {}).get("official_window", [None, None])[1]
+    md.extended = bool(extension)
+    return md

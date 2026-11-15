@@ -26,7 +26,7 @@ const clean = (t: string) => t.replace(/\s*\[(?:[a-z]+\.[A-Za-z0-9_.\-]+)(?:\s*[
 
 const STEP_FR: [RegExp, string][] = [
   [/check_investment/, "Je vérifie ce placement avec votre profil…"],
-  [/recommended_plan/, "Je prépare un plan adapté à votre profil…"],
+  [/model_portfolio/, "Je prépare un portefeuille modèle pour votre profil…"],
   [/portfolio_xray|compare_alternatives|what_changed/, "J'analyse vos placements…"],
   [/hype_research/, "Je vérifie les nouvelles et les sources officielles…"],
   [/asset_analysis|hypothetical_addition|run_scenario/, "J'étudie ce placement…"],
@@ -42,7 +42,7 @@ function stepText(job: Job | null): string {
 
 function suggestions(path: string): string[] {
   if (path.startsWith("/mandats")) return ["Pourquoi cette proposition ?", "Que veut dire « pire baisse historique » ?", "Que se passe-t-il si j'approuve ?"];
-  if (path.startsWith("/placements")) return ["Mon portefeuille est-il adapté à mon profil ?", "Pourquoi mon portefeuille est-il risqué ?", "Que me conseilles-tu de changer ?"];
+  if (path.startsWith("/placements")) return ["Mon portefeuille est-il adapté à mon profil ?", "Pourquoi mon portefeuille est-il risqué ?", "Qu'est-ce qui dépasse les limites de mon profil ?"];
   return ["Est-ce que je devrais investir 1 000 $ dans NVIDIA ?", "Tout le monde parle du Bitcoin. Est-ce pour moi ?", "J'ai 5 000 $, comment je devrais investir ?"];
 }
 
@@ -109,7 +109,7 @@ function AdvisorPanel({ open, setOpen, msgs, running, job, send, reset }:
   return (
     <>
       {!open && (
-        <button onClick={() => setOpen(true)} data-testid="advisor-open" data-tour="lea" aria-label="Parler à Léa, votre conseillère"
+        <button onClick={() => setOpen(true)} data-testid="advisor-open" data-tour="lea" aria-label="Parler à Léa, votre assistante"
           title="Une question ? Parlez à Léa"
           className="fixed bottom-20 right-4 z-40 grid h-14 w-14 place-items-center rounded-full bg-ink text-white shadow-lift transition hover:scale-105 hover:bg-black md:bottom-6 md:right-6">
           <MessageCircle className="h-6 w-6" />
@@ -118,11 +118,11 @@ function AdvisorPanel({ open, setOpen, msgs, running, job, send, reset }:
       )}
       {open && (
         <div className="animate-pop fixed inset-0 z-50 flex flex-col overflow-hidden bg-white shadow-lift sm:inset-auto sm:bottom-6 sm:right-6 sm:h-[min(640px,calc(100vh-48px))] sm:w-[400px] sm:rounded-3xl sm:border sm:border-line"
-          role="dialog" aria-label="Léa, votre conseillère" data-testid="advisor-panel">
+          role="dialog" aria-label="Léa, votre assistante" data-testid="advisor-panel">
           <header className="flex items-center gap-3 border-b border-line bg-white px-4 py-3.5 text-ink">
             <AdvisorAvatar />
             <div className="min-w-0 flex-1">
-              <div className="font-semibold">{ADVISOR_NAME} <span className="text-xs font-normal text-ink-muted">· conseillère virtuelle (IA)</span></div>
+              <div className="font-semibold">{ADVISOR_NAME} <span className="text-xs font-normal text-ink-muted">· assistante pédagogique (IA)</span></div>
               <div className="truncate text-xs text-ink-muted">Me connaît : profil {me?.profile?.risk_profile_label?.toLowerCase()}, objectifs, placements</div>
             </div>
             {msgs.length > 0 && <button onClick={reset} className="rounded-full p-2 text-ink-muted hover:bg-canvas hover:text-ink" aria-label="Nouvelle conversation" title="Nouvelle conversation"><RotateCcw className="h-4 w-4" /></button>}
@@ -131,10 +131,10 @@ function AdvisorPanel({ open, setOpen, msgs, running, job, send, reset }:
 
           <div className="flex-1 space-y-3 overflow-y-auto bg-canvas px-4 py-4">
             <Bubble role="assistant">
-              <p>Bonjour{name ? ` ${name}` : ""}, ici {ADVISOR_NAME}. Dites-moi ce que vous envisagez, par exemple <i>« Est-ce que je devrais investir 2 000 $ dans Apple ? »</i>. Je vous dirai si je vous le <b>conseille ou non</b>, selon votre profil, et pourquoi.</p>
+              <p>Bonjour{name ? ` ${name}` : ""}, ici {ADVISOR_NAME}. Dites-moi ce que vous envisagez, par exemple <i>« Est-ce que je devrais investir 2 000 $ dans Apple ? »</i>. Je vérifie si c'est <b>compatible ou non</b> avec votre profil, et pourquoi. Je ne donne pas de conseil personnalisé.</p>
             </Bubble>
             {sys.data && !sys.data.llm_ready && (
-              <div className="rounded-xl bg-amber-50 p-3 text-xs text-amber-900">Le conseiller IA n'est pas connecté sur ce serveur ({sys.data.llm_status}). La vérification d'un placement dans « Investir » fonctionne sans lui.</div>
+              <div className="rounded-xl bg-amber-50 p-3 text-xs text-amber-900">L'assistante IA n'est pas connectée sur ce serveur ({sys.data.llm_status}). La vérification d'un placement dans « Investir » fonctionne sans lui.</div>
             )}
             {msgs.map((m, i) => (
               <Bubble key={i} role={m.role} error={m.error}>

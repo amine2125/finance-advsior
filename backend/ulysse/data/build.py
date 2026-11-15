@@ -21,7 +21,7 @@ import numpy as np
 import pandas as pd
 
 from ulysse import __version__
-from ulysse.config import DATAPACK_DIR, EXT_START, KIT_START, MANUAL_DIR
+from ulysse.config import DATAPACK_DIR, EXT_START, KIT_END, KIT_START, MANUAL_DIR, kit_end
 from ulysse.data import kit
 from ulysse.data.sources import boc_fred, issuers, wikipedia, yahoo_ext
 
@@ -280,6 +280,7 @@ def build(fetch: bool = False, out: Path = DATAPACK_DIR) -> dict:
         "built_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "calendar": {"start": str(cal[0].date()), "end": str(cal[-1].date()), "n_days": len(cal),
                      "rule": "weekdays with at least one TSX or U.S. session; prices carried forward when a market is closed"},
+        "kit": {"official_end": KIT_END, "end": kit_end(), "extended": kit_end() != KIT_END},
         "base_currency": "CAD", "assets": assets, "splice": {"date": KIT_START, "per_ticker": splice_report},
         "corrections": {"CNQ.TO": {"what": "spurious 1.021 split on 2022-08-22 removed; special dividend applied once",
                                    "evidence": "CNQ press release 2022-08-04, SEC EDGAR accession 0001017413-22-000049", **cnq_info}},

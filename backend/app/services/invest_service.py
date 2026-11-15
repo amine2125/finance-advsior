@@ -10,7 +10,7 @@ Every number comes from run_xray on the real dataset; the reasons cite the measu
 """
 from __future__ import annotations
 
-from ..analytics.persona_rules import allowed_tier
+from ..analytics.persona_rules import allowed_tier, esg_conflict
 from ..analytics.tiers import classify_risk_tier
 from ..data.loader import MarketData
 from ..i18n import sector_fr
@@ -68,16 +68,17 @@ def _plain(p: dict, name: str, persona: InvestorProfile) -> str:
                     "En ajouter aggraverait le problème." if worse else
                     f"Avec ce placement, vos actions et cryptos passeraient à {_pct(v)}, au-delà de votre zone ({_pct(b.growth_min)} à {_pct(b.growth_max)}).")
         if rid == "budget.single_issuer":
-            return f"{name} pèserait {_pct(v)} de votre portefeuille ; le maximum conseillé par entreprise est {_pct(b.max_single_issuer)}."
+            return f"{name} pèserait {_pct(v)} de votre portefeuille ; la limite de votre profil par entreprise est {_pct(b.max_single_issuer)}."
         if rid == "budget.speculative":
             return f"Les cryptoactifs feraient {_pct(v)} de votre portefeuille ; votre profil en permet au plus {_pct(b.max_speculative)}."
         if rid == "budget.single_sector":
-            return f"Un même secteur ferait {_pct(v)} de votre portefeuille (maximum conseillé : {_pct(b.max_single_sector)}) : ces titres baissent souvent ensemble."
+            return f"Un même secteur ferait {_pct(v)} de votre portefeuille (limite de votre profil : {_pct(b.max_single_sector)}) : ces titres baissent souvent ensemble."
         if rid == "budget.theme_exposure":
-            return f"Un seul thème porterait jusqu'à {_pct(v)} de votre argent (maximum conseillé : {_pct(b.max_single_sector)})."
+            return f"Un seul thème porterait jusqu'à {_pct(v)} de votre argent (limite de votre profil : {_pct(b.max_single_sector)})."
         if rid == "budget.drawdown_review":
-            return (f"Votre portefeuille pourrait perdre jusqu'à {_pct(-v)} dans une mauvaise année, plus que les {_pct(-b.drawdown_review)} "
-                    "que vous avez dit pouvoir accepter.")
+            # The review threshold comes from the profile level (methodology « budgets »), not from the person's own answer.
+            return (f"Avec ces poids, votre portefeuille aurait déjà perdu jusqu'à {_pct(-v)} par le passé (pire baisse historique), "
+                    f"plus que le seuil de revue de {_pct(-b.drawdown_review)} prévu pour un profil {persona.risk_profile_label.lower()}.")
     msg = p["message"].replace("Hors bande: ", "")
     return msg[0].upper() + msg[1:] + "."
 
@@ -115,6 +116,8 @@ def check_investment(md: MarketData, persona: InvestorProfile, pf: Portfolio | N
         return stop("Votre profil ne prévoit aucune part pour les placements spéculatifs comme les cryptoactifs.")
     if meta["sector"] in persona.excluded_sectors:
         return stop(f"Vous avez choisi d'éviter le secteur « {sector_fr(meta['sector'])} ».")
+    if esg := esg_conflict(persona, meta):  # a sourced warning, never a refusal on its own (docs/hypotheses.md, ESG)
+        reasons.append({"tone": "warn", "text": esg})
     # 2. horizon rule
     if tier["tier"] == "HIGH" and persona.horizon_years_min < METHODOLOGY["horizon_rule"]["low_below_years"]:
         return stop(f"Vous aurez besoin de cet argent dans {persona.horizon_years_min:g} an(s) : un placement qui a déjà perdu "

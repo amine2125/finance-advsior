@@ -164,14 +164,14 @@ def stressed_correlation(returns: pd.DataFrame, weights: dict[str, float], ppy: 
     end = roll.idxmin()
     end_pos = returns.index.get_loc(end)
     win = returns.iloc[end_pos - window + 1:end_pos + 1]
-    c_s = win.corr().fillna(0).to_numpy()
+    c_s = win.corr().fillna(0).to_numpy(copy=True)  # pandas 3 (copy-on-write) returns a read-only view otherwise
     np.fill_diagonal(c_s, 1.0)
     cols = list(returns.columns)
     w = np.array([weights.get(c, 0.0) for c in cols])
     vols = returns.std(ddof=1).to_numpy() * math.sqrt(ppy)
     d = np.diag(vols)
     stressed_var = float(w @ d @ c_s @ d @ w)
-    normal_corr = returns.corr().fillna(0).to_numpy()
+    normal_corr = returns.corr().fillna(0).to_numpy(copy=True)
     np.fill_diagonal(normal_corr, 1.0)
     normal_var = float(w @ d @ normal_corr @ d @ w)
     return {

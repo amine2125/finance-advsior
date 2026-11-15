@@ -29,7 +29,7 @@ from .prompts import COPILOT_SYSTEM
 from .quant_agent import compare_alternatives
 
 TOOLS = [
-    {"name": "recommended_plan", "description": "Portefeuille modèle recommandé pour le profil de l'utilisateur, pour un montant donné (part Stabilité / Croissance, fonds indiciels qui les composent, ce qu'il aurait fait sur les dernières années). À utiliser pour « que dois-je acheter ? », « comment investir X $ ? », ou pour proposer une alternative.",
+    {"name": "model_portfolio", "description": "Portefeuille modèle simulé correspondant au profil déclaré de l'utilisateur, pour un montant donné (part Stabilité / Croissance, fonds indiciels qui les composent, ce qu'il aurait fait sur les dernières années). À utiliser pour « que dois-je acheter ? », « comment investir X $ ? », ou pour montrer une alternative simulée.",
      "schema": {"type": "object", "properties": {"amount_cad": {"type": "number"}}, "required": ["amount_cad"]}},
     {"name": "check_investment", "description": "À utiliser EN PREMIER pour toute question « puis-je / devrais-je investir X $ dans Y ? ». Verdict déterministe de compatibilité avec le profil de l'utilisateur et son portefeuille (compatible / compatible jusqu'à un montant maximal / non adapté) avec les raisons chiffrées (préférences, horizon, limites du profil).",
      "schema": {"type": "object", "properties": {"asset_id": {"type": "string"}, "amount_cad": {"type": "number"}}, "required": ["asset_id", "amount_cad"]}},
@@ -138,7 +138,7 @@ class ToolBox:
         return {"scenario": SHOCK_PRESETS[preset]["name"], "metrics": self._m([f"scn.{n}.return", f"scn.{n}.pnl"]), "label": r["label"],
                 "_summary": f"{r['return'] * 100:.1f} %"}
 
-    def t_recommended_plan(self, amount_cad: float):
+    def t_model_portfolio(self, amount_cad: float):
         from ..services.plan_service import recommended_plan
         p = recommended_plan(self.md, self.persona, float(amount_cad), None)
         self.led.add("plan.amount", "Montant du plan", float(amount_cad), "cad", "saisie de l'utilisateur", info_class="HYPOTHETICAL")
@@ -224,7 +224,7 @@ def run_chat(tracker: JobTracker, owner: str, req: dict) -> dict:
     persona = ps.resolve_persona(owner, req.get("persona_id"), pf)
     conv_id = req.get("conversation_id") or new_id("conv")
     conv = get_store().get(owner, "CONV", conv_id) or {"conversation_id": conv_id, "messages": [], "created_at": utcnow()}
-    tracker.add("copilot.understand", "copilot", "Compréhension de la question")
+    tracker.add("copilot.understand", "copilot", "Compréhension de la question", "calcul")
     tracker.start("copilot.understand")
     biases = detect_biases(message)
     assets = mentioned_assets(md, message)
@@ -233,7 +233,7 @@ def run_chat(tracker: JobTracker, owner: str, req: dict) -> dict:
     box.question = message
     answer, policy, corrections, usage_tot = "", None, [], {"input_tokens": 0, "output_tokens": 0, "calls": 0}
     if is_prediction_request(message):
-        tracker.add("copilot.forecast_policy", "audit_agent", "Politique de prévision (réponse en quatre parties)")
+        tracker.add("copilot.forecast_policy", "audit_agent", "Politique de prévision (réponse en quatre parties)", "calcul")
         tracker.start("copilot.forecast_policy")
         target = assets[0] if assets else (pf.holdings[0].asset_id if pf and pf.holdings else "SPY")
         policy = four_part_answer(md, target, md.end_date, box.led)
@@ -259,7 +259,7 @@ def run_chat(tracker: JobTracker, owner: str, req: dict) -> dict:
         for m in conv["messages"][-6:]:
             history.append({"role": m["role"], "content": [{"text": m["text"][:1500]}]})
         msgs = history + [{"role": "user", "content": [{"text": message}]}]
-        tracker.add("copilot.reasoning", "copilot", "Choix des outils et rédaction")
+        tracker.add("copilot.reasoning", "copilot", "Choix des outils et rédaction", "ia")
         tracker.start("copilot.reasoning")
         for _ in range(5):
             r = llm.converse(system=system, messages=msgs, model_id=s.reasoning_model_id, max_tokens=1800, temperature=0.2, tool_config=tool_cfg,
@@ -280,7 +280,7 @@ def run_chat(tracker: JobTracker, owner: str, req: dict) -> dict:
             msgs.append({"role": "user", "content": results})
         tracker.done("copilot.reasoning", f"{usage_tot['calls']} appel(s) Bedrock", {"model_id": s.agent_model_id, **usage_tot})
         # governance on the final answer
-        tracker.add("audit.answer", "audit_agent", "Audit de la réponse")
+        tracker.add("audit.answer", "audit_agent", "Audit de la réponse", "calcul")
         tracker.start("audit.answer")
         if not box.led.ids() and pf is not None and pf.holdings:
             box.xr()

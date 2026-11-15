@@ -1,7 +1,7 @@
 """Versioned methodology configuration.
 
 Every threshold used by analytics, persona rules, Guardian and governance lives here so it can be
-inspected (GET /api/v1/methodology), versioned in snapshots, and changed without touching code.
+inspected, versioned in snapshots, and changed without touching code.
 Values marked `heuristic` are demonstration conventions, not regulatory rules or advice.
 """
 from __future__ import annotations
@@ -66,6 +66,25 @@ METHODOLOGY: dict = {
     # Index funds whose holdings are dominated by one sector (no verified look-through): counted in full toward that
     # sector's exposure, reported as « jusqu'à ». Nasdaq-100 (QQQ) is known as technology-dominated.
     "thematic_etfs": {"QQQ": "Information Technology"},
+    # ESG preference (persona Mateo, énoncé p. 6). No open, reliable per-company ESG rating or controversy feed is
+    # connected, so the screen is the published exclusion rule of the ESG index already in the kit (ESGV), applied by sector.
+    "esg_screen": {
+        "kind": "public_index_rule",
+        "excluded_sectors": ["Energy"],
+        "label": "Filtre ESG de l'indice FTSE US All Cap Choice (suivi par le FNB ESGV du kit)",
+        "rule": "L'indice exclut notamment les combustibles fossiles, les armes, le tabac, l'alcool, les jeux d'argent, "
+                "le nucléaire civil et le divertissement pour adultes, ainsi que les sociétés jugées non conformes au "
+                "Pacte mondial de l'ONU (travail, droits humains, environnement, corruption).",
+        "applied_here": "Seule l'exclusion des combustibles fossiles est appliquée, par secteur (Énergie du kit : "
+                        "Enbridge, Canadian Natural Resources, Exxon Mobil). Les autres critères demandent des données "
+                        "par entreprise que le prototype n'a pas.",
+        "source": "Vanguard World Fund, prospectus abrégé (formulaire 497K) déposé à la SEC",
+        "source_url": "https://www.sec.gov/Archives/edgar/data/52848/000168386321007247/f10433d1.htm",
+        "limits": ["Filtre par secteur, pas une note ESG par entreprise.",
+                   "Les controverses propres à chaque entreprise ne sont pas vérifiées : aucune source ouverte et fiable n'est connectée.",
+                   "Le prospectus cité date de 2021 ; FTSE a ajouté des critères en mars 2024 et revoit l'indice chaque trimestre.",
+                   "Les cryptoactifs, FNB et obligations ne sont pas couverts par ce filtre d'indice d'actions."],
+    },
     "profile_builder": {
         "kind": "heuristic mapping from the investor's own answers; demonstration only, not a suitability assessment",
         "levels": ["prudent", "low_moderate", "moderate", "high"],

@@ -13,7 +13,7 @@ export default function About() {
   const sys = useApi<any>("/system/info");
   return (
     <Body overlap={false}>
-      <PageTitle title="À propos des chiffres" subtitle="D'où viennent les données, et comment les conseils sont calculés." />
+      <PageTitle title="À propos des chiffres" subtitle="D'où viennent les données, et comment les vérifications sont calculées." />
       <div className="grid gap-5 lg:grid-cols-2">
         <Card title="Comment ça marche">
           <ul className="space-y-2 text-sm text-ink-soft">
@@ -33,8 +33,9 @@ export default function About() {
           <dl className="space-y-2 text-sm">
             <div className="flex justify-between gap-3"><dt className="text-ink-soft">Période</dt><dd className="text-right">{date(me!.data_start)} → {date(me!.data_as_of)}</dd></div>
             <div className="flex justify-between gap-3"><dt className="text-ink-soft">Jeu de données</dt><dd className="text-right">{me!.dataset_origin === "official_datathon_zip" ? "Officiel (AlphaForge, datathon PolyFinances 2026)" : me!.dataset_origin}</dd></div>
+            {me!.official_end && <div className="flex justify-between gap-3"><dt className="text-ink-soft">Prolongation</dt><dd className="text-right">Officiel jusqu'au {date(me!.official_end)}, puis prolongé par l'équipe avec le script et les sources du kit (Yahoo Finance, Banque du Canada, FRED)</dd></div>}
             <div className="flex justify-between gap-3"><dt className="text-ink-soft">Devise</dt><dd>$ CA (taux de la Banque du Canada)</dd></div>
-            {sys.data && <div className="flex justify-between gap-3"><dt className="text-ink-soft">Conseiller IA</dt><dd><Badge tone={sys.data.llm_ready ? "good" : "warn"}>{sys.data.llm_ready ? "Connecté" : "Non connecté"}</Badge></dd></div>}
+            {sys.data && <div className="flex justify-between gap-3"><dt className="text-ink-soft">Assistante IA</dt><dd><Badge tone={sys.data.llm_ready ? "good" : "warn"}>{sys.data.llm_ready ? "Connecté" : "Non connecté"}</Badge></dd></div>}
           </dl>
           {sources.data && (
             <ul className="mt-4 space-y-2 border-t border-line pt-4 text-xs text-ink-soft">

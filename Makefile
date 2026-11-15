@@ -1,8 +1,9 @@
 PY  := backend/.venv/bin/python
 PIP := backend/.venv/bin/pip
 KIT := context/Datathon2026/alphaforge_starter
+KIT_EXT := data/kit
 
-.PHONY: setup data test api web web-build e2e lambda deploy demo-accounts
+.PHONY: setup data data-refresh test api web web-build e2e lambda deploy demo-accounts
 
 setup:          ## Python 3.12+ environment (AEGIS API + ULYSSE engine), interface and CDK dependencies
 	python3 -m venv backend/.venv
@@ -13,7 +14,11 @@ setup:          ## Python 3.12+ environment (AEGIS API + ULYSSE engine), interfa
 
 data:           ## official dataset for AEGIS (data/active) + ULYSSE datapack (data/build), both from the committed starter kit
 	$(PY) scripts/import_datathon_zip.py $(KIT) --out data/active
-	cd backend && .venv/bin/python -m ulysse.data.build
+	cd backend && ULYSSE_KIT_DIR="$(abspath $(KIT))" .venv/bin/python -m ulysse.data.build
+
+data-refresh:   ## official kit extended to yesterday with the kit's own script (Yahoo, Bank of Canada, FRED), then `make data` on it
+	$(PY) scripts/extend_kit.py $(KIT) --out $(KIT_EXT)
+	$(MAKE) data KIT=$(KIT_EXT)
 
 test:           ## all backend tests (AEGIS + ULYSSE): no AWS, no network, LLM stubbed
 	cd backend && .venv/bin/python -m pytest -q
@@ -33,7 +38,7 @@ e2e:            ## full browser journey against the local stack (`make api` + `m
 lambda:         ## Lambda package (Linux wheels, no Docker) with the ULYSSE signals pre-computed
 	PATH="$(CURDIR)/backend/.venv/bin:$$PATH" bash scripts/build_lambda.sh
 
-deploy: lambda web-build   ## deploy to AWS with the CDK (AWS credentials in the environment or .env)
+deploy: data-refresh lambda web-build   ## prices extended to yesterday, then deploy to AWS with the CDK (AWS credentials in .env)
 	cd backend && .venv/bin/python -c "import app.config, os, subprocess, sys; sys.exit(subprocess.run(['npx', 'cdk', 'deploy', 'AegisStack', '--require-approval', 'never', '--outputs-file', 'cdk-outputs.json'], cwd='../infrastructure', env=os.environ).returncode)"
 	$(MAKE) demo-accounts
 

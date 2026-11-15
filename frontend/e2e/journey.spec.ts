@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 // Full user journey on a fresh browser profile: welcome → onboarding (bank-style questions) → recommended plan for the
-// profile → invested → portfolio → « est-ce que tu me conseilles Tesla ? » → advisor bubble. Screenshots go to SHOTS.
+// profile → invested → portfolio → « Tesla est-elle compatible avec mon profil ? » → advisor bubble. Screenshots go to SHOTS.
 const SHOTS = process.env.SHOTS || "test-results/shots";
 const shot = (page: any, name: string) => page.screenshot({ path: `${SHOTS}/${name}.png`, fullPage: true });
 
@@ -104,7 +104,7 @@ test("investor states a request, agents propose verified orders, risky request c
   await page.getByTestId("mandate-input").fill("Je veux mettre 3 000 $ dans Tesla");
   await page.getByTestId("mandate-start").click();
   await expect(page.getByTestId("proposal")).toBeVisible({ timeout: 240_000 });
-  await expect(page.getByTestId("headline")).toContainText("Je ne vous le conseille pas");
+  await expect(page.getByTestId("headline")).toContainText("Hors de vos limites");
   await shot(page, "10-proposal-refused");
 
   await page.goto("/placements");

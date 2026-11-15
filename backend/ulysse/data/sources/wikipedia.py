@@ -8,7 +8,7 @@ import urllib.parse
 
 import pandas as pd
 
-from ulysse.config import CACHE_DIR, KIT_END, MANUAL_DIR
+from ulysse.config import CACHE_DIR, KIT_END, MANUAL_DIR, kit_end
 from ulysse.data.sources.http import NotFound, fetch
 
 OUT = CACHE_DIR / "wikipedia"
@@ -21,10 +21,11 @@ def mapping() -> pd.DataFrame:
 
 
 def article_views(project: str, article: str, refresh: bool = False) -> pd.Series:
-    end = KIT_END.replace("-", "")
+    end = kit_end().replace("-", "")
     url = API.format(project=project, article=urllib.parse.quote(article, safe=""), start=START, end=end)
     safe = article.replace("/", "_").replace(",", "").replace("&", "and")
-    path = fetch(url, OUT / f"{project}__{safe}.json", refresh=refresh)
+    tag = "" if end == KIT_END.replace("-", "") else f"__{end}"  # an extended kit needs views up to its own last day
+    path = fetch(url, OUT / f"{project}__{safe}{tag}.json", refresh=refresh)
     items = json.loads(path.read_text()).get("items", [])
     s = pd.Series({pd.Timestamp(i["timestamp"][:8]): i["views"] for i in items}, dtype="float64")
     return s.sort_index()

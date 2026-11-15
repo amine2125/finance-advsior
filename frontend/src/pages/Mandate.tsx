@@ -145,6 +145,14 @@ function Orb({ Icon, iconKey, state }: { Icon: LucideIcon; iconKey: string; stat
 }
 
 /** Full step list with durations: shown only in the « Trace » tab of the detailed analysis. */
+/** What did the work in each step: deterministic Python, a language model, or both (the jury sees agents are not decoration). */
+const ENGINE_FR: Record<string, string> = { calcul: "Calcul Python", ia: "IA (Bedrock)", mixte: "Calcul + IA" };
+const ENGINE_TIP: Record<string, string> = {
+  calcul: "Règles et formules testées, sans modèle de langage",
+  ia: "Un modèle de langage rédige ; chaque chiffre cité est vérifié contre les calculs",
+  mixte: "Règles d'abord ; le modèle de langage sert seulement à reconnaître un nom ou à extraire des affirmations",
+};
+
 export function Pipeline({ steps }: { steps: JobStep[] }) {
   if (!steps.length) return <Spinner label="Démarrage des agents…" />;
   return (
@@ -160,7 +168,8 @@ export function Pipeline({ steps }: { steps: JobStep[] }) {
             </span>
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-baseline justify-between gap-x-3">
-                <span className="text-sm text-ink"><span className="font-semibold">{agent}</span>{task ? <span className="text-ink-muted"> · {task}</span> : null}</span>
+                <span className="text-sm text-ink"><span className="font-semibold">{agent}</span>{task ? <span className="text-ink-muted"> · {task}</span> : null}
+                  {s.engine && <span className="ml-2 rounded-full bg-ink/[0.05] px-2 py-0.5 text-[11px] font-medium text-ink-muted" title={ENGINE_TIP[s.engine]}>{ENGINE_FR[s.engine]}</span>}</span>
                 {s.latency_ms > 0 && <span className="tabular-nums text-[11px] text-ink-muted">{(s.latency_ms / 1000).toFixed(1).replace(".", ",")} s{s.model_id ? ` · ${s.model_id.split(".").slice(-1)[0].split("-v")[0]}` : ""}</span>}
               </div>
               {s.detail && <p className="mt-0.5 text-sm leading-snug text-ink-muted">{s.detail}</p>}
@@ -539,11 +548,11 @@ function Split({ orders, total }: { orders: any[]; total: number }) {
 /** One broken limit: the measure, its limit, and a bar with the limit marked. Tap for the plain-language detail. */
 function ProblemTile({ p }: { p: any }) {
   const [open, setOpen] = useState(false);
-  const tier = p.rule_id === "tier";
-  const val = tier ? null : Math.abs(p.value ?? 0), lim = tier ? null : Math.abs(p.limit_value ?? 0);
+  const tier = p.rule_id === "tier", esg = p.rule_id === "esg.screen";
+  const val = tier || esg ? null : Math.abs(p.value ?? 0), lim = tier || esg ? null : Math.abs(p.limit_value ?? 0);
   const scale = val != null && lim != null ? Math.max(val, lim) * 1.15 || 1 : 1;
-  const shown = tier ? TIER[p.tiers?.[0]] : p.value != null ? pct(p.value, 1) : "—";
-  const limitText = tier ? `permis : ${TIER[p.tiers?.[1]]?.toLowerCase()}` : p.limit_min != null ? `zone ${pct(p.limit_min, 0)}–${pct(p.limit_value, 0)}` : `max ${pct(p.limit_value, 0)}`;
+  const shown = esg ? "Exclu" : tier ? TIER[p.tiers?.[0]] : p.value != null ? pct(p.value, 1) : "—";
+  const limitText = esg ? "filtre ESG public, par secteur" : tier ? `permis : ${TIER[p.tiers?.[1]]?.toLowerCase()}` : p.limit_min != null ? `zone ${pct(p.limit_min, 0)}–${pct(p.limit_value, 0)}` : `max ${pct(p.limit_value, 0)}`;
   return (
     <StaggerItem as="div">
       <motion.button layout type="button" onClick={() => setOpen(!open)} whileTap={{ scale: 0.98 }}
@@ -727,6 +736,11 @@ function Why({ m, metrics }: { m: any; metrics: any }) {
       {m.research && (
         <div>
           <h3 className="text-sm font-semibold text-ink">Ce que l'agent Recherche a trouvé</h3>
+          {m.research.dates?.gap_days > 0 && (
+            <p className="mt-1 text-xs text-ink-muted" data-testid="research-dates">
+              Prix au {date(m.research.dates.prices_as_of)} · nouvelles lues le {date(m.research.dates.researched_on)}
+            </p>
+          )}
           <ul className="mt-2 divide-y divide-line border-t border-line">
             {m.research.events.map((ev: any, i: number) => (
               <li key={i} className="flex items-start justify-between gap-3 py-3 text-sm">
