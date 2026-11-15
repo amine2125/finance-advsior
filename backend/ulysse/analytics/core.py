@@ -197,3 +197,30 @@ def rendement_dividende(v: AsOf, t: str) -> Evidence:
     total = sum(x["value"] for x in divs)
     return evidence(**base, valeur=float(total / last[-1] * 100), unite="%", devise=a["currency"],
                     date_de_calcul=str(v.date), periode=(str(start), str(end)))
+
+
+def duree_sous_l_eau(v: AsOf, t: str) -> Evidence:
+    """Longest time the total-return index stayed below a previous peak (still running counts)."""
+    lv = v.series(t, "adj", "CAD")
+    idx = np.flatnonzero(v.traded(t) & ~np.isnan(lv))
+    d, x = v.dates[idx], lv[idx]
+    base = dict(mesure="duree_max_sous_l_eau", libelle="Plus longue période passée sous un ancien sommet", sujet=t,
+                as_of=str(v.day), donnees_source=src(v, t), methode="duree_max_entre_sommet_et_retour",
+                reference="Durée de récupération d'un indice de rendement total (« underwater period »).")
+    if len(x) < 250:
+        return evidence(**base, valeur=None, unite="années", date_de_calcul=v.date, statut="donnees_insuffisantes",
+                        note=f"{len(x)} séances, 250 requises")
+    peak_val, peak_day = x[0], d[0]
+    best = (0, d[0], d[0], True)
+    for day, val in zip(d, x):
+        if val >= peak_val:
+            dur = int((day - peak_day).astype(int))
+            if dur > best[0]:
+                best = (dur, peak_day, day, True)
+            peak_val, peak_day = val, day
+    running = int((d[-1] - peak_day).astype(int))
+    if running > best[0]:
+        best = (running, peak_day, d[-1], False)
+    years = best[0] / 365.25
+    return evidence(**base, valeur={"annees": years, "debut": str(best[1]), "fin": str(best[2]), "termine": best[3]},
+                    unite="années", date_de_calcul=str(d[-1]), periode=(str(d[0]), str(d[-1])))

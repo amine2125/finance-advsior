@@ -76,6 +76,13 @@ def ishares_ca_holdings(ticker: str, as_of: date | None = None, refresh: bool = 
     stamp = lines[0].split(",", 1)[1].strip().strip('"')
     if stamp in ("-", ""):
         path.unlink(missing_ok=True)  # empty answer (non-business day): do not cache it
+        if as_of is None:  # « latest » asked on a weekend or holiday: use the last business day that has a file
+            for back in range(1, 6):
+                day = (pd.Timestamp.today().normalize() - pd.tseries.offsets.BDay(back)).date()
+                try:
+                    return ishares_ca_holdings(ticker, day, refresh)
+                except NotFound:
+                    continue
         raise NotFound(f"no holdings published for {ticker} as of {tag}")
     snap = datetime.strptime(stamp, "%b %d, %Y").date()
     start = next(i for i, l in enumerate(lines) if l.startswith("Ticker,"))

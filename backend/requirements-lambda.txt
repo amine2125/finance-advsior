@@ -1,0 +1,7 @@
+# Lambda bundle (boto3/botocore are provided by the python3.12 Lambda runtime)
+fastapi==0.163.0
+pydantic==2.14.3
+pandas==2.2.3
+numpy==2.0.2
+httpx==0.28.1
+mangum==0.22.0

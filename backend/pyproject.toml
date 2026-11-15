@@ -1,29 +1,31 @@
 [project]
-name = "ulysse"
-version = "0.1.0"
-description = "ULYSSE — simulated investing app with an embedded, self-explaining agent (Datathon AlphaForge AI 2026). Simulation only, not financial advice."
+name = "aegis-ulysse"
+version = "0.2.0"
+description = "AEGIS — agentic, self-explaining investing app (Datathon AlphaForge AI 2026), with the ULYSSE market-signal engine. Simulation only, not financial advice."
 requires-python = ">=3.12"
 dependencies = [
   "numpy>=2.0",
-  "scipy>=1.13",
-  "scikit-learn>=1.5",
+  "pandas>=2.2,<3",          # AEGIS writes into pandas arrays in place: pandas 3 copy-on-write makes them read-only
   "pydantic>=2.7",
+  "httpx>=0.27",
 ]
 
 [project.optional-dependencies]
-data = ["pandas>=2.2", "yfinance>=0.2.50", "openpyxl>=3.1"]
-api = ["fastapi>=0.115", "uvicorn[standard]>=0.30"]
-aws = ["boto3>=1.35", "anthropic[bedrock]>=2.0"]
-dev = ["pytest>=8", "httpx>=0.27"]
+api = ["fastapi>=0.115", "uvicorn[standard]>=0.30", "mangum>=0.17"]   # AEGIS API (local server and Lambda)
+aws = ["boto3>=1.35"]                                                 # Cognito, DynamoDB, Bedrock, S3
+signals = ["scikit-learn>=1.5", "scipy>=1.13"]                        # ULYSSE engine: market climate and unusual attention
+data = ["yfinance>=0.2.50", "openpyxl>=3.1"]                          # ULYSSE datapack build (make data)
+dev = ["pytest>=8", "pyflakes>=3"]
 
 [build-system]
 requires = ["setuptools>=69"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["ulysse*"]
+include = ["app*", "ulysse*"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["tests", "tests_aegis"]
 addopts = ""
 markers = ["network: test needs internet (skipped by default)", "datapack: test needs the built datapack"]
+filterwarnings = ["ignore::DeprecationWarning", "ignore:Using `httpx` with `starlette.testclient`"]
