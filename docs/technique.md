@@ -39,6 +39,24 @@ Code : `backend/app/agents/mandate.py` (orchestration, liste `STEPS`), `backend/
 Si Bedrock est lent ou absent, les étapes 8 et 10 sont marquées « échec » ou « ignorée » et une explication déterministe les remplace :
 la proposition reste complète.
 
+**Temps de réponse.** Lire SEC, GDELT et CoinGecko au moment de la demande coûtait 15 à 40 s par titre : GDELT accepte une
+requête toutes les 5 s, puis le modèle extrait les affirmations. Trois mesures, sans changer le résultat :
+
+1. **Cache partagé des nouvelles** (`hype_research/news_cache.py`). Toutes les 15 minutes, soit le rythme de mise à jour de GDELT, les
+   sources de chaque titre individuel sont relues : sur AWS par une règle EventBridge qui appelle la Lambda des agents
+   (`{"task": "news_refresh"}`), en local par un fil d'exécution de l'API (`AEGIS_NEWS_REFRESH_MIN`). Ce rafraîchissement n'appelle
+   pas le modèle de langage. Avec un appel Bedrock par titre et par tour, il coûterait environ 25 $ par jour.
+2. **Préchargement à l'ouverture de la page d'un titre** (`POST /api/v1/research/prefetch`, tâche `news_warm`). Les sources trop
+   vieilles sont relues et les affirmations extraites pendant que la personne lit la page. L'extraction est réutilisée tant que
+   les articles sont les mêmes.
+3. **Recherche en parallèle** (`agents/mandate.py`). L'agent Recherche tourne pendant les étapes 5 à 7 et n'est attendu qu'avant
+   les agents Opportunités / Risques. `MetricLedger.merge_first` remet ses métriques en tête du registre : le registre et ses
+   identifiants sont les mêmes que dans l'ordre séquentiel.
+
+Mesure locale sur NVDA : recherche de nouvelles en 38,7 s sans cache, 0,2 s avec, pour les mêmes 31 événements. La fraîcheur
+n'est jamais cachée (énoncé p. 14) : chaque partie garde son heure de lecture réelle, la trace indique « cache », et l'écran de
+résultat affiche « nouvelles lues le … à … ». Détail des durées de réutilisation : `docs/donnees.md`, S11.
+
 **Léa** (assistante) suit le même principe avec des outils fermés (`check_investment`, `model_portfolio`, `portfolio_xray`,
 `hype_research`…) ; sa réponse est auditée avant affichage, et réécrite une fois si l'audit la rejette.
 
@@ -101,7 +119,7 @@ registre (tolérance d'arrondi), sinon la phrase est rejetée et corrigée. Le r
 
 | Validation | Résultat |
 |---|---|
-| Tests automatisés (`make test`) | 108 tests verts, dont 10 qui demandent le datapack ULYSSE (`make data` d'abord) : formules financières, profil, verdicts, mandats, solde, validateur (formulations interdites, conseil personnalisé, chiffres non traçables), ESG, dates de recherche, signaux ULYSSE, absence d'information future |
+| Tests automatisés (`make test`) | 113 tests verts, dont 18 qui demandent le datapack ULYSSE (`make data` d'abord) : formules financières, profil, verdicts, mandats, solde, validateur (formulations interdites, conseil personnalisé, chiffres non traçables), ESG, dates de recherche, cache des nouvelles (fraîcheur, copie de secours datée), signaux ULYSSE, absence d'information future |
 | Prolongation des prix (`make data-refresh`) | clôtures identiques au kit sur le chevauchement (écart maximal 0,000 % le 2026-11-15) ; contrôles du kit sans avertissement |
 | Parcours en navigateur (`make e2e`, Playwright) | inscription, questionnaire, deux mandats, approbation, leçon ; à relancer avant la remise |
 | Trois comptes de démonstration (exécution locale du 2026-11-15) | Robert : Tesla refusée, alternative obligataire ; Amira : rééquilibrage, volatilité 24,9 % → 12,9 %, rejeu 2022 −24,3 % → −6,8 % ; Mateo : « rien à corriger » |
@@ -112,7 +130,8 @@ registre (tolérance d'arrondi), sinon la phrase est rejetée et corrigée. Le r
 - Seuils et limites par profil : heuristiques lisibles, pas des règles réglementaires.
 - ESG : filtre sectoriel sourcé, pas de note ESG ni de vérification des controverses par entreprise.
 - Données Yahoo non certifiées ; biais du survivant ; compositions de QQQ et d'ESGV non disponibles.
-- Nouvelles : couverture GDELT ; dépôts SEDAR+ non connectés.
+- Nouvelles : couverture GDELT ; dépôts SEDAR+ non connectés. Une analyse peut reposer sur des nouvelles lues jusqu'à 20 minutes
+  plus tôt (24 h si la source est en panne) ; l'heure de lecture est affichée.
 - Le passé ne prédit pas l'avenir : rejeux et chocs décrivent un fait passé ou une hypothèse explicite.
 
 ## 8. Améliorations envisagées

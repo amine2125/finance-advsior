@@ -28,11 +28,11 @@ export default function AmountPicker({ value, onChange, presets, min = 1, max, t
     : typed == null ? "Entrez un montant en dollars, ex. 1 500."
     : typed < min ? `Minimum ${cad(min)}.`
     : max != null && typed > max ? `Maximum ${cad(max)}.` : null;
-  const type = (s: string) => {
-    setText(s);
+  const valid = (s: string) => {
     const v = parseAmount(s);
-    onChange(v != null && v >= min && (max == null || v <= max) ? v : null);
+    return v != null && v >= min && (max == null || v <= max) ? v : null;
   };
+  const type = (s: string) => { setText(s); onChange(valid(s)); };
   const chip = (active: boolean) => clsx("relative rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors", active ? "text-white" : "text-ink-soft hover:text-ink");
   return (
     <div data-testid={testid}>
@@ -48,7 +48,7 @@ export default function AmountPicker({ value, onChange, presets, min = 1, max, t
           );
         })}
         <motion.button type="button" role="radio" aria-checked={custom} whileTap={{ scale: 0.96 }} data-testid={testid && `${testid}-other`}
-          onClick={() => { setCustom(true); onChange(parseAmount(text)); }} className={clsx(chip(custom), !custom && "bg-ink/[0.04]")}>
+          onClick={() => { setCustom(true); onChange(valid(text)); }} className={clsx(chip(custom), !custom && "bg-ink/[0.04]")}>
           {custom && <motion.span layoutId={`amt-${testid || "x"}`} className="absolute inset-0 -z-0 rounded-full bg-ink" transition={spring} />}
           <span className="relative">Autre montant</span>
         </motion.button>

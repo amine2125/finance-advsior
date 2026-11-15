@@ -82,6 +82,26 @@ test("investor states a request, agents propose verified orders, risky request c
   await expect(page.getByTestId("tour")).toBeHidden();
   await expect(page.getByTestId("starter")).toBeVisible();
 
+  // « Investir » lets the user choose the amount: the whole balance by default, a suggested amount, or any amount in range.
+  await page.getByTestId("invest-cash").click();
+  await expect(page.getByTestId("invest-panel")).toBeVisible();
+  await expect(page.getByTestId("invest-amount").locator('[aria-checked="true"]')).toContainText("Tout");
+  await page.getByTestId("invest-amount-other").click();
+  await page.getByTestId("invest-amount-input").fill("20");
+  await expect(page.getByTestId("confirm-invest")).toBeDisabled();
+  await page.getByTestId("invest-amount-input").fill("2 500");
+  await expect(page.getByTestId("confirm-invest")).toBeEnabled();
+  await shot(page, "07a-invest-panel");
+  await page.getByTestId("invest-cash").click();
+
+  // Security search: « / » opens it, Escape closes it.
+  await page.keyboard.press("/");
+  await expect(page.getByTestId("asset-search")).toBeVisible();
+  await page.getByTestId("asset-search-input").fill("nvda");
+  await expect(page.getByTestId("asset-search-row").first()).toContainText("NVDA");
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("asset-search")).toBeHidden();
+
   // The agentic mandate: the user states what they want, the agents work in front of them, then a verified proposal.
   await expect(page.getByTestId("mandate-input")).toBeVisible({ timeout: 30_000 });
   await shot(page, "07-mandate-home");

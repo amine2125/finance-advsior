@@ -96,7 +96,8 @@ Ce qui rend les réponses **dignes de confiance** :
 | **Amazon API Gateway** | API HTTP devant la Lambda, avec limitation du débit. |
 | **AWS Lambda · API** | L'API FastAPI (via Mangum) : profil, placements, mandats, solde. Elle fait valider chaque jeton par Cognito. |
 | **AWS Lambda · agents** | Le workflow agentique, lancé en asynchrone (jusqu'à 10 minutes) pour ne jamais bloquer l'interface. |
-| **Amazon DynamoDB** | Toutes les données des utilisateurs, une partition par compte (`PK = USER#<compte>`) : personne ne lit les données d'un autre. |
+| **Amazon EventBridge** | Une règle toutes les 15 minutes (le rythme de mise à jour de GDELT) appelle la Lambda des agents pour relire les sources publiques (SEC, GDELT, CoinGecko) de chaque titre. Une analyse trouve ainsi les nouvelles déjà lues. Sans modèle de langage, donc sans coût Bedrock. |
+| **Amazon DynamoDB** | Toutes les données des utilisateurs, une partition par compte (`PK = USER#<compte>`) : personne ne lit les données d'un autre. Une partition à part (`USER#_shared`) garde le cache des nouvelles publiques, qui ne contient aucune donnée personnelle. |
 | **Amazon Bedrock** | Claude Haiku 4.5 (API Converse) pour les agents qui raisonnent et rédigent. Permission limitée à ce seul modèle. |
 | **Amazon CloudWatch** | Journaux, et pour chaque agent : jetons consommés et latence, dans un tableau de bord. |
 | **AWS CDK → CloudFormation** | Toute l'infrastructure est décrite en TypeScript (`infrastructure/`) et déployée en une commande. |

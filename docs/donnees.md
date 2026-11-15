@@ -20,7 +20,7 @@
 | S8 | iShares Canada (BlackRock) | Compositions de XIU (mensuelles) et XBB | 2016-01 → 2026-11 | expositions des FNB |
 | S9 | Communiqué de CNQ (copie SEC EDGAR) | Preuve d'une correction du kit | — | correction CNQ.TO |
 | S10 | Kit officiel prolongé **vers l'avant** (script du kit) | Prix, change et macro après le 2026-11-12 | 2026-11-13 → veille du déploiement | tout le moteur, si `make data-refresh` |
-| S11 | Sources en direct de l'agent Recherche | Dépôts SEC EDGAR, nouvelles GDELT, marché crypto CoinGecko | lues au moment de la demande | agent Recherche |
+| S11 | Sources en direct de l'agent Recherche | Dépôts SEC EDGAR, nouvelles GDELT, marché crypto CoinGecko | lues aux 15 minutes (cache partagé) et au moment de la demande si la copie a vieilli | agent Recherche |
 | S12 | Prospectus abrégé d'ESGV (SEC, formulaire 497K) | Règle d'exclusion de l'indice ESG | prospectus de 2021 | filtre ESG (préférence de Mateo) |
 
 ## S1 — Kit de départ AlphaForge
@@ -145,8 +145,24 @@ Utilisées seulement quand une demande vise un titre précis (« Je veux 2 000 $
 - **Cohérence temporelle** : ces sources sont lues le jour de la demande, alors que les prix s'arrêtent au dernier jour du jeu de
   données. Quand une source a répondu et que les deux dates diffèrent, l'écran de proposition, la trace et les limites l'indiquent :
   « Prix au … · nouvelles lues le … » (`research_dates`).
+- **Cache partagé** (`backend/app/hype_research/news_cache.py`) : ces sources publiques sont lentes (GDELT accepte une requête
+  toutes les 5 s). Elles sont donc lues à l'avance et gardées dans une partition commune du stockage (`_shared`, type `NEWS`), sans
+  aucune donnée personnelle :
+  - **rafraîchissement aux 15 minutes**, soit le rythme de mise à jour de GDELT : une interrogation plus fréquente ne rapporterait
+    rien de neuf. Sur AWS, une règle EventBridge appelle la Lambda des agents (`{"task": "news_refresh"}`) ; en local, un fil
+    d'exécution de l'API s'en charge (`AEGIS_NEWS_REFRESH_MIN`, 15 par défaut, 0 pour le couper). Il porte sur les titres
+    individuels et les cryptoactifs, pas sur les FNB diversifiés. Il n'appelle pas le modèle de langage ;
+  - **ouverture de la page d'un titre** (`POST /api/v1/research/prefetch`) : relit ses sources si elles ont vieilli et extrait les
+    affirmations pendant que la personne lit la page. Une extraction est réutilisée tant que les articles sont les mêmes ;
+  - **durée de réutilisation** : 20 min pour les articles et CoinGecko, 1 h pour les dépôts SEC, 6 h pour le volume sur 90 jours.
+    Au-delà, l'analyse relit la source en direct. Si cette lecture échoue, une copie de moins de 24 h est utilisée et signalée
+    comme telle dans la trace.
+- **Date de lecture réelle** (énoncé p. 14) : chaque partie garde le moment où elle a vraiment été lue. La trace journalise
+  « cache » avec ce moment, et l'écran de résultat affiche l'heure de lecture des nouvelles (`dates.read_at`, la plus ancienne
+  lecture utilisée). Une nouvelle lue en cache n'est jamais présentée comme lue à l'instant de l'analyse.
 - **Limites** : GDELT couvre surtout la presse en ligne ; les dépôts SEDAR+ (émetteurs canadiens) ne sont pas connectés ; les
-  conditions exactes de GDELT et de CoinGecko sont à relire avant toute diffusion publique.
+  conditions exactes de GDELT et de CoinGecko sont à relire avant toute diffusion publique. Une analyse peut s'appuyer sur des
+  nouvelles lues jusqu'à 20 minutes plus tôt (24 h si la source est en panne) ; l'heure affichée le dit.
 
 ## S12 — Filtre ESG (préférence de Mateo)
 
