@@ -230,8 +230,8 @@ function Connect() {
   const [manual, setManual] = useState(false);
   const [busy, setBusy] = useState(false);
   return (
-    <Glass className="mt-6 px-6 py-7 sm:px-9" glow>
-      <div data-testid="connect" data-tour="connect">
+    <div data-tour="connect"><Glass className="mt-6 px-6 py-7 sm:px-9" glow>
+      <div data-testid="connect">
         <span className="grid h-11 w-11 place-items-center rounded-2xl bg-primary-50 text-primary-600"><Link2 className="h-5 w-5" /></span>
         <h2 className="mt-4 font-display text-[30px] font-semibold leading-tight tracking-tightest text-ink">Connectez votre portefeuille</h2>
         <p className="mt-2 max-w-xl text-ink-soft">Reliez le compte où sont déjà vos placements. Nos agents vérifient tout de suite s'il respecte votre profil {me!.profile.risk_profile_label.toLowerCase()}.</p>
@@ -249,7 +249,7 @@ function Connect() {
         )}
         <p className="mt-5 text-xs text-ink-muted">Simulation : aucun identifiant n'est demandé et aucun vrai compte n'est contacté.</p>
       </div>
-    </Glass>
+    </Glass></div>
   );
 }
 
@@ -323,7 +323,8 @@ function CashRow() {
     finally { setBusy(false); }
   };
   return (
-    <div className="mt-4 border-t border-line pt-4" data-tour="cash" data-testid="cash">
+    <div className="mt-4 border-t border-line pt-4" data-testid="cash">
+      <div data-tour="cash">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <span className="grid h-10 w-10 place-items-center rounded-full bg-primary-50 text-primary-600"><Wallet className="h-4 w-4" /></span>
@@ -344,6 +345,7 @@ function CashRow() {
           <span className="text-xs text-ink-muted">Argent fictif, pour apprendre sans risque.</span>
         </motion.div>
       )}
+      </div>
       <ErrorBox error={err} />
     </div>
   );

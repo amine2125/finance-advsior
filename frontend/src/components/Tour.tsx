@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowLeft, ArrowRight, X } from "lucide-react";
-import { useCallback, useEffect, useLayoutEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useApp } from "../hooks/useApp";
 import { api } from "../services/api";
@@ -36,6 +36,64 @@ const visible = (name: string): HTMLElement | null => {
   return null;
 };
 
+const PAD = 8;   // space between the element and the highlight ring, identical on all four sides
+const GAP = 14;  // space between the highlight and the explanation card
+const M = 16;    // minimum distance from the viewport edges
+
+/** The element that actually draws the shape: skips bare wrappers (no padding, border or background) around a single child. */
+const shape = (el: HTMLElement): HTMLElement => {
+  let e = el;
+  while (e.children.length === 1) {
+    const s = getComputedStyle(e);
+    const boxed = ["top", "right", "bottom", "left"].some((k) => parseFloat(s.getPropertyValue(`padding-${k}`)) || parseFloat(s.getPropertyValue(`border-${k}-width`)));
+    if (boxed || s.backgroundColor !== "rgba(0, 0, 0, 0)" || s.backgroundImage !== "none") break;
+    const c = e.firstElementChild as HTMLElement;
+    const cr = c.getBoundingClientRect();
+    if (!cr.width || !cr.height) break;
+    e = c;
+  }
+  return e;
+};
+const pinned = (el: HTMLElement) => {
+  for (let e: HTMLElement | null = el; e; e = e.parentElement) { const p = getComputedStyle(e).position; if (p === "fixed" || p === "sticky") return true; }
+  return false;
+};
+/** Bottom edge of the sticky header: content scrolled above it is hidden behind it. */
+const headerBottom = () => {
+  const h = document.querySelector("header");
+  if (!h) return 0;
+  const p = getComputedStyle(h).position;
+  return p === "sticky" || p === "fixed" ? Math.max(0, h.getBoundingClientRect().bottom) : 0;
+};
+const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), Math.max(lo, hi));
+
+type Box = { top: number; left: number; width: number; height: number; borderRadius: number };
+
+const measureBox = (el: HTMLElement): Box => {
+  const v = shape(el);
+  const r = v.getBoundingClientRect();
+  const raw = getComputedStyle(v).borderTopLeftRadius;
+  const height = r.height + PAD * 2;
+  const rad = raw.endsWith("%") ? Infinity : parseFloat(raw) || 0;
+  return { top: r.top - PAD, left: r.left - PAD, width: r.width + PAD * 2, height, borderRadius: Math.min(rad > 0 ? rad + PAD : 12, height / 2, (r.width + PAD * 2) / 2) };
+};
+
+/** Card position: below, then above, then right, then left of the highlight; never on top of it when any side has room. */
+const placeCard = (b: Box, cw: number, ch: number, vw: number, vh: number) => {
+  const x = clamp(b.width >= cw ? b.left : b.left + b.width / 2 - cw / 2, M, vw - cw - M);
+  const fitsY = (t: number) => t >= M && t + ch <= vh - M;
+  const below = b.top + b.height + GAP;
+  if (fitsY(below)) return { top: below, left: x };
+  const above = b.top - GAP - ch;
+  if (fitsY(above)) return { top: above, left: x };
+  const midY = clamp(b.top + b.height / 2 - ch / 2, M, vh - ch - M);
+  const right = b.left + b.width + GAP;
+  if (right + cw <= vw - M) return { top: midY, left: right };
+  const left = b.left - GAP - cw;
+  if (left >= M) return { top: midY, left };
+  return { top: vh - (b.top + b.height) >= b.top ? clamp(below, M, vh - ch - M) : clamp(above, M, vh - ch - M), left: x };
+};
+
 /** Guided tour of the home screen: starts by itself on the first visit, and on demand (event « aegis:tour »). */
 export default function Tour() {
   const { me, reload } = useApp();
@@ -43,7 +101,10 @@ export default function Tour() {
   const nav = useNavigate();
   const [stops, setStops] = useState<Stop[] | null>(null);
   const [i, setI] = useState(0);
-  const [rect, setRect] = useState<DOMRect | null>(null);
+  const [box, setBox] = useState<Box | null>(null);
+  const [snap, setSnap] = useState(false); // true while following a scroll/resize: no spring lag behind the element
+  const [cardH, setCardH] = useState(260);
+  const cardRef = useRef<HTMLDivElement>(null);
 
   const start = useCallback(() => {
     if (loc.pathname !== "/") nav("/");
@@ -66,20 +127,49 @@ export default function Tour() {
   const stop = stops?.[i];
   const measure = useCallback(() => {
     const el = stop && visible(stop.target);
-    setRect(el ? el.getBoundingClientRect() : null);
+    setBox(el ? measureBox(el) : null);
   }, [stop]);
+
+  // Card height follows its content, so placement never relies on a guess.
+  useLayoutEffect(() => {
+    const c = cardRef.current;
+    if (!c) return;
+    setCardH(c.offsetHeight);
+    const ro = new ResizeObserver(() => setCardH(c.offsetHeight));
+    ro.observe(c);
+    return () => ro.disconnect();
+  }, [stops]);
+
   useLayoutEffect(() => {
     const el = stop && visible(stop.target);
     if (!el) return;
-    el.scrollIntoView({ block: "center", behavior: "smooth" });
-    const t = setTimeout(measure, 350);
-    window.addEventListener("resize", measure);
-    window.addEventListener("scroll", measure, true);
-    return () => { clearTimeout(t); window.removeEventListener("resize", measure); window.removeEventListener("scroll", measure, true); };
-  }, [stop, measure]);
+    const v = shape(el);
+    if (!pinned(v)) {
+      // Scroll so that the element AND the card fit together, clear of the sticky header.
+      const r = v.getBoundingClientRect();
+      const vw = window.innerWidth, vh = window.innerHeight;
+      const ch = cardRef.current?.offsetHeight ?? cardH;
+      const cw = Math.min(360, vw - 2 * M);
+      const T = headerBottom() + M, B = vh - M, bh = r.height + PAD * 2;
+      const sideRoom = r.right + PAD + GAP + cw <= vw - M || r.left - PAD - GAP - cw >= M;
+      const boxTop = bh + GAP + ch <= B - T ? T + (B - T - bh - GAP - ch) / 2   // card below, the pair centred
+        : bh <= B - T && sideRoom ? T + (B - T - bh) / 2                          // card beside
+        : Math.max(T, M + ch + GAP);                                              // card above, element continues below
+      window.scrollBy({ top: r.top - PAD - boxTop, behavior: "smooth" });
+    }
+    setSnap(false);
+    measure();
+    const follow = () => { setSnap(true); measure(); };
+    const t = setTimeout(follow, 600);
+    const ro = new ResizeObserver(follow);
+    ro.observe(v);
+    window.addEventListener("resize", follow);
+    window.addEventListener("scroll", follow, true);
+    return () => { clearTimeout(t); ro.disconnect(); window.removeEventListener("resize", follow); window.removeEventListener("scroll", follow, true); };
+  }, [stop, measure]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const finish = async () => {
-    setStops(null); setRect(null);
+    setStops(null); setBox(null);
     if (isDemo(me?.email)) { try { sessionStorage.setItem(SESSION_KEY, "1"); } catch { /* private mode */ } return; }
     if (!me?.guide?.tour_done) { await api.put("/guide", { tour_done: true }).catch(() => undefined); reload(); }
   };
@@ -92,31 +182,29 @@ export default function Tour() {
   const next = () => (stops && i < stops.length - 1 ? setI(i + 1) : finish());
 
   if (!stops || !stop) return null;
-  const pad = 8;
-  const box = rect && { top: rect.top - pad, left: rect.left - pad, width: rect.width + pad * 2, height: rect.height + pad * 2 };
   const vw = window.innerWidth, vh = window.innerHeight;
-  const cardW = Math.min(360, vw - 32);
-  const below = box ? box.top + box.height + 220 < vh : true;
-  const cardTop = box ? (below ? box.top + box.height + 12 : Math.max(16, box.top - 12 - 200)) : vh / 2 - 100;
-  const cardLeft = box ? Math.min(Math.max(16, box.left), vw - cardW - 16) : (vw - cardW) / 2;
+  const cardW = Math.min(360, vw - 2 * M);
+  const card = box ? placeCard(box, cardW, cardH, vw, vh) : { top: (vh - cardH) / 2, left: (vw - cardW) / 2 };
+  const move = snap ? { ...softSpring, top: { duration: 0 }, left: { duration: 0 }, width: { duration: 0 }, height: { duration: 0 } } : softSpring;
 
   return (
     <div className="fixed inset-0 z-[60]" role="dialog" aria-modal="true" aria-label="Visite guidée" data-testid="tour">
       <div className="absolute inset-0" onClick={finish} />
       <AnimatePresence>
         {box && (
-          <motion.div key="spot" className="pointer-events-none absolute rounded-[24px] ring-2 ring-primary-500" style={{ boxShadow: "0 0 0 9999px rgba(21,20,19,0.55)" }}
-            initial={false} animate={box} transition={softSpring} />
+          <motion.div key="spot" className="pointer-events-none absolute ring-2 ring-primary-500" style={{ boxShadow: "0 0 0 9999px rgba(21,20,19,0.55)" }}
+            initial={false} animate={box} transition={move} />
         )}
       </AnimatePresence>
-      <motion.div className="absolute rounded-[22px] bg-surface p-5 shadow-lift hairline" style={{ width: cardW }}
-        initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0, top: cardTop, left: cardLeft }} transition={softSpring}>
+      <motion.div ref={cardRef} className="absolute left-0 top-0 rounded-[22px] bg-surface p-5 shadow-lift hairline" style={{ width: cardW }}
+        initial={{ opacity: 0, y: 8, top: card.top, left: card.left }} animate={{ opacity: 1, y: 0, top: card.top, left: card.left }} transition={move}>
         <div className="flex items-start justify-between gap-3">
           <span className="tabular-nums text-xs font-medium text-primary-600">Visite guidée · {i + 1} sur {stops.length}</span>
           <button onClick={finish} className="-mr-1 -mt-1 grid h-7 w-7 place-items-center rounded-full text-ink-muted hover:bg-ink/[0.05]" aria-label="Passer la visite" data-testid="tour-skip"><X className="h-4 w-4" /></button>
         </div>
-        <AnimatePresence mode="wait">
-          <motion.div key={stop.target} initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -8 }} transition={{ duration: 0.16 }}>
+        {/* No exit animation: the new text is in the DOM at once, so the card height measured for placement is the right one. */}
+        <AnimatePresence initial={false}>
+          <motion.div key={stop.target} initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.16 }}>
             <h3 className="mt-1 font-display text-xl font-semibold tracking-tight text-ink">{stop.title}</h3>
             <p className="mt-1.5 text-sm leading-relaxed text-ink-soft">{stop.text}</p>
           </motion.div>
