@@ -3,6 +3,8 @@
 **Une application de placement simulée qui vérifie tes intentions contre les règles que tu as toi-même fixées, faits à l'appui.**
 Datathon PolyFinances 2026 « AlphaForge AI » (Banque Nationale × AWS × PolyFinances).
 
+> **Branche `fusion`** : la logique et le back-end de ULYSSE, avec l'interface visuelle d'AEGIS (barre en verre, navigation en pilule, Jost + Instrument Sans, fond crème, accent cobalt, animations) et un **assistant conversationnel encadré** qui remplace le conseiller virtuel d'AEGIS. Le one-pager et la vidéo sont produits à part.
+
 > **Simulation, pas un conseil financier.** Aucune transaction réelle. ULYSSE ne dit jamais « achète », « vends » ou « tu devrais » : il montre si une intention est cohérente avec ton contrat, avec des preuves vérifiables. Profils et portefeuilles fictifs ; données publiques uniquement.
 
 Ulysse s'est fait attacher au mât pour résister au chant des sirènes. Ici, les sirènes sont l'engouement du marché ; le mât, ce sont tes règles, écrites à froid.
@@ -14,6 +16,7 @@ Ulysse s'est fait attacher au mât pour résister au chant des sirènes. Ici, le
 - **La Vigie (en continu)** : chaque heure (ou à la demande, ou rejouée à une date passée), elle surveille la dérive du portefeuille, l'attention inhabituelle sur les titres suivis et le climat de marché, puis pré-calcule les signaux.
 - **Le signal** : partout dans l'app, l'élément concerné s'allume (halo + pastille) ; un clic ouvre 2–3 faits, leurs preuves et des options.
 - **Le dossier de décision** : Données → Constats → Analyse → Options → Explication ; chaque phrase étiquetée (MESURÉ, DOCUMENTÉ, HYPOTHÈSE, INCERTAIN) ; chaque chiffre cliquable vers sa preuve ; un vérificateur en code rejette tout chiffre sans preuve.
+- **L'assistant (chatbot encadré)** : tu écris ce que tu envisages en français libre (« 20 000 $ dans NVIDIA », « et Tesla ? », « mon portefeuille respecte-t-il mes règles ? »). Le code comprend la question, calcule avec les mêmes outils que le reste de l'app (même niveau que le Mât) et vérifie chaque phrase ; le LLM peut seulement reformuler. Il ne recommande jamais, ne prédit rien, et le dit quand on le lui demande.
 - **La machine à remonter le temps** : toute l'app à une date passée, avec seulement l'information publiée à cette date.
 
 ## Démarrage (local, sans AWS)
@@ -23,7 +26,7 @@ Prérequis : Python 3.12, Node 20+ (testé avec Node 26), macOS ou Linux.
 ```bash
 make setup        # environnement Python + dépendances de l'interface
 make data         # construit le datapack (télécharge une fois les sources publiques manquantes)
-make test         # 71 tests, sans AWS ni réseau, LLM simulé
+make test         # 92 tests, sans AWS ni réseau, LLM simulé
 make web-build    # construit l'interface
 make api          # serveur local : http://127.0.0.1:8000
 make demo         # (autre terminal) remet la démo dans un état connu
@@ -60,7 +63,7 @@ infra/ (AWS SAM)   CloudFront → S3 (interface) + URL de fonction Lambda ; Dyna
 bench/             banc d'essai (scénarios étiquetés, propriétés, latence)
 ```
 
-Le LLM ne fait que **planifier** (choisir des modules d'analyse) et **rédiger** (à partir des seules preuves). Tout calcul, toute règle et tout niveau de signal sont du code testé.
+Le LLM ne fait que **planifier** (choisir des modules d'analyse), **rédiger** (à partir des seules preuves) et **reformuler** les réponses de l'assistant (vérifiées comme les dossiers). Tout calcul, toute règle et tout niveau de signal sont du code testé.
 
 ## Données
 
@@ -71,8 +74,6 @@ Jeu de départ AlphaForge (31 actifs, 2021-11-12 → 2026-11-12) + ajouts docume
 | Document | Contenu |
 |---|---|
 | [docs/technique.md](docs/technique.md) | Méthodes et justification, données, hypothèses, explicabilité avec un exemple réel, validations, limites, améliorations |
-| [docs/one-pager.md](docs/one-pager.md) | Le projet en une page |
-| [docs/video-script.md](docs/video-script.md) | Script de la vidéo (~5 min) |
 | [docs/pitch.md](docs/pitch.md) | Plan, messages clés, chiffres sourcés |
 | [docs/aws.md](docs/aws.md) | Architecture AWS, rôle et raison de chaque service, coût estimé |
 | [docs/donnees.md](docs/donnees.md), [docs/hypotheses.md](docs/hypotheses.md) | Catalogue des sources ; hypothèses |
@@ -80,6 +81,9 @@ Jeu de départ AlphaForge (31 actifs, 2021-11-12 → 2026-11-12) + ajouts docume
 | [docs/decisions.md](docs/decisions.md), [docs/journal.md](docs/journal.md), [docs/audit.md](docs/audit.md) | Décisions, journal par phase, audit final |
 
 ## Limites (honnêtes)
+
+- **Interface refaite (branche `fusion`)** : les mesures d'accessibilité et de performance de `docs/ux/validation.md` (axe, Lighthouse) portent sur l'ancienne interface ULYSSE et sont **à refaire**. Vérifié sur la nouvelle : compilation TypeScript sans erreur, build de production, parcours pilotés dans Chromium sans erreur de console.
+- **Assistant** : sans mémoire de conversation (chaque message est traité seul) ; il ne comprend que les 31 actifs de l'univers et des formulations simples (montant, % du portefeuille, titre).
 
 - **AWS pas encore déployé** : l'infrastructure (SAM) est écrite et validée localement (`cfn-lint`) et le paquet Lambda est construit, mais le déploiement attend les accès de l'équipe (phase 7). Les mesures avec Bedrock (taux de rejet réel du vérificateur, durée et coût par dossier, latence sur AWS) ne sont donc **pas encore mesurées**.
 - Le LLM réel n'a pas encore été appelé : les dossiers de démonstration locale sont rédigés par un LLM simulé déterministe (gabarit), vérifiés par le même vérificateur.

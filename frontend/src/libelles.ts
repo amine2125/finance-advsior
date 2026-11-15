@@ -1,3 +1,5 @@
+export const TOLERANCE: Record<string, string> = { faible: "faible", faible_modere: "faible à modérée", modere: "modérée", eleve: "élevée" };
+export const EXPERIENCE: Record<string, string> = { debutant: "débutant", intermediaire: "intermédiaire", avance: "avancé" };
 export const SECTEURS: Record<string, string> = { "Information Technology": "Technologies de l'information", "Communication Services": "Services de communication",
   Financials: "Finance", Energy: "Énergie", Industrials: "Industrie", Utilities: "Services publics", "Consumer Staples": "Consommation de base",
   "Consumer Discretionary": "Consommation discrétionnaire", "Health Care": "Santé", Materials: "Matériaux", "Real Estate": "Immobilier",

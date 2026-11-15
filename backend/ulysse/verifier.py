@@ -94,30 +94,35 @@ def verifier(redaction: dict, preuves: dict[str, Evidence]) -> list[str]:
     manquantes = [e for e in ETAPES if e not in vues]
     if manquantes:
         defauts.append(f"V5 ÉTAPE_MANQUANTE : sections absentes {manquantes}.")
-    n = 0
-    for sec in sections:
-        for ph in sec.get("phrases", []):
-            n += 1
-            txt = ph.get("texte", "")
-            where = f"phrase {n} (« {txt[:60]}… »)"
-            if ph.get("etiquette") not in LABELS:
-                defauts.append(f"V1 PHRASE_SANS_ETIQUETTE : {where} a l'étiquette {ph.get('etiquette')!r} ; attendu {list(LABELS)}.")
-            ids = ph.get("preuves") or []
-            if not ids:
-                defauts.append(f"V2 PHRASE_SANS_PREUVE : {where} ne cite aucune preuve.")
-            unknown = [i for i in ids if i not in preuves]
-            if unknown:
-                defauts.append(f"V2 PREUVE_INCONNUE : {where} cite {unknown}, absents du dossier.")
-            for rx, why in INTERDITS:
-                m = rx.search(txt)
-                if m:
-                    defauts.append(f"V4 FORMULATION_INTERDITE : {where} contient « {m.group(0)} » ({why}).")
-            leaves = [v for i in ids if i in preuves for v in _leaves(preuves[i])]
-            for raw, val, tol in _numbers(txt):
-                if not any(abs(abs(val) - abs(x)) <= tol for x in leaves):
-                    proches = sorted(leaves, key=lambda x: abs(abs(x) - abs(val)))[:2]
-                    defauts.append(f"V3 CHIFFRE_SANS_PREUVE : « {raw} » dans la {where} ne correspond à aucune valeur des "
-                                   f"preuves citées {ids} (valeurs les plus proches : {[round(p, 2) for p in proches]}).")
-    if n == 0:
+    phrases = [ph for sec in sections for ph in sec.get("phrases", [])]
+    defauts += verifier_phrases(phrases, preuves)
+    if not phrases:
         defauts.append("V5 DOSSIER_VIDE : aucune phrase.")
+    return defauts
+
+
+def verifier_phrases(phrases: list[dict], preuves: dict[str, Evidence]) -> list[str]:
+    """V1–V4 on a flat list of sentences (dossier sections, or an assistant answer)."""
+    defauts: list[str] = []
+    for n, ph in enumerate(phrases, start=1):
+        txt = ph.get("texte", "")
+        where = f"phrase {n} (« {txt[:60]}… »)"
+        if ph.get("etiquette") not in LABELS:
+            defauts.append(f"V1 PHRASE_SANS_ETIQUETTE : {where} a l'étiquette {ph.get('etiquette')!r} ; attendu {list(LABELS)}.")
+        ids = ph.get("preuves") or []
+        if not ids:
+            defauts.append(f"V2 PHRASE_SANS_PREUVE : {where} ne cite aucune preuve.")
+        unknown = [i for i in ids if i not in preuves]
+        if unknown:
+            defauts.append(f"V2 PREUVE_INCONNUE : {where} cite {unknown}, absents du dossier.")
+        for rx, why in INTERDITS:
+            m = rx.search(txt)
+            if m:
+                defauts.append(f"V4 FORMULATION_INTERDITE : {where} contient « {m.group(0)} » ({why}).")
+        leaves = [v for i in ids if i in preuves for v in _leaves(preuves[i])]
+        for raw, val, tol in _numbers(txt):
+            if not any(abs(abs(val) - abs(x)) <= tol for x in leaves):
+                proches = sorted(leaves, key=lambda x: abs(abs(x) - abs(val)))[:2]
+                defauts.append(f"V3 CHIFFRE_SANS_PREUVE : « {raw} » dans la {where} ne correspond à aucune valeur des "
+                               f"preuves citées {ids} (valeurs les plus proches : {[round(p, 2) for p in proches]}).")
     return defauts

@@ -440,6 +440,17 @@ def dossier(query, body, did):
     return d
 
 
+@route("POST", "/api/profils/{pid}/assistant")
+def assistant_route(query, body, pid):
+    """Chatbot kept inside the rules: code understands, computes and verifies; the LLM may only rephrase."""
+    from ulysse import assistant
+    prof, con = _profil(pid)
+    as_of = body.get("as_of") or _asof(query)
+    ctx = body.get("contexte") or {}
+    return assistant.repondre(get_store(), pid, prof, con, str(body.get("message", "")), as_of,
+                              {"ticker": ctx.get("ticker")} if isinstance(ctx, dict) else None, get_llm())
+
+
 @route("GET", "/api/profils/{pid}/journal")
 def journal(query, body, pid):
     _profil(pid)

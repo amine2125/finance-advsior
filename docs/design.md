@@ -1,3 +1,5 @@
+> **Branche `fusion` (2026-11-15)** : le système visuel ci-dessous (Atkinson Hyperlegible, bleu « mer ») est **remplacé** par celui d'AEGIS : jetons dans `frontend/tailwind.config.js` et `frontend/src/index.css`, composants dans `frontend/src/components/ui.tsx` et `motion.tsx`. Les principes restent : un niveau = une icône + un mot (lisible sans couleur), chaque chiffre cliquable vers sa preuve, tableau disponible pour chaque graphique, aucun bouton caché dans la pause de réflexion (décision D-040).
+
 # Design — ULYSSE
 
 > Phase 5. Plan rédigé selon le skill `frontend-design` (plan → revue contre le brief → construction → critique), règles de `web-design-guidelines` et palette des graphiques validée selon le skill `dataviz` (script `validate_palette.js`).

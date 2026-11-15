@@ -144,3 +144,19 @@ Un bilan court par phase : ce qui est fait, vérifié comment, ce qui reste ouve
 ## Phase 11 — Audit (provisoire)
 
 - `docs/audit.md` : tous les critères sont couverts **sauf** le déploiement AWS (condition d'admissibilité), les mesures avec Bedrock et la vidéo à tourner. **Prochaine étape bloquante : accès AWS.**
+
+## Fusion ULYSSE × AEGIS (2026-11-15, branche `fusion`)
+
+**Fait**
+- Interface refaite avec le système visuel d'AEGIS : jetons Tailwind (fond crème, encre, accent cobalt unique, vert/ambre/rouge sémantiques), Jost + Instrument Sans, barre en verre avec navigation en pilule (5 onglets + menu « Plus »), menu de profil (profils, machine à remonter le temps, langue), cloche de la Vigie, animations framer-motion (respectent « réduire les animations »), barre de navigation mobile. Les 13 écrans gardent leurs données, leurs preuves et leur logique.
+- Création de profil en assistant par étapes (style AEGIS) ; le résultat reste un contrat ULYSSE.
+- **Assistant encadré** (`backend/ulysse/assistant.py`, `POST /api/profils/{id}/assistant`) : compréhension par règles écrites (montant, % du portefeuille, titre par symbole ou par nom, contexte de la page), calcul par la politique du Mât (ordre), une position de référence de 5 % (titre) ou l'état du portefeuille ; phrases écrites par le code avec étiquette et preuves ; reformulation LLM facultative (Bedrock), vérifiée par V1–V4, 2 essais puis repli ; cadres fixes pour les demandes de conseil ou de prévision ; question consignée au Journal.
+- Vérificateur : boucle par phrase extraite en `verifier_phrases` (réutilisée par l'assistant).
+- One-pager et script vidéo retirés de la branche (produits à part par l'équipe).
+
+**Vérifié (exécution)**
+- 92 tests verts (71 + 21 pour l'assistant : compréhension, même niveau que le Mât, chaque phrase vérifiée, cadres conseil/prévision, reformulation qui invente un chiffre rejetée (V3, V4) puis repli, panne du LLM, Journal, route).
+- `tsc` sans erreur ; build de production. Parcours dans Chromium (accueil, fiche, pause, contrat, portefeuille, assistant → dossier, journal ; bureau et mobile) : 0 erreur de console.
+- Défaut trouvé à la revue visuelle et corrigé : dans la pause de réflexion, les quatre choix passaient sous la ligne de flottaison ; ils sont maintenant fixés en bas de la fenêtre.
+
+**À refaire** : audits axe et Lighthouse sur la nouvelle interface (`docs/ux/validation.md` porte sur l'ancienne).
