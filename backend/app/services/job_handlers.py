@@ -26,6 +26,18 @@ def _hype(tracker, owner, req):
     return {"research_id": res["research_id"]}, res["research_id"]
 
 
+@handler("news_warm")
+def _news_warm(tracker, owner, req):
+    """A security's page was opened: read its sources and extract its claims now, so « Analyser » finds them ready."""
+    from ..hype_research.pipeline import warm
+
+    tracker.add("market_intelligence.warm", "market_intelligence_agent", "Lecture anticipée des sources")
+    tracker.start("market_intelligence.warm")
+    out = warm(get_market_data(), req["asset_id"])
+    tracker.done("market_intelligence.warm", f"{out['articles']} article(s), {out['claims']} affirmation(s), lus le {out['read_at']}")
+    return out, None
+
+
 @handler("chat")
 def _chat(tracker, owner, req):
     from ..agents.copilot import run_chat

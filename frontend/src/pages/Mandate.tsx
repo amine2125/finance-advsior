@@ -73,9 +73,10 @@ export function MandateRun() {
   const reached = job?.status === "done" ? steps.length : firstOpen < 0 ? steps.length : firstOpen;
   useEffect(() => {
     if (shown >= reached) return;
-    const t = setTimeout(() => setShown((v) => v + 1), STEP_MIN_MS);
+    // Once the answer is ready, the remaining sentences go by quickly: the person is not kept waiting for the animation.
+    const t = setTimeout(() => setShown((v) => v + 1), job?.status === "done" ? 220 : STEP_MIN_MS);
     return () => clearTimeout(t);
-  }, [shown, reached]);
+  }, [shown, reached, job?.status]);
   const failed = job?.status === "failed" || !!error || stalled;
   const [relaunching, setRelaunching] = useState(false);
   const ready = job?.status === "done" && !!job.result_ref && steps.length > 0 && shown >= steps.length;
@@ -736,9 +737,10 @@ function Why({ m, metrics }: { m: any; metrics: any }) {
       {m.research && (
         <div>
           <h3 className="text-sm font-semibold text-ink">Ce que l'agent Recherche a trouvé</h3>
-          {m.research.dates?.gap_days > 0 && (
+          {(m.research.dates?.gap_days > 0 || m.research.dates?.read_at) && (
             <p className="mt-1 text-xs text-ink-muted" data-testid="research-dates">
-              Prix au {date(m.research.dates.prices_as_of)} · nouvelles lues le {date(m.research.dates.researched_on)}
+              Prix au {date(m.research.dates.prices_as_of)} · nouvelles lues le {date(m.research.dates.read_at || m.research.dates.researched_on)}
+              {m.research.dates.read_at && ` à ${new Date(m.research.dates.read_at).toLocaleTimeString("fr-CA", { hour: "2-digit", minute: "2-digit" })}`}
             </p>
           )}
           <ul className="mt-2 divide-y divide-line border-t border-line">

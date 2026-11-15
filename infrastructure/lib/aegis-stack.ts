@@ -14,6 +14,8 @@ import * as cloudfront from "aws-cdk-lib/aws-cloudfront";
 import * as origins from "aws-cdk-lib/aws-cloudfront-origins";
 import * as cw from "aws-cdk-lib/aws-cloudwatch";
 import * as cognito from "aws-cdk-lib/aws-cognito";
+import * as events from "aws-cdk-lib/aws-events";
+import * as targets from "aws-cdk-lib/aws-events-targets";
 
 /**
  * Smallest credible AWS footprint for AEGIS:
@@ -112,6 +114,13 @@ export class AegisStack extends cdk.Stack {
       }));
     }
     worker.grantInvoke(api);
+    // Shared news cache: every 15 min (GDELT's own update rhythm) the worker re-reads SEC / GDELT / CoinGecko for the single
+    // securities, so an analysis no longer waits for these slow, rate-limited sources. No language model in this refresh.
+    new events.Rule(this, "NewsRefreshSchedule", {
+      description: "AEGIS: refresh the shared news cache (free public sources only)",
+      schedule: events.Schedule.rate(cdk.Duration.minutes(15)),
+      targets: [new targets.LambdaFunction(worker, { event: events.RuleTargetInput.fromObject({ task: "news_refresh", period_s: 900 }), retryAttempts: 0 })],
+    });
 
     // ---------------------------------------------------------------- API
     const httpApi = new apigw.HttpApi(this, "HttpApi", {

@@ -16,6 +16,7 @@ from ..web_research.tool import WebResearchTool
 from .attention import attention_index, diversity_component, momentum_component, news_volume_component, trading_volume_component
 from .claims import extract_claims, make_price_checker, verify_claims
 from .dedup import cluster_articles, independence_summary
+from . import news_cache
 from .fixtures import FIXTURE_LABEL, fixture_articles, fixture_claims
 
 NOT_CONNECTED = [
@@ -63,12 +64,55 @@ def _relevance_terms(md: MarketData, asset_id: str) -> list[str]:
     return sorted(t for t in terms if len(t) >= 3)
 
 
-def _news_query(name: str, asset_id: str) -> str:
-    base = re.sub(r"\b(inc|corp|corporation|class a|ltd|plc|co)\b\.?", "", name, flags=re.IGNORECASE).strip(" .,&")
-    return f'"{base}"'
+def _relevant(md: MarketData, asset_id: str, articles: list[dict], use_fixture: bool) -> tuple[list[dict], int]:
+    """Keeps the articles whose title names the security (GDELT matches loosely); returns them and how many were dropped."""
+    if use_fixture or not articles:
+        return articles, 0
+    terms = _relevance_terms(md, asset_id)
+    kept = [a for a in articles if any(t in (a.get("title") or "").lower() for t in terms)]
+    return kept, len(articles) - len(kept)
 
 
-def research_dates(prices_as_of: dt.date, researched_on: dt.date, nothing_live: bool = False) -> dict:
+def _claims(asset_id: str, name: str, clusters: list[dict]) -> tuple[list[dict], dict]:
+    """Claim extraction (language model), reused while the articles are the same ones."""
+    key = news_cache.claims_key(asset_id, clusters)
+    hit = news_cache.cached_claims(asset_id, key)
+    if hit:
+        return hit
+    raw, extraction = extract_claims(clusters, name)
+    news_cache.store_claims(asset_id, key, raw, extraction)
+    return raw, extraction
+
+
+def warm(md: MarketData, asset_id: str) -> dict:
+    """Reads the sources and extracts the claims ahead of an analysis (security page opened). Same code path as run_research."""
+    tool = WebResearchTool()
+    src = news_cache.gather(md, asset_id, tool)
+    articles, _ = _relevant(md, asset_id, src["articles"] or [], False)
+    clusters = cluster_articles(articles)
+    raw, extraction = _claims(asset_id, md.asset(asset_id)["name"], clusters)
+    return {"asset_id": asset_id, "read_at": src["read_at"], "articles": len(articles), "claims": len(raw), "extraction": extraction.get("method"),
+            "tool_calls": [{"tool": c["tool"], "status": c["status"]} for c in tool.calls]}
+
+
+def refresh(md: MarketData, asset_ids: list[str] | None = None, period_s: int = 900) -> dict:
+    """Scheduled refresh of the free sources (no language model: claims are extracted on demand). Parts older than ~80 % of
+    the period are re-read, so the next analysis finds them fresh."""
+    ages = {k: min(v, int(period_s * 0.8)) for k, v in news_cache.MAX_AGE_S.items() if k in ("articles", "cg_snap", "cg_trend")}
+    done, failed = 0, []
+    for aid in asset_ids or news_cache.refresh_targets(md):
+        try:
+            tool = WebResearchTool()
+            if not tool.enabled:
+                return {"refreshed": 0, "disabled": True}
+            news_cache.gather(md, aid, tool, max_age=ages)
+            done += 1
+        except Exception as exc:  # noqa: BLE001 - one security failing never stops the others
+            failed.append(f"{aid}: {str(exc)[:80]}")
+    return {"refreshed": done, "failed": failed}
+
+
+def research_dates(prices_as_of: dt.date, researched_on: dt.date, nothing_live: bool = False, read_at: str | None = None) -> dict:
     """Prices stop at the dataset's last day; news and filings are read live. Say so when the two differ (énoncé p. 14).
     `nothing_live`: fixture, or no live source answered, so there is no later information to warn about."""
     use_fixture = nothing_live
@@ -78,7 +122,7 @@ def research_dates(prices_as_of: dt.date, researched_on: dt.date, nothing_live: 
         note = (f"Les prix s'arrêtent au {prices_as_of.isoformat()}, mais les nouvelles et les dépôts ont été lus le "
                 f"{researched_on.isoformat()} : ils peuvent décrire {gap} jour(s) que les chiffres de risque ne contiennent pas encore.")
     return {"prices_as_of": prices_as_of.isoformat(), "researched_on": None if use_fixture else researched_on.isoformat(),
-            "gap_days": gap, "note": note}
+            "read_at": None if use_fixture else read_at, "gap_days": gap, "note": note}
 
 
 def run_research(md: MarketData, asset_id: str, question: str, persona: InvestorProfile | None, portfolio: Portfolio | None,
@@ -93,34 +137,25 @@ def run_research(md: MarketData, asset_id: str, question: str, persona: Investor
     tool = WebResearchTool()
     today = dt.date.today()
     evidence: list[dict] = []
-    filings = None
     step("market_intelligence.sources", "running", "Consultation des dépôts et sources d'actualités configurés")
-    if meta.get("cik"):
-        filings = tool.filings(meta["cik"], days=120, until=today)  # None = provider failure, [] = no filing
-        if filings is not None:
-            evidence += filings
-    cg_snap, cg_trend = None, None
-    if meta["asset_class"] == "crypto" and meta.get("coingecko_id"):
-        cg_snap = tool.crypto_snapshot(meta["coingecko_id"])
-        cg_trend = tool.crypto_trending()
-        if cg_snap:
-            evidence.append(cg_snap)
-        if cg_trend:
-            evidence.append({k: v for k, v in cg_trend.items() if k != "coins"} | {"coins_top": cg_trend["coins"][:15]})
     if use_fixture:
-        articles = fixture_articles(name.split()[0] if meta["asset_class"] == "crypto" else name, md.end_date.date().isoformat())
-        timeline = None
+        src = {"filings": tool.filings(meta["cik"], days=120, until=today) if meta.get("cik") else None, "cg_snap": None, "cg_trend": None,
+               "articles": fixture_articles(name.split()[0] if meta["asset_class"] == "crypto" else name, md.end_date.date().isoformat()),
+               "timeline": None, "read_at": None}
+        if meta["asset_class"] == "crypto" and meta.get("coingecko_id"):
+            src["cg_snap"], src["cg_trend"] = tool.crypto_snapshot(meta["coingecko_id"]), tool.crypto_trending()
     else:
-        articles = tool.news(_news_query(name, asset_id), days=14)
-        timeline = tool.news_timeline(_news_query(name, asset_id), days=90) if articles is not None else None
+        src = news_cache.gather(md, asset_id, tool)  # fresh shared copy when there is one, live reads otherwise
+    filings, cg_snap, cg_trend, timeline = src["filings"], src["cg_snap"], src["cg_trend"], src["timeline"]
+    if filings is not None:  # None = provider failure, [] = no filing
+        evidence += filings
+    if cg_snap:
+        evidence.append(cg_snap)
+    if cg_trend:
+        evidence.append({k: v for k, v in cg_trend.items() if k != "coins"} | {"coins_top": cg_trend["coins"][:15]})
+    articles = src["articles"]
     news_status = "fixture" if use_fixture else ("ok" if articles is not None else "unavailable")
-    articles = articles or []
-    off_topic = 0
-    if not use_fixture and articles:
-        terms = _relevance_terms(md, asset_id)
-        kept = [a for a in articles if any(t in (a.get("title") or "").lower() for t in terms)]
-        off_topic = len(articles) - len(kept)
-        articles = kept
+    articles, off_topic = _relevant(md, asset_id, articles or [], use_fixture)
     evidence += articles
     step("market_intelligence.sources", "done", f"{len(evidence)} éléments de preuve")
     step("market_intelligence.dedup", "running", "Déduplication des reprises et extraction des affirmations")
@@ -129,7 +164,7 @@ def run_research(md: MarketData, asset_id: str, question: str, persona: Investor
     if use_fixture:
         raw_claims, extraction = fixture_claims(), {"method": "fixture"}
     else:
-        raw_claims, extraction = extract_claims(clusters, name)
+        raw_claims, extraction = _claims(asset_id, name, clusters)
     checker = make_price_checker(md, asset_id, cg_snap)
     claims = verify_claims(raw_claims, clusters, filings, checker, md.end_date.date().isoformat())
     step("market_intelligence.dedup", "done", f"{indep['articles']} articles → {indep['independent_reports']} rapports indépendants; "
@@ -203,7 +238,8 @@ def run_research(md: MarketData, asset_id: str, question: str, persona: Investor
     return {
         "research_id": rid, "asset_id": asset_id, "name": name, "asset_class": meta["asset_class"], "question": question,
         "persona_id": persona.persona_id if persona else None, "created_at": utcnow(), "data_as_of": md.end_date.date().isoformat(),
-        "dates": research_dates(md.end_date.date(), today, use_fixture or not (filings is not None or news_status == "ok" or cg_snap)),
+        "dates": research_dates(md.end_date.date(), dt.date.fromisoformat(src["read_at"][:10]) if src.get("read_at") else today,
+                                use_fixture or not (filings is not None or news_status == "ok" or cg_snap), src.get("read_at")),
         "is_fixture": use_fixture, "fixture_label": FIXTURE_LABEL if use_fixture else None,
         "identity": {"asset_id": asset_id, "name": name, "exchange": meta.get("exchange"), "currency": meta["currency"],
                      "cik": meta.get("cik") or None, "coingecko_id": meta.get("coingecko_id") or None},

@@ -12,15 +12,15 @@ type Stop = { target: string; title: string; text: string };
 
 const STOPS: Stop[] = [
   { target: "balance", title: "Votre argent, en un coup d'œil", text: "La valeur totale : vos placements, plus l'argent disponible à investir. Tout est simulé : c'est de l'argent fictif pour apprendre sans risque." },
-  { target: "cash", title: "Votre solde à investir", text: "Chaque compte commence avec de l'argent fictif. Investir le dépense, vendre le remplit. Vous pouvez en ajouter quand vous voulez." },
+  { target: "cash", title: "Votre solde à investir", text: "Chaque compte commence avec de l'argent fictif. « Investir » vous laisse choisir le montant : tout le solde ou la somme de votre choix." },
+  { target: "decide", title: "Que voulez-vous faire ?", text: "Les actions principales sont ici : investir, analyser un titre, vérifier votre portefeuille. Ou écrivez en français : « J'ai 2 000 $ à investir ». Rien n'est fait sans votre accord." },
   { target: "connect", title: "Vos placements", text: "Si vous avez déjà des placements ailleurs, connectez votre compte (simulation) ou entrez-les à la main : les agents vérifient s'ils vous conviennent." },
   { target: "health", title: "Est-ce que ça vous ressemble ?", text: "Les agents comparent vos placements à votre profil et vous disent, en clair, ce qui dépasse vos limites." },
-  { target: "decide", title: "Dites ce que vous voulez faire", text: "Écrivez en français : « J'ai 2 000 $ à investir », « Est-ce que Tesla me convient ? ». Des agents analysent et vous proposent un plan. Rien n'est fait sans votre accord." },
+  { target: "search", title: "Trouver un titre", text: "Apple, NVIDIA, un fonds d'obligations… Ouvrez n'importe quel titre pour voir son risque et demander aux agents s'il vous convient. Raccourci : la touche /." },
   { target: "nav-placements", title: "Placements", text: "Le détail de ce que vous détenez : la liste, la répartition, et vos limites respectées ou non." },
   { target: "nav-decisions", title: "Décisions", text: "Toutes les propositions des agents, approuvées, refusées ou en attente, avec leur explication." },
-  { target: "nav-learn", title: "Apprendre", text: "Sept leçons de 2 minutes pour comprendre l'investissement : risque, diversification, intérêts composés…" },
   { target: "lea", title: "Léa, toujours là", text: "Une question, un mot que vous ne comprenez pas ? Demandez à Léa, à tout moment." },
-  { target: "account", title: "Votre profil", text: "Modifiez une réponse si votre situation change, relancez cette visite ou déconnectez-vous." },
+  { target: "account", title: "Votre profil et les leçons", text: "Modifiez une réponse si votre situation change, retrouvez les leçons « Apprendre les bases », relancez cette visite ou déconnectez-vous." },
 ];
 
 // Demo accounts are shared by the jury: remember the tour per browser session, so every judge gets it once.

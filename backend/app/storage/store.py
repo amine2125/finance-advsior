@@ -17,7 +17,7 @@ from typing import Protocol
 
 from ..config import get_settings
 
-KINDS = {"PORTFOLIO", "PERSONA", "ANALYSIS", "SNAPSHOT", "DEBATE", "ALERT", "JOB", "REPORT", "CONV", "HYPE", "HYP", "RESEARCH", "REPLAY", "META", "GOAL", "MANDATE"}
+KINDS = {"PORTFOLIO", "PERSONA", "ANALYSIS", "SNAPSHOT", "DEBATE", "ALERT", "JOB", "REPORT", "CONV", "HYPE", "HYP", "RESEARCH", "REPLAY", "META", "GOAL", "MANDATE", "NEWS"}
 _SAFE = re.compile(r"^[A-Za-z0-9_.\-]{1,80}$")
 
 
@@ -36,6 +36,14 @@ class Store(Protocol):
     def ids(self, owner: str, kind: str) -> list[str]: ...
 
 
+def _read(p: Path) -> dict:
+    raw = p.read_bytes()
+    try:
+        return json.loads(raw.decode("utf-8"))
+    except UnicodeDecodeError:  # files written before the store forced UTF-8 (Windows cp1252)
+        return json.loads(raw.decode("cp1252"))
+
+
 class LocalStore:
     def __init__(self, root: Path) -> None:
         self.root = root
@@ -50,7 +58,7 @@ class LocalStore:
         p.parent.mkdir(parents=True, exist_ok=True)
         tmp = p.with_suffix(".tmp")
         with self._lock:
-            tmp.write_text(json.dumps(data, default=str, ensure_ascii=False))
+            tmp.write_text(json.dumps(data, default=str, ensure_ascii=False), encoding="utf-8")  # Windows defaults to cp1252
             tmp.replace(p)
 
     def get(self, owner, kind, item_id):
@@ -58,7 +66,7 @@ class LocalStore:
         p = self._path(owner, kind, item_id)
         if not p.exists():
             return None
-        return json.loads(p.read_text())
+        return _read(p)
 
     def list(self, owner, kind, limit=50):
         _check(owner, kind, "x")
@@ -66,7 +74,7 @@ class LocalStore:
         if not d.exists():
             return []
         files = sorted(d.glob("*.json"), key=lambda f: f.name, reverse=True)[:limit]
-        return [json.loads(f.read_text()) for f in files]
+        return [_read(f) for f in files]
 
     def delete(self, owner, kind, item_id):
         _check(owner, kind, item_id)

@@ -1,7 +1,8 @@
 import clsx from "clsx";
 import { ArrowLeft, ArrowRight, ExternalLink, Flame } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import AmountPicker from "../components/AmountPicker";
 import { ValueChart } from "../components/charts";
 import { TickerLogo, sym } from "../components/Ticker";
 import { Button, ErrorBox, Spinner } from "../components/ui";
@@ -39,6 +40,8 @@ export default function AssetPage() {
   const chg = last && first ? last / first - 1 : null;
   const mine = (held.data?.holdings || []).find((x: any) => x.asset_id === assetId);
   const cur = prices.data?.currency || "";
+  // While the page is read, the agents' live sources (filings, news) are read ahead into a shared cache: « Analyser » then starts at once.
+  useEffect(() => { api.post("/research/prefetch", { asset_id: assetId }).catch(() => undefined); }, [assetId]);
 
   return (
     <div className="mx-auto max-w-3xl px-5 py-8 sm:">
@@ -85,16 +88,18 @@ export default function AssetPage() {
   );
 }
 
-const AMOUNTS: [number, string][] = [[500, "500 $"], [1000, "1 000 $"], [2500, "2 500 $"], [5000, "5 000 $"]];
+const AMOUNTS = [500, 1000, 2500, 5000];
 
-/** « Est-ce une bonne idée pour moi ? » — launches the agents directly on this exact security (no re-typing, no ambiguity). */
+/** « Est-ce une bonne idée pour vous ? » — launches the agents directly on this exact security (no re-typing, no ambiguity). */
 function Ask({ assetId, name }: { assetId: string; name: string }) {
   const nav = useNavigate();
-  const { portfolio } = useApp();
-  const [amount, setAmount] = useState(1000);
+  const { me, portfolio } = useApp();
+  const cash = me?.cash?.cash_cad ?? 0;
+  const [amount, setAmount] = useState<number | null>(1000);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<ApiError | null>(null);
   const go = async () => {
+    if (!amount) return;
     setBusy(true); setErr(null);
     try {
       await launchMandate(nav, `Je veux mettre ${cad(amount)} dans ${sym(assetId)}`, portfolio?.portfolio_id, { kind: "buy_asset", amount_cad: amount, asset_id: assetId });
@@ -103,10 +108,14 @@ function Ask({ assetId, name }: { assetId: string; name: string }) {
   return (
     <Glass className="mt-6 p-6" glow>
       <h2 className="font-display text-[22px] font-semibold tracking-tight text-ink">Est-ce une bonne idée pour vous ?</h2>
-      <p className="mt-1 text-sm text-ink-muted">Les agents vérifient {name} avec votre profil et vos placements actuels.</p>
-      <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
-        <Segmented value={amount} onChange={setAmount} options={AMOUNTS} size="sm" />
-        <Button variant="gold" onClick={go} disabled={busy} data-testid="ask-agents">{busy ? "Lancement…" : "Analyser"}<ArrowRight className="h-4 w-4" /></Button>
+      <p className="mt-1 text-sm text-ink-muted">Choisissez un montant : les agents vérifient {name} avec votre profil et vos placements actuels.</p>
+      <div className="mt-5"><AmountPicker value={amount} onChange={setAmount} presets={AMOUNTS} min={50} max={1_000_000} testid="ask-amount" /></div>
+      {amount != null && amount > cash && (
+        <p className="mt-2 text-xs text-ink-muted">Votre solde disponible est de {cad(cash)} : les agents proposeront au plus ce montant. Vous pouvez ajouter des fonds depuis l'accueil.</p>
+      )}
+      <div className="mt-5 flex flex-wrap items-center gap-3">
+        <Button variant="gold" onClick={go} disabled={busy || !amount} data-testid="ask-agents">{busy ? "Lancement…" : <>Analyser {amount ? cad(amount) : ""}</>}<ArrowRight className="h-4 w-4" /></Button>
+        <span className="text-xs text-ink-muted">Simulation : rien n'est acheté sans votre accord.</span>
       </div>
       <ErrorBox error={err} />
     </Glass>

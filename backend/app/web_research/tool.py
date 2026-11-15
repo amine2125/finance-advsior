@@ -37,6 +37,11 @@ class WebResearchTool:
             if rec not in self.calls:
                 self.calls.append(rec)
 
+    def cached(self, name: str, provider: str, fetched_at: str, n_results: int | None, stale: bool = False) -> None:
+        """Logs a result served from the shared news cache: the audit trail still shows the source and when it was really read."""
+        self.calls.append({"tool": name, "provider": provider, "args": [], "started_at": utcnow(), "latency_ms": 0,
+                           "status": "cache_stale" if stale else "cache", "fetched_at": fetched_at, "n_results": n_results})
+
     def filings(self, cik: str, days: int = 120, until: dt.date | None = None):
         until = until or dt.date.today()
         return self._run("sec_filings", "sec_edgar", providers.sec_filings, cik, until - dt.timedelta(days=days), until)

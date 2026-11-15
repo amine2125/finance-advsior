@@ -389,28 +389,17 @@ def run_mandate(tracker: JobTracker, owner: str, req: dict) -> dict:
     tracker.done("data.collect", f"{len(prov['assets'])} actifs validés du {prov['coverage'][0]} au {prov['coverage'][1]} · "
                                  f"{len(prov['issues'])} signalement(s) de qualité · devises converties en $ CA (Banque du Canada)")
 
-    # 4. research (only when a specific security is requested)
+    # 4. research (only when a specific security is requested). It runs in the background while the analyst, governance and
+    # scenario agents work, since only the pros/cons agents read it: same result, without waiting for slow live sources first.
     tracker.start("market_intelligence.research")
     research = None
+    research_fut = None
+    research_t0 = time.time()
     if intent["kind"] == "buy_asset":
-        try:
-            rex = ThreadPoolExecutor(max_workers=1)
-            fut = rex.submit(market_intelligence_agent.investigate, md, intent["asset_id"], request or label, persona,
-                             pf if pf and pf.holdings else None, intent["amount_cad"])
-            rex.shutdown(wait=False)
-            try:
-                research = fut.result(timeout=RESEARCH_BUDGET_S)
-            except FuturesTimeout:
-                raise RuntimeError(f"sources trop lentes (> {RESEARCH_BUDGET_S} s)") from None
-            led.merge(MetricLedger.from_dict(research["ledger"]))
-            n_ver = sum(1 for e in research["events"] if e.get("primary_source"))
-            d = research.get("dates") or {}
-            tracker.done("market_intelligence.research", f"{n_ver} fait(s) vérifié(s) de sources officielles · {len(research['claims'])} affirmation(s) examinée(s) · "
-                         + (f"prix au {d['prices_as_of']}, nouvelles lues le {d['researched_on']} · " if d.get("gap_days") else "")
-                         + ", ".join(f"{c['tool']}={c['status']}" for c in research.get("tool_calls", [])[:4]))
-        except Exception as exc:  # noqa: BLE001 - research is optional: say so, continue
-            research = None
-            tracker.fail("market_intelligence.research", f"Recherche indisponible ({str(exc)[:80]}) : l'analyse continue sans elle")
+        rex = ThreadPoolExecutor(max_workers=1)
+        research_fut = rex.submit(market_intelligence_agent.investigate, md, intent["asset_id"], request or label, persona,
+                                  pf if pf and pf.holdings else None, intent["amount_cad"])
+        rex.shutdown(wait=False)
     else:
         tracker.skip("market_intelligence.research", "Pas de titre précis demandé : uniquement des fonds diversifiés, aucune recherche de nouvelles nécessaire")
 
@@ -602,6 +591,25 @@ def run_mandate(tracker: JobTracker, owner: str, req: dict) -> dict:
     rp = next((r for r in stress if r["key"] == "replay_2022"), None)
     tracker.done("scenario.stress", f"{len(stress)} scénario(s)" + (f" · 2022 rejoué : {_pct(rp.get('before'))} → {_pct(rp['after'])}" if rp and "before" in rp
                                                                      else f" · 2022 rejoué : {_pct(rp['after'])}" if rp else ""))
+
+    # 4 (end). the research started at step 4 is needed from here on
+    if research_fut is not None:
+        try:
+            try:
+                research = research_fut.result(timeout=max(0.1, RESEARCH_BUDGET_S - (time.time() - research_t0)))
+            except FuturesTimeout:
+                raise RuntimeError(f"sources trop lentes (> {RESEARCH_BUDGET_S} s)") from None
+            led.merge_first(MetricLedger.from_dict(research["ledger"]))  # identical ledger to reading the research first
+            n_ver = sum(1 for e in research["events"] if e.get("primary_source"))
+            d = research.get("dates") or {}
+            cached = sum(1 for c in research.get("tool_calls", []) if str(c.get("status", "")).startswith("cache"))
+            tracker.done("market_intelligence.research", f"{n_ver} fait(s) vérifié(s) de sources officielles · {len(research['claims'])} affirmation(s) examinée(s) · "
+                         + (f"prix au {d['prices_as_of']}, nouvelles lues le {d['researched_on']} · " if d.get("gap_days") else "")
+                         + (f"{cached} source(s) lue(s) d'avance (copie du {d['read_at'][:16].replace('T', ' ')} UTC) · " if cached and d.get("read_at") else "")
+                         + ", ".join(f"{c['tool']}={c['status']}" for c in research.get("tool_calls", [])[:4]))
+        except Exception as exc:  # noqa: BLE001 - research is optional: say so, continue
+            research = None
+            tracker.fail("market_intelligence.research", f"Recherche indisponible ({str(exc)[:80]}) : l'analyse continue sans elle")
 
     # 8-9. advocates
     source_ids = {r["source_id"] for r in md.source_references()} | {f"persona_{persona.persona_id}"}

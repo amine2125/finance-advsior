@@ -1,24 +1,25 @@
 import clsx from "clsx";
-import { Compass, GraduationCap, Home, LayoutList, LogOut, Sparkles, UserRound } from "lucide-react";
+import { Compass, GraduationCap, Home, LayoutList, LogOut, Search, Sparkles, UserRound } from "lucide-react";
 import { ReactNode, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Link, NavLink, useLocation } from "react-router-dom";
 import { spring } from "./motion";
 import { useApp } from "../hooks/useApp";
 import { AdvisorAvatar, AdvisorProvider, useAdvisor } from "./Advisor";
+import AssetSearch, { openSearch } from "./AssetSearch";
 import Tour from "./Tour";
 import { Disclaimer } from "./ui";
 
 /** Product name is configuration (VITE_APP_NAME), never hard-coded to a bank. */
 export const APP_NAME: string = (import.meta as any).env?.VITE_APP_NAME || "AEGIS";
 
+/** The three places people act from. Learning stays one tap away (account menu, « Bien démarrer », each « Comment ça marche »). */
 export const NAV = [
   { to: "/", label: "Accueil", icon: Home, end: true },
   { to: "/placements", label: "Placements", icon: LayoutList, end: false },
   { to: "/decisions", label: "Décisions", icon: Sparkles, end: false },
-  { to: "/apprendre", label: "Apprendre", icon: GraduationCap, end: false },
 ];
-const TOUR_ID: Record<string, string> = { "/placements": "nav-placements", "/decisions": "nav-decisions", "/apprendre": "nav-learn", "/profil": "account" };
+const TOUR_ID: Record<string, string> = { "/placements": "nav-placements", "/decisions": "nav-decisions", "/profil": "account" };
 
 export function Logo({ light }: { light?: boolean }) {
   return (
@@ -55,6 +56,7 @@ function AccountMenu({ name }: { name: string }) {
             className="absolute right-0 top-12 z-40 w-64 origin-top-right overflow-hidden rounded-[20px] bg-surface p-1.5 shadow-lift hairline">
             {accounts && me?.email && <div className="truncate px-3 pb-2 pt-2 text-xs text-ink-muted">Connecté : <span className="text-ink-soft">{me.email}</span></div>}
             <Link to="/profil" onClick={() => setOpen(false)} className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-ink hover:bg-ink/[0.04]"><UserRound className="h-4 w-4" /> Mon profil</Link>
+            <Link to="/apprendre" onClick={() => setOpen(false)} className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-ink hover:bg-ink/[0.04]" data-testid="menu-learn"><GraduationCap className="h-4 w-4" /> Apprendre les bases</Link>
             <button onClick={() => { setOpen(false); window.dispatchEvent(new Event("aegis:tour")); }} className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-sm text-ink hover:bg-ink/[0.04]" data-testid="restart-tour">
               <Compass className="h-4 w-4" /> Revoir la visite guidée
             </button>
@@ -89,6 +91,10 @@ function TopBar() {
           ))}
         </nav>
         <div className="ml-auto flex items-center gap-2">
+          <button onClick={openSearch} data-tour="search" data-testid="open-search" aria-label="Rechercher un titre" title="Rechercher un titre (touche /)"
+            className="flex h-9 items-center gap-2 rounded-full px-2.5 text-sm text-ink-muted hover:bg-ink/[0.04] hover:text-ink lg:w-56 lg:bg-ink/[0.035] lg:px-3.5">
+            <Search className="h-4 w-4" /><span className="hidden lg:inline">Rechercher un titre</span><kbd className="ml-auto hidden rounded-md bg-white px-1.5 text-[11px] font-medium text-ink-muted shadow-card lg:inline">/</kbd>
+          </button>
           <motion.button whileTap={{ scale: 0.97 }} onClick={() => setOpen(true)} className="hidden items-center gap-2 rounded-full py-1 pl-1 pr-3 text-sm font-medium text-ink hover:bg-ink/[0.04] sm:flex" data-testid="topbar-advisor">
             <AdvisorAvatar size={28} /> Demander à Léa
           </motion.button>
@@ -107,8 +113,10 @@ export default function Layout({ children }: { children: ReactNode }) {
         <TopBar />
         <main>{children}</main>
         <Tour />
-        <footer className="mx-auto flex max-w-6xl flex-wrap items-start justify-between gap-3 px-4 pb-10 pt-10 sm:px-6"><Disclaimer className="max-w-2xl" /><Link to="/a-propos" className="text-xs font-semibold text-ink-muted hover:text-ink">À propos des chiffres</Link></footer>
-        <nav className="glass fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-line pb-[env(safe-area-inset-bottom)] md:hidden">
+        <AssetSearch />
+        <footer className="mx-auto flex max-w-6xl flex-wrap items-start justify-between gap-3 px-4 pb-10 pt-10 sm:px-6"><Disclaimer className="max-w-2xl" />
+          <div className="flex gap-4"><Link to="/apprendre" className="text-xs font-semibold text-ink-muted hover:text-ink">Apprendre les bases</Link><Link to="/a-propos" className="text-xs font-semibold text-ink-muted hover:text-ink">À propos des chiffres</Link></div></footer>
+        <nav className="glass fixed inset-x-0 bottom-0 z-30 grid grid-cols-4 border-t border-line pb-[env(safe-area-inset-bottom)] md:hidden">
           {[...NAV, { to: "/profil", label: "Profil", icon: UserRound, end: false }].map((n) => (
             <NavLink key={n.to} to={n.to} end={n.end} data-tour={TOUR_ID[n.to]}
               className={({ isActive }) => clsx("flex flex-col items-center gap-0.5 py-2.5 text-[11px] font-semibold", isActive ? "text-ink" : "text-ink-muted")}>

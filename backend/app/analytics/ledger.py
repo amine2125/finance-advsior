@@ -56,6 +56,13 @@ class MetricLedger:
     def merge(self, other: "MetricLedger") -> None:
         self._records.update(other._records)
 
+    def merge_first(self, other: "MetricLedger") -> None:
+        """Same ledger as if `other` had been merged BEFORE everything already here: its records come first (order matters
+        for the metrics shown to the agents) and the records already here win on a shared id."""
+        merged = {mid: self._records.get(mid, rec) for mid, rec in other._records.items()}
+        merged.update({mid: rec for mid, rec in self._records.items() if mid not in merged})
+        self._records = merged
+
     def get(self, metric_id: str) -> MetricRecord | None:
         return self._records.get(metric_id)
 

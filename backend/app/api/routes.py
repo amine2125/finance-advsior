@@ -564,6 +564,25 @@ def hype_research(req: HypeReq, owner: str = Depends(owner_id)):
     return _job_out(jobs.submit(owner, "hype", body))
 
 
+class PrefetchReq(BaseModel):
+    asset_id: str = Field(min_length=1, max_length=20)
+
+
+@router.post("/research/prefetch")
+def research_prefetch(req: PrefetchReq, owner: str = Depends(owner_id)):
+    """Opening a security's page warms its live sources (shared cache) while the person reads: the analysis then starts at once."""
+    from ..hype_research import news_cache
+
+    md = get_market_data()
+    aid = req.asset_id.upper()
+    if not md.has_asset(aid) or not get_settings().web_research_enabled:
+        return {"status": "skipped"}
+    if news_cache.is_warm(md, aid):
+        return {"status": "fresh"}
+    rate_limit(owner, "prefetch", 6)
+    return {"status": "warming", **_job_out(jobs.submit(owner, "news_warm", {"asset_id": aid}))}
+
+
 @router.get("/hype/research")
 def hype_list(owner: str = Depends(owner_id)):
     return {"research": [{"research_id": r["research_id"], "asset_id": r["asset_id"], "name": r["name"], "created_at": r["created_at"],

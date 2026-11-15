@@ -100,3 +100,29 @@ async def _rv(request: Request, exc: RequestValidationError):
 from .api.routes import router  # noqa: E402
 
 app.include_router(router)
+
+
+@app.on_event("startup")
+def _news_refresher() -> None:
+    """Local runs: refresh the shared news cache in the background (on AWS an EventBridge schedule calls the worker instead)."""
+    import os
+    import threading
+
+    minutes = int(os.getenv("AEGIS_NEWS_REFRESH_MIN", "15") or 0)
+    cfg = get_settings()
+    if minutes <= 0 or cfg.job_runner != "thread" or not cfg.web_research_enabled:
+        return
+
+    def loop():
+        from .data.registry import get_market_data
+        from .hype_research.pipeline import refresh
+
+        while True:
+            try:
+                out = refresh(get_market_data(), period_s=minutes * 60)
+                log.info(json.dumps({"event": "news_refresh", **out}))
+            except Exception:  # noqa: BLE001 - the cache is an accelerator, never a reason to stop the API
+                log.exception("news refresh failed")
+            time.sleep(minutes * 60)
+
+    threading.Thread(target=loop, name="news-refresh", daemon=True).start()

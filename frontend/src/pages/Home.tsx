@@ -1,8 +1,10 @@
 import clsx from "clsx";
 import { motion } from "framer-motion";
-import { ArrowRight, ArrowUpRight, BookOpen, Check, Compass, Flame, Link2, Plus, ShieldAlert, Sparkles, Wallet, X } from "lucide-react";
-import { useRef, useState } from "react";
+import { ArrowRight, ArrowUpRight, BookOpen, Check, Compass, Flame, Hourglass, Link2, LucideIcon, Plus, Search, ShieldAlert, ShieldCheck, Sparkles, Wallet, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import AmountPicker from "../components/AmountPicker";
+import { openSearch } from "../components/AssetSearch";
 import { ValueChart } from "../components/charts";
 import HoldingsEditor from "../components/HoldingsEditor";
 import { CountUp, Glass, Meter, PageIn, Segmented, spring, Stagger, StaggerItem } from "../components/motion";
@@ -16,7 +18,7 @@ import { friendly } from "../lib/assets";
 import { cad, date, pct } from "../lib/format";
 import { api, ApiError } from "../services/api";
 
-const SUGGESTIONS = ["J'ai 5 000 $ à investir", "Je veux 2 000 $ de NVIDIA", "Rééquilibre mon portefeuille"];
+const SUGGESTIONS = ["Je veux 2 000 $ de NVIDIA", "J'ai 3 000 $ pour un projet dans 2 ans", "Rééquilibre mon portefeuille"];
 const RANGES: [number, string][] = [[30, "1M"], [90, "3M"], [365, "1A"], [1825, "5A"]];
 
 /** Starts the agents on a request and opens the live run. */
@@ -29,7 +31,9 @@ export const REVIEW = "Analyse mon portefeuille et dis-moi s'il respecte mon pro
 export const signed = (v: number | null | undefined, d = 2) => (v == null ? "—" : `${v >= 0 ? "+" : "−"}${cad(Math.abs(v), d)}`);
 export const signedPct = (v: number | null | undefined) => (v == null ? "" : `${v >= 0 ? "+" : "−"}${pct(Math.abs(v), 2)}`);
 
-/** Accueil : le solde, sa santé vis-à-vis du profil, « que voulez-vous faire ? », les placements et l'activité. */
+type Panel = "invest" | "deposit" | null;
+
+/** Accueil, du plus utile au moins utile : combien j'ai, ce qui attend ma réponse, que faire maintenant, puis le détail. */
 export default function Home() {
   const { me } = useApp();
   const cash = me?.cash?.cash_cad ?? 0;
@@ -39,23 +43,28 @@ export default function Home() {
   const hist = useApi<any>(`/history?days=${days}`, [days]);
   const act = useApi<any>("/activity");
   const ask = useRef<HTMLTextAreaElement>(null);
+  const [panel, setPanel] = useState<Panel>(null);
   const has = (h.data?.holdings || []).length > 0;
   const pending = (act.data?.items || []).find((i: any) => i.kind === "proposed");
   const ch = hist.data?.change_cad;
+  const openPanel = (x: Panel) => {
+    setPanel(x);
+    setTimeout(() => document.querySelector('[data-tour="cash"]')?.scrollIntoView({ behavior: "smooth", block: "center" }), 60);
+  };
 
   return (
-    <PageIn className="mx-auto max-w-[920px] px-5 pb-20 pt-8 sm:px-8 sm:pt-12">
+    <PageIn className="mx-auto max-w-[920px] px-5 pb-20 pt-8 sm:px-8 sm:pt-10">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-ink-muted">Bonjour {p.display_name}</p>
         <HowItWorks topic="home" />
       </div>
       <StarterCard />
       {/* balance */}
-      <div data-tour="balance"><Glass glow className="px-6 pb-4 pt-7 sm:px-9 sm:pt-9">
+      <div data-tour="balance"><Glass glow className="px-6 pb-4 pt-7 sm:px-9 sm:pt-8">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="text-sm text-ink-muted">Valeur totale · profil {p.risk_profile_label.toLowerCase()}</p>
-            <p className="mt-2 font-display text-[48px] font-semibold leading-none tracking-tightest text-ink sm:text-[64px]" data-testid="total-value">
+            <p className="mt-2 font-display text-[44px] font-semibold leading-none tracking-tightest text-ink sm:text-[56px]" data-testid="total-value">
               {h.data ? <CountUp value={h.data.total_value_cad + cash} format={(v) => cad(v, 2)} /> : "…"}
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
@@ -67,18 +76,20 @@ export default function Home() {
           {has && <Segmented value={days} onChange={setDays} options={RANGES} size="sm" />}
         </div>
         {has && hist.data?.series?.length > 1 && (
-          <motion.div className="-mx-2 mt-6" initial={{ opacity: 0 }} animate={{ opacity: 1 }} key={days} transition={{ duration: 0.35 }}>
-            <ValueChart series={hist.data.series} height={240} />
+          <motion.div className="-mx-2 mt-5" initial={{ opacity: 0 }} animate={{ opacity: 1 }} key={days} transition={{ duration: 0.35 }}>
+            <ValueChart series={hist.data.series} height={190} />
           </motion.div>
         )}
         {!has && h.data && <div className="h-2" />}
-        <CashRow />
+        <CashRow panel={panel} setPanel={setPanel} />
       </Glass></div>
+
+      {pending && <PendingBanner item={pending} />}
+
+      <DecisionBox inputRef={ask} hasHoldings={has} cash={cash} onInvest={() => openPanel(cash >= 50 ? "invest" : "deposit")} />
 
       {h.data && !has && <Connect />}
       {has && <Health pending={pending} />}
-
-      <DecisionBox inputRef={ask} />
 
       {has && (
         <div className="mt-14 grid gap-12 lg:grid-cols-[minmax(0,1fr)_280px]">
@@ -107,6 +118,21 @@ export default function Home() {
       )}
       <ErrorBox error={h.error} />
     </PageIn>
+  );
+}
+
+/** A proposal from the agents waits for an answer: the most urgent thing on the page, one tap away. */
+function PendingBanner({ item }: { item: any }) {
+  return (
+    <Link to={`/mandats/${item.mandate_id}`} data-testid="pending-proposal"
+      className="group mt-4 flex items-center gap-4 rounded-[22px] bg-primary-50 px-5 py-4 transition-colors hover:bg-primary-50/70">
+      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-primary-500 text-white"><Hourglass className="h-4 w-4" /></span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-semibold text-ink">Une proposition attend votre réponse</span>
+        <span className="block truncate text-sm text-ink-soft">{item.title}</span>
+      </span>
+      <span className="inline-flex shrink-0 items-center gap-1 text-sm font-medium text-primary-600">Voir <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" /></span>
+    </Link>
   );
 }
 
@@ -182,8 +208,8 @@ export function HoldingRow({ h }: { h: any }) {
   );
 }
 
-/** « Que voulez-vous faire ? » — the entry point of the agent workflow. */
-export function DecisionBox({ inputRef }: { inputRef?: React.RefObject<HTMLTextAreaElement> }) {
+/** « Que voulez-vous faire ? » — the entry point of the agent workflow: the three main actions, or the request in plain words. */
+export function DecisionBox({ inputRef, hasHoldings, cash = 0, onInvest }: { inputRef?: React.RefObject<HTMLTextAreaElement>; hasHoldings?: boolean; cash?: number; onInvest?: () => void }) {
   const { portfolio } = useApp();
   const nav = useNavigate();
   const [text, setText] = useState(() => new URLSearchParams(window.location.search).get("demande") || "");
@@ -195,26 +221,50 @@ export function DecisionBox({ inputRef }: { inputRef?: React.RefObject<HTMLTextA
     setBusy(true); setError(null);
     try { await launchMandate(nav, r, portfolio?.portfolio_id); } catch (e) { setError(e as ApiError); setBusy(false); }
   };
+  const tiles: { icon: LucideIcon; title: string; sub: string; onClick: () => void; testid: string }[] = [
+    { icon: Wallet, title: "Investir mon solde", testid: "tile-invest", onClick: () => onInvest?.(),
+      sub: cash >= 50 ? `${cad(cash)} disponibles. Vous choisissez le montant.` : "Ajoutez d'abord de l'argent fictif." },
+    { icon: Search, title: "Analyser un titre", testid: "tile-search", onClick: openSearch, sub: "Apple, NVIDIA, un fonds… Est-ce pour moi ?" },
+    hasHoldings
+      ? { icon: ShieldCheck, title: "Vérifier mon portefeuille", testid: "tile-review", onClick: () => start(REVIEW), sub: "Respecte-t-il mon profil ? Sinon, quoi corriger ?" }
+      : { icon: Plus, title: "Ajouter mes placements", testid: "tile-connect", sub: "Ceux que vous avez déjà, ici ou ailleurs.",
+          onClick: () => document.querySelector('[data-tour="connect"]')?.scrollIntoView({ behavior: "smooth", block: "center" }) },
+  ];
   return (
-    <section className="mt-14" data-tour="decide">
+    <section className="mt-10" data-tour="decide">
       <div className="flex items-center gap-2 text-sm font-medium text-primary-600"><Sparkles className="h-4 w-4" /> Prendre une décision</div>
-      <h2 className="mt-2 font-display text-[34px] font-semibold leading-[1.05] tracking-tightest text-ink sm:text-[44px]">Que voulez-vous faire<br className="hidden sm:block" /> avec votre argent ?</h2>
+      <h2 className="mt-1.5 font-display text-[30px] font-semibold leading-[1.05] tracking-tightest text-ink sm:text-[36px]">Que voulez-vous faire ?</h2>
+      <Stagger as="div" className="mt-5 grid gap-3 sm:grid-cols-3">
+        {tiles.map((t) => (
+          <StaggerItem as="div" key={t.testid}>
+            <motion.button whileTap={{ scale: 0.98 }} whileHover={{ y: -2 }} transition={spring} onClick={t.onClick} disabled={busy} data-testid={t.testid}
+              className="flex h-full w-full items-start gap-3 rounded-[22px] glass hairline p-4 text-left transition-shadow hover:shadow-card disabled:opacity-50">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-primary-50 text-primary-600"><t.icon className="h-[18px] w-[18px]" /></span>
+              <span className="min-w-0">
+                <span className="block font-semibold tracking-[-0.01em] text-ink">{t.title}</span>
+                <span className="mt-0.5 block text-[13px] leading-snug text-ink-muted">{t.sub}</span>
+              </span>
+            </motion.button>
+          </StaggerItem>
+        ))}
+      </Stagger>
+      <p className="mt-6 text-sm font-medium text-ink">Ou dites-le avec vos mots</p>
       <form onSubmit={(e) => { e.preventDefault(); start(); }}
-        className="mt-6 flex items-end gap-3 rounded-[22px] glass hairline p-2 pl-5 transition-shadow focus-within:shadow-glow">
+        className="mt-2 flex items-end gap-3 rounded-[22px] glass hairline p-2 pl-5 transition-shadow focus-within:shadow-glow">
         <textarea ref={inputRef} rows={1} value={text} onChange={(e) => setText(e.target.value)} data-testid="mandate-input"
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); start(); } }}
           placeholder="J'ai 10 000 $ à investir…"
-          className="max-h-40 min-h-[52px] flex-1 resize-none bg-transparent py-3 text-[19px] tracking-[-0.01em] text-ink outline-none placeholder:text-ink-muted/70" />
+          className="max-h-40 min-h-[48px] flex-1 resize-none bg-transparent py-3 text-[17px] tracking-[-0.01em] text-ink outline-none placeholder:text-ink-muted/70" />
         <motion.button type="submit" disabled={busy || !text.trim()} data-testid="mandate-start" aria-label="Lancer l'analyse"
           whileTap={{ scale: 0.92 }} transition={spring}
           className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-primary-500 text-white shadow-glow transition-colors hover:bg-primary-600 disabled:bg-ink/[0.06] disabled:text-ink-muted disabled:shadow-none">
           {busy ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" /> : <ArrowUpRight className="h-5 w-5" />}
         </motion.button>
       </form>
-      <div className="mt-4 flex flex-wrap gap-2">
+      <div className="mt-3 flex flex-wrap gap-2">
         {SUGGESTIONS.map((e) => (
           <motion.button key={e} whileTap={{ scale: 0.96 }} onClick={() => { setText(e); start(e); }}
-            className="rounded-full hairline bg-white/60 px-4 py-2 text-sm text-ink transition-colors hover:bg-white">{e}</motion.button>
+            className="rounded-full hairline bg-white/60 px-3.5 py-1.5 text-[13px] text-ink-soft transition-colors hover:bg-white hover:text-ink">{e}</motion.button>
         ))}
       </div>
       <p className="mt-4 max-w-2xl text-sm text-ink-muted">Nos agents analysent votre profil, vos placements et le marché, vérifient chaque chiffre, puis vous proposent des ordres. Rien n'est fait sans votre accord.</p>
@@ -299,26 +349,32 @@ function Health({ pending }: { pending?: any }) {
   );
 }
 
-const DEPOSITS: [number, string][] = [[1000, "1 000 $"], [5000, "5 000 $"], [10000, "10 000 $"], [25000, "25 000 $"]];
+const DEPOSITS = [1000, 5000, 10000, 25000];
+const INVEST_STEPS = [500, 1000, 2500, 5000, 10000, 25000, 50000];
 
-/** Simulated cash: what can be invested now, one tap to ask the agents how to invest it, and fictional top-ups. */
-function CashRow() {
+/** Simulated cash: what can be invested now, how much of it to invest (all of it or the amount the person chooses), and fictional top-ups. */
+function CashRow({ panel, setPanel }: { panel: Panel; setPanel: (p: Panel) => void }) {
   const { me, reload, portfolio } = useApp();
   const nav = useNavigate();
   const cash = me?.cash?.cash_cad ?? 0;
-  const [adding, setAdding] = useState(false);
-  const [amount, setAmount] = useState(5000);
+  const all = Math.floor(cash);
+  const [invAmt, setInvAmt] = useState<number | null>(all);
+  const [amount, setAmount] = useState<number | null>(5000);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<ApiError | null>(null);
+  useEffect(() => { if (panel === "invest") setInvAmt(all); }, [panel]); // eslint-disable-line react-hooks/exhaustive-deps
+  const steps = INVEST_STEPS.filter((v) => v < all).slice(-3);
   const invest = async () => {
+    if (!invAmt) return;
     setBusy(true); setErr(null);
-    const amt = Math.floor(cash);
+    const amt = Math.floor(invAmt);
     try { await launchMandate(nav, `J'ai ${cad(amt)} à investir`, portfolio?.portfolio_id, { kind: "invest", amount_cad: amt }); }
     catch (e) { setErr(e as ApiError); setBusy(false); }
   };
   const add = async () => {
+    if (!amount) return;
     setBusy(true); setErr(null);
-    try { await api.post("/wallet/deposit", { amount_cad: amount }); await reload(); setAdding(false); }
+    try { await api.post("/wallet/deposit", { amount_cad: amount }); await reload(); setPanel(null); }
     catch (e) { setErr(e as ApiError); }
     finally { setBusy(false); }
   };
@@ -334,15 +390,35 @@ function CashRow() {
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          {cash >= 50 && <Button size="sm" variant="gold" onClick={invest} disabled={busy} data-testid="invest-cash">Investir ce montant <ArrowRight className="h-3.5 w-3.5" /></Button>}
-          <Button size="sm" variant="secondary" onClick={() => setAdding(!adding)} data-testid="add-funds"><Plus className="h-3.5 w-3.5" /> Ajouter des fonds</Button>
+          {cash >= 50 && (
+            <Button size="sm" variant={panel === "invest" ? "secondary" : "gold"} onClick={() => setPanel(panel === "invest" ? null : "invest")} disabled={busy} data-testid="invest-cash">
+              {panel === "invest" ? <><X className="h-3.5 w-3.5" /> Fermer</> : <>Investir <ArrowRight className="h-3.5 w-3.5" /></>}
+            </Button>
+          )}
+          <Button size="sm" variant="secondary" onClick={() => setPanel(panel === "deposit" ? null : "deposit")} data-testid="add-funds"><Plus className="h-3.5 w-3.5" /> Ajouter des fonds</Button>
         </div>
       </div>
-      {adding && (
-        <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} className="mt-3 flex flex-wrap items-center gap-2">
-          <Segmented value={amount} onChange={setAmount} options={DEPOSITS} size="sm" />
-          <Button size="sm" onClick={add} disabled={busy} data-testid="confirm-deposit">{busy ? "Ajout…" : "Ajouter"}</Button>
-          <span className="text-xs text-ink-muted">Argent fictif, pour apprendre sans risque.</span>
+      {panel === "invest" && (
+        <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} className="mt-4 rounded-[20px] bg-white/60 p-4 hairline sm:p-5" data-testid="invest-panel">
+          <p className="font-semibold tracking-[-0.01em] text-ink">Combien voulez-vous investir ?</p>
+          <p className="mb-3.5 mt-0.5 text-[13px] text-ink-muted">Les agents proposent comment répartir ce montant selon votre profil. Le reste demeure disponible.</p>
+          <AmountPicker value={invAmt} onChange={setInvAmt} presets={[[all, `Tout · ${cad(all)}`], ...steps]} min={50} max={all} testid="invest-amount" />
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <Button variant="gold" onClick={invest} disabled={busy || !invAmt} data-testid="confirm-invest">
+              {busy ? "Les agents démarrent…" : <>Analyser {invAmt ? cad(Math.floor(invAmt)) : ""} <ArrowRight className="h-4 w-4" /></>}
+            </Button>
+            <span className="text-xs text-ink-muted">Rien n'est acheté sans votre accord.</span>
+          </div>
+        </motion.div>
+      )}
+      {panel === "deposit" && (
+        <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} className="mt-4 rounded-[20px] bg-white/60 p-4 hairline sm:p-5">
+          <p className="mb-3 font-semibold tracking-[-0.01em] text-ink">Combien ajouter ?</p>
+          <AmountPicker value={amount} onChange={setAmount} presets={DEPOSITS} min={1} max={100000} testid="deposit-amount" />
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <Button size="sm" onClick={add} disabled={busy || !amount} data-testid="confirm-deposit">{busy ? "Ajout…" : `Ajouter ${amount ? cad(amount) : ""}`}</Button>
+            <span className="text-xs text-ink-muted">Argent fictif, pour apprendre sans risque.</span>
+          </div>
         </motion.div>
       )}
       </div>
