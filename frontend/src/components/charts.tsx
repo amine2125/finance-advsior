@@ -51,7 +51,7 @@ export function BandGauge({ value, min, max, label }: { value: number; min: numb
         <span className="tabular text-ink-soft"><b className="text-ink">{pct(value, 0)}</b> · votre profil : {pct(min, 0)} à {pct(max, 0)}</span>
       </div>
       <div className="relative h-3 rounded-full bg-canvas">
-        <div className="absolute inset-y-0 rounded-full bg-emerald-100 ring-1 ring-emerald-300" style={{ left: `${min * 100}%`, width: `${Math.max(0.5, (max - min) * 100)}%` }} title="Zone prévue par votre profil" />
+        <div className="absolute inset-y-0 rounded-full bg-gain-50 ring-1 ring-gain-600" style={{ left: `${min * 100}%`, width: `${Math.max(0.5, (max - min) * 100)}%` }} title="Zone prévue par votre profil" />
         <div className="absolute -top-1 h-5 w-1.5 -translate-x-1/2 rounded-full ring-2 ring-white" style={{ left: `${Math.min(100, Math.max(0, value * 100))}%`, background: inside ? "#00314d" : "#c4161c" }} />
       </div>
       <div className="mt-1 flex justify-between text-[11px] text-ink-muted"><span>0 %</span><span>100 %</span></div>
@@ -60,15 +60,15 @@ export function BandGauge({ value, min, max, label }: { value: number; min: numb
 }
 
 /** Value over time (single series: the title names it). Gold area, Wealthsimple-like: no grid, light axis. */
-export function ValueChart({ series, height = 220, compact, color = "#d9971f" }: { series: { date: string; value: number }[]; height?: number; compact?: boolean; color?: string }) {
+export function ValueChart({ series, height = 220, compact, color = "#3350ff" }: { series: { date: string; value: number }[]; height?: number; compact?: boolean; color?: string }) {
   const id = "vfill" + color.replace("#", "");
   return (
     <ResponsiveContainer width="100%" height={height}>
       <AreaChart data={series} margin={{ top: 8, right: 0, left: 0, bottom: 0 }}>
         <defs>
           <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={color} stopOpacity={0.28} />
-            <stop offset="100%" stopColor={color} stopOpacity={0.03} />
+            <stop offset="0%" stopColor={color} stopOpacity={0.22} />
+            <stop offset="100%" stopColor={color} stopOpacity={0} />
           </linearGradient>
         </defs>
         <XAxis dataKey="date" tickFormatter={tickDate} minTickGap={80} stroke={INK.muted} fontSize={11} tickLine={false} axisLine={false} hide={compact} />

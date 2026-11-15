@@ -188,7 +188,7 @@ def _minimal_correction(md, persona: InvestorProfile, current: dict[str, float])
             return
         amounts[a] -= x
         sold[a] = sold.get(a, 0.0) + x
-        why.setdefault(a, reason)
+        why[a] = reason  # the last reason is the one that decided the final amount
 
     crypto = [a for a in amounts if meta[a]["asset_class"] == "crypto"]
     thematic = METHODOLOGY.get("thematic_etfs", {})
@@ -215,13 +215,16 @@ def _minimal_correction(md, persona: InvestorProfile, current: dict[str, float])
         excess = g - mid * V
         tiers = [[a for a in amounts if is_growth(a) and int(meta[a].get("is_single_issuer", 1)) and a not in crypto],
                  [a for a in amounts if a in thematic], [a for a in amounts if is_growth(a) and meta[a]["asset_class"] == "etf" and a not in thematic]]
-        for tier in tiers:
+        tier_why = [f"Une action seule est le placement le plus risqué : vendue en premier pour ramener vos actions vers {mid * 100:.0f} %.",
+                    "Fonds concentré sur la technologie : vendu avant les fonds diversifiés.",
+                    f"Fonds diversifié : on en garde une partie pour la croissance, le reste ramène vos actions vers {mid * 100:.0f} %."]
+        for tier, reason in zip(tiers, tier_why):
             pool = sum(amounts[a] for a in tier)
             if excess <= 1 or pool <= 1:
                 continue
             take = min(excess, pool)
             for a in tier:
-                sell(a, take * amounts[a] / pool, "Réduit pour ramener la part en actions dans la zone de votre profil.")
+                sell(a, take * amounts[a] / pool, reason)
             excess -= take
     cash = sum(sold.values())
     if cash < 1:
@@ -357,7 +360,9 @@ def run_mandate(tracker: JobTracker, owner: str, req: dict) -> dict:
         A = intent["asset_id"]
         verdict = check_investment(md, persona, pf if pf and pf.holdings else None, A, amt)
         requested = {"asset_id": A, "name": verdict["name"], "amount_cad": amt, "verdict": verdict["verdict"], "max_amount_cad": verdict["max_amount_cad"],
-                     "reasons": [r["text"] for r in verdict["reasons"]], "tier": verdict["asset_tier"]["tier"]}
+                     "reasons": [r["text"] for r in verdict["reasons"]], "tier": verdict["asset_tier"]["tier"],
+                     "allowed_tier": verdict["allowed_tier"], "volatility": verdict["asset_tier"].get("volatility"),
+                     "max_drawdown": verdict["asset_tier"].get("max_drawdown"), "points": [dict(r) for r in verdict["reasons"]]}
         ok_amt = amt if verdict["verdict"] == "suitable" else verdict["max_amount_cad"]
         # The verdict tests the request ALONE. If only a size limit is at stake (not a preference, the horizon or the risk level),
         # the request can be combined with diversified funds for the rest: the cap then applies to the combined portfolio.
@@ -386,6 +391,7 @@ def run_mandate(tracker: JobTracker, owner: str, req: dict) -> dict:
                     requested["verdict"] = "partial"
                     requested["max_amount_cad"] = x
                     requested["reasons"].append(f"En plaçant le reste dans des fonds diversifiés, jusqu'à {_cad(x)} restent dans vos limites.")
+                    requested["points"].append({"tone": "good", "text": requested["reasons"][-1]})
                     break
                 x = float(int(x * 0.75 // 50 * 50))
         if ok_amt >= 1:
@@ -422,6 +428,9 @@ def run_mandate(tracker: JobTracker, owner: str, req: dict) -> dict:
     after_amounts = dict(before_amounts)
     for o in orders:
         after_amounts[o["asset_id"]] = after_amounts.get(o["asset_id"], 0) + (o["amount_cad"] if o["side"] == "buy" else -o["amount_cad"])
+    for o in orders:  # what the client holds before and keeps after, so « vendre tout » vs « alléger » is visible
+        o["held_cad"] = round(before_amounts.get(o["asset_id"], 0.0), 2)
+        o["keep_cad"] = round(max(0.0, after_amounts.get(o["asset_id"], 0.0)), 2)
     after_pf = _portfolio(persona, after_amounts)
     after_xr = run_xray(md, after_pf, persona, include_series=False) if after_pf else before_xr
     if after_xr is None:
@@ -611,9 +620,10 @@ def run_mandate(tracker: JobTracker, owner: str, req: dict) -> dict:
 
     mid = new_id("mnd")
     out = {
-        "mandate_id": mid, "status": "proposed", "created_at": utcnow(), "request": request or label, "intent": intent, "label": label,
+        "mandate_id": mid, "status": "proposed" if orders else "reviewed", "created_at": utcnow(), "request": request or label, "intent": intent, "label": label,
         "headline": headline, "portfolio_id": pf.portfolio_id if pf else None, "profile_level": persona.risk_profile_label, "constraints": constraints,
-        "orders": orders, "requested": requested, "governance": gov, "diagnosis": diagnosis, "before": B, "after": Af, "stress": stress,
+        "orders": orders, "requested": requested, "governance": gov,
+        "ideas": _ideas(persona, B) if intent["kind"] == "review" and not orders else [], "diagnosis": diagnosis, "before": B, "after": Af, "stress": stress,
         "debate": {"opportunity": view(args["opp"]), "risk": view(args["risk"])}, "explanation": explanation,
         "research": ({"events": [{"title": e["title"], "url": e.get("url"), "published_at": e.get("published_at"), "provider": e.get("provider")}
                                  for e in research["events"] if e.get("primary_source")][:5],
@@ -627,6 +637,42 @@ def run_mandate(tracker: JobTracker, owner: str, req: dict) -> dict:
     }
     get_store().put(owner, "MANDATE", mid, out)
     return out
+
+
+def _ideas(persona, B: dict | None) -> list[dict]:
+    """When nothing needs fixing: optional ideas (never orders), each with its reason and, when concrete, a request the agents can run."""
+    if not B:
+        return []
+    b = persona.budget
+    k = persona.kyc or {}
+    snap = k.get("snapshot") or {}
+    gs = B.get("growth_share") or 0.0
+    pos = sorted(B.get("positions") or [], key=lambda p: -p["weight"])
+    out: list[dict] = []
+    margin = snap.get("monthly_margin")
+    if margin and margin > 0 and not k.get("before_investing"):
+        amt = max(50, min(2000, int(margin * 0.3 // 50 * 50)))
+        out.append({"kind": "monthly", "title": f"Investir {_cad(amt)} chaque mois",
+                    "text": f"Il vous reste environ {_cad(margin)} par mois. En placer une partie régulièrement fait grandir votre portefeuille "
+                            f"sans avoir à deviner le bon moment pour investir.", "request": f"J'ai {amt} $ à investir"})
+    if gs < b.growth_max - 0.05:
+        out.append({"kind": "growth_room", "title": "De la place pour plus de croissance",
+                    "text": f"Vos actions font {_pct(gs)} du portefeuille et votre profil va jusqu'à {_pct(b.growth_max)}. C'est un bon équilibre ; "
+                            f"si vous visez plus de rendement à long terme, votre prochain dépôt peut aller davantage vers les fonds d'actions.", "request": None})
+    elif gs > b.growth_max - 0.03:
+        out.append({"kind": "near_limit", "title": "Vous êtes près de votre limite",
+                    "text": f"Vos actions font {_pct(gs)} et la limite est {_pct(b.growth_max)}. Si les marchés montent, vous pourriez la dépasser : "
+                            f"les agents vous le signaleront.", "request": None})
+    if pos and pos[0]["weight"] > 0.4:
+        p = pos[0]
+        out.append({"kind": "concentration", "title": f"Un seul fonds pèse {_pct(p['weight'])}",
+                    "text": f"« {ROLES.get(p['asset_id'], (p['name'],))[0]} » porte une grande partie de votre argent. Le répartir entre deux ou trois "
+                            f"fonds semblables réduit la dépendance à un seul marché.", "request": None})
+    elif len(pos) <= 2:
+        out.append({"kind": "few", "title": "Peu de placements différents",
+                    "text": "Avec seulement un ou deux fonds, une mauvaise année sur un marché pèse sur tout. Un fonds canadien et un fonds américain "
+                            "se complètent bien.", "request": None})
+    return out[:3]
 
 
 def _headline(intent, requested, orders, plan, persona, B) -> str:
@@ -645,10 +691,10 @@ def _headline(intent, requested, orders, plan, persona, B) -> str:
             return f"Oui, mais pas plus de {_cad(requested['max_amount_cad'])} dans {n}. Je place le reste dans des fonds diversifiés."
         return f"Je ne vous le conseille pas. À la place, je vous propose de placer {_cad(requested['amount_cad'])} dans un portefeuille {lvl}."
     if not orders:
-        return f"Votre portefeuille respecte votre profil {lvl} : je ne recommande aucun changement."
-    sells = sum(1 for o in orders if o["side"] == "sell")
-    return (f"Je vous propose {len(orders)} ordre(s) : alléger {sells} placement{'s' if sells > 1 else ''} qui dépasse{'nt' if sells > 1 else ''} vos limites "
-            f"et réinvestir le produit là où il manque, sans changer le montant investi.")
+        return f"Votre portefeuille respecte votre profil {lvl}. Rien à corriger : voici seulement quelques idées, si vous le souhaitez."
+    sold = sum(o["amount_cad"] for o in orders if o["side"] == "sell")
+    return (f"Pour revenir à un portefeuille {lvl}, je propose de déplacer {_cad(sold)} des placements les plus risqués vers des placements stables, "
+            f"sans changer le montant investi.")
 
 
 def _fallback_explanation(intent, requested, B, Af, rp) -> dict:

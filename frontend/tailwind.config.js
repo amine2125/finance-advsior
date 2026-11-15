@@ -1,6 +1,6 @@
 /** @type {import('tailwindcss').Config} */
-// Restrained, Wealthsimple-like system: white / light grey, near-black ink, one gold accent for the main action,
-// green / red only for gains and losses.
+// Flagship light theme: warm off-white surfaces, near-black ink, ONE high-contrast accent (cobalt).
+// Green / red are semantic only (gains / losses), never decoration. Depth = 1px translucent borders, frosted glass, ambient glows.
 export default {
   content: ["./index.html", "./src/**/*.{ts,tsx}"],
   theme: {
@@ -10,17 +10,27 @@ export default {
         display: ["Jost", "'Futura PT'", "Futura", "'Century Gothic'", "ui-sans-serif", "system-ui", "sans-serif"],
       },
       colors: {
-        ink: { DEFAULT: "#1a1a19", soft: "#5c5b57", muted: "#8e8c86" },
-        canvas: "#f6f5f2",
-        line: "#ebe9e4",
-        gold: { 50: "#fdf6e7", 100: "#fbe9c2", 400: "#f6c25a", 500: "#f2b23e", 600: "#d9971f" },
-        // legacy names still used by some components
-        brand: { 50: "#f3f3f0", 100: "#e9e8e3", 200: "#d6d4cd", 300: "#a3a19a", 500: "#2563c9", 600: "#1e4fa3", 700: "#33322f", 800: "#1a1a19", 900: "#000000" },
+        ink: { DEFAULT: "#151413", soft: "#56544f", muted: "#8e8b84" },
+        canvas: "#f6f4ef",
+        surface: "#fbfaf7",
+        line: "rgba(21,20,19,0.07)",
+        // the single accent
+        primary: { 50: "#eef1ff", 100: "#dde3ff", 200: "#bcc7ff", 400: "#5b72ff", 500: "#3350ff", 600: "#2440eb", 700: "#1c32bd" },
+        // semantic
+        gain: { 50: "#e9f6ef", 600: "#0f8a5f", 700: "#0b7350" },
         accent: { 50: "#fdf0ef", 100: "#f7d9d6", 500: "#d6453b", 600: "#c4372d", 700: "#a8291f" },
+        // legacy aliases kept for older components (mapped onto the new system)
+        gold: { 50: "#eef1ff", 100: "#dde3ff", 400: "#5b72ff", 500: "#3350ff", 600: "#2440eb" },
+        brand: { 50: "#f1efe9", 100: "#e8e5dd", 200: "#d6d2c8", 300: "#a19d93", 500: "#3350ff", 600: "#2440eb", 700: "#2b2a27", 800: "#151413", 900: "#000000" },
       },
-      boxShadow: { card: "0 1px 2px rgba(0,0,0,.04)", lift: "0 10px 30px -12px rgba(0,0,0,.18)" },
+      boxShadow: {
+        card: "0 0 0 1px rgba(21,20,19,0.05), 0 1px 2px rgba(21,20,19,0.03)",
+        lift: "0 0 0 1px rgba(21,20,19,0.06), 0 12px 40px -16px rgba(21,20,19,0.18)",
+        glow: "0 0 0 1px rgba(51,80,255,0.10), 0 18px 50px -20px rgba(51,80,255,0.45)",
+        inset: "inset 0 1px 0 rgba(255,255,255,0.7)",
+      },
       borderRadius: { "4xl": "2rem" },
-      letterSpacing: { tightish: "-0.011em" },
+      letterSpacing: { tightest: "-0.045em" },
     },
   },
   plugins: [],

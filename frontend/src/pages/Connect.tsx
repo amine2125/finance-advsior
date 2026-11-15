@@ -104,7 +104,7 @@ export default function Connect() {
                   <button onClick={() => setChosen(on ? chosen.filter((x) => x !== a.id) : [...chosen, a.id])} className="flex w-full items-center gap-4 py-4 text-left" data-testid={`acct-${a.id}`}>
                     <span className={clsx("grid h-6 w-6 shrink-0 place-items-center rounded-md border", on ? "border-ink bg-ink" : "border-line")}>{on && <Check className="h-4 w-4 text-white" strokeWidth={3} />}</span>
                     <span className="flex-1"><span className="block font-medium text-ink">{a.label}</span><span className="text-sm text-ink-muted">{a.number} · {a.n_holdings} placements</span></span>
-                    <span className="text-right"><span className="tabular block font-medium text-ink">{cad(a.value_cad, 2)}</span><span className={clsx("tabular text-sm", g >= 0 ? "text-emerald-700" : "text-accent-700")}>{g >= 0 ? "+" : "−"}{pct(Math.abs(g), 1)} depuis l'achat</span></span>
+                    <span className="text-right"><span className="tabular block font-medium text-ink">{cad(a.value_cad, 2)}</span><span className={clsx("tabular text-sm", g >= 0 ? "text-gain-700" : "text-accent-700")}>{g >= 0 ? "+" : "−"}{pct(Math.abs(g), 1)} depuis l'achat</span></span>
                   </button>
                 </li>
               );

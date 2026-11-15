@@ -1,9 +1,11 @@
 import clsx from "clsx";
-import { ArrowRight, ArrowUpRight, Check, Plus, Upload } from "lucide-react";
+import { motion } from "framer-motion";
+import { ArrowRight, ArrowUpRight, Check, Link2, Plus, ShieldAlert, Sparkles } from "lucide-react";
 import { useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ValueChart } from "../components/charts";
 import HoldingsEditor from "../components/HoldingsEditor";
+import { CountUp, Glass, Meter, PageIn, Segmented, spring, Stagger, StaggerItem } from "../components/motion";
 import { TickerLogo, sym } from "../components/Ticker";
 import { Button, ErrorBox, Spinner } from "../components/ui";
 import { useApi } from "../hooks/useApi";
@@ -13,11 +15,11 @@ import { cad, date, pct } from "../lib/format";
 import { api, ApiError } from "../services/api";
 
 const SUGGESTIONS = ["J'ai 5 000 $ à investir", "Je veux 2 000 $ de NVIDIA", "Rééquilibre mon portefeuille"];
-const RANGES: [string, number, string][] = [["1M", 30, "sur 1 mois"], ["3M", 90, "sur 3 mois"], ["1A", 365, "sur 1 an"], ["5A", 1825, "sur 5 ans"]];
+const RANGES: [number, string][] = [[30, "1M"], [90, "3M"], [365, "1A"], [1825, "5A"]];
 
 /** Starts the agents on a request and opens the live run. */
-export async function launchMandate(nav: (to: string) => void, request: string, portfolioId?: string) {
-  const j = await api.post<{ job_id: string }>("/mandates", { request, portfolio_id: portfolioId });
+export async function launchMandate(nav: (to: string) => void, request: string, portfolioId?: string, structured?: { kind: string; amount_cad?: number; asset_id?: string }) {
+  const j = await api.post<{ job_id: string }>("/mandates", { request, portfolio_id: portfolioId, structured });
   nav(`/mandats/en-cours/${j.job_id}?q=${encodeURIComponent(request)}`);
 }
 export const REVIEW = "Analyse mon portefeuille et dis-moi s'il respecte mon profil";
@@ -25,7 +27,7 @@ export const REVIEW = "Analyse mon portefeuille et dis-moi s'il respecte mon pro
 export const signed = (v: number | null | undefined, d = 2) => (v == null ? "—" : `${v >= 0 ? "+" : "−"}${cad(Math.abs(v), d)}`);
 export const signedPct = (v: number | null | undefined) => (v == null ? "" : `${v >= 0 ? "+" : "−"}${pct(Math.abs(v), 2)}`);
 
-/** Accueil : la valeur en grand, son évolution, « que voulez-vous faire ? », vos placements, l'activité. Pas de boîtes. */
+/** Accueil : le solde, sa santé vis-à-vis du profil, « que voulez-vous faire ? », les placements et l'activité. */
 export default function Home() {
   const { me } = useApp();
   const p = me!.profile;
@@ -37,122 +39,104 @@ export default function Home() {
   const has = (h.data?.holdings || []).length > 0;
   const pending = (act.data?.items || []).find((i: any) => i.kind === "proposed");
   const ch = hist.data?.change_cad;
-  const range = RANGES.find((r) => r[1] === days)!;
 
   return (
-    <div className="mx-auto max-w-[880px] px-5 pb-16 sm:px-8">
-      {/* value */}
-      <section className="pt-10 sm:pt-14">
-        <p className="text-sm text-ink-muted">Mon portefeuille · profil {p.risk_profile_label.toLowerCase()}</p>
-        <p className="tabular mt-2 font-display text-[52px] font-medium leading-none tracking-tight text-ink sm:text-[68px]" data-testid="total-value">
-          {h.data ? cad(h.data.total_value_cad, 2) : "…"}
-        </p>
-        {has && h.data.gain_cad != null && (
-          <p className={clsx("tabular mt-3 text-[17px]", h.data.gain_cad >= 0 ? "text-emerald-700" : "text-accent-700")}>
-            {signed(h.data.gain_cad)} ({signedPct(h.data.gain_pct)}) <span className="text-ink-muted">depuis vos achats</span>
-          </p>
-        )}
-        {has && ch != null && h.data.gain_cad == null && (
-          <p className={clsx("tabular mt-3 text-[17px]", ch >= 0 ? "text-emerald-700" : "text-accent-700")}>
-            {signed(ch)} ({signedPct(hist.data.change_pct)}) <span className="text-ink-muted">{range[2]}</span>
-          </p>
-        )}
-        {has && h.data.day_change_cad != null && (
-          <p className="tabular mt-1 text-sm text-ink-muted">Aujourd'hui <span className={h.data.day_change_cad >= 0 ? "text-emerald-700" : "text-accent-700"}>{signed(h.data.day_change_cad)}</span></p>
-        )}
-      </section>
-
-      {/* chart, full width, no frame */}
-      <section className="-mx-1 mt-8">
-        {hist.loading && !hist.data ? <div className="h-[280px]" /> : hist.data?.series?.length > 1 ? <ValueChart series={hist.data.series} height={280} />
-          : null}
-        {hist.data?.series?.length > 1 && (
-          <div className="mt-4 flex items-center justify-between gap-4">
-            <div className="flex gap-1">
-              {RANGES.map(([l, d]) => (
-                <button key={l} onClick={() => setDays(d)} className={clsx("rounded-full px-3.5 py-1.5 text-sm font-medium transition", days === d ? "bg-ink text-white" : "text-ink-muted hover:text-ink")}>{l}</button>
-              ))}
+    <PageIn className="mx-auto max-w-[920px] px-5 pb-20 pt-8 sm:px-8 sm:pt-12">
+      {/* balance */}
+      <Glass glow className="px-6 pb-4 pt-7 sm:px-9 sm:pt-9">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-sm text-ink-muted">Mon portefeuille · profil {p.risk_profile_label.toLowerCase()}</p>
+            <p className="mt-2 font-display text-[48px] font-semibold leading-none tracking-tightest text-ink sm:text-[64px]" data-testid="total-value">
+              {h.data ? <CountUp value={h.data.total_value_cad} format={(v) => cad(v, 2)} /> : "…"}
+            </p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {has && h.data.gain_cad != null && <Chip tone={h.data.gain_cad >= 0 ? "gain" : "loss"}>{signed(h.data.gain_cad, 0)} · {signedPct(h.data.gain_pct)} depuis vos achats</Chip>}
+              {has && ch != null && <Chip tone={ch >= 0 ? "gain" : "loss"}>{signedPct(hist.data.change_pct)} sur {RANGES.find((r) => r[0] === days)?.[1]}</Chip>}
+              {has && h.data.day_change_cad != null && <Chip tone="neutral">{signed(h.data.day_change_cad)} aujourd'hui</Chip>}
             </div>
-            <p className="hidden text-xs text-ink-muted sm:block">Vos placements actuels, s'ils avaient été détenus depuis le {date(hist.data.series[0].date)}</p>
           </div>
+          {has && <Segmented value={days} onChange={setDays} options={RANGES} size="sm" />}
+        </div>
+        {has && hist.data?.series?.length > 1 && (
+          <motion.div className="-mx-2 mt-6" initial={{ opacity: 0 }} animate={{ opacity: 1 }} key={days} transition={{ duration: 0.35 }}>
+            <ValueChart series={hist.data.series} height={240} />
+          </motion.div>
         )}
-      </section>
+        {!has && h.data && <div className="h-4" />}
+      </Glass>
 
       {h.data && !has && <Connect />}
       {has && <Health pending={pending} />}
 
-      {pending && !has && (
-        <Link to={`/mandats/${pending.mandate_id}`} className="group mt-12 flex items-center gap-4 border-y border-line py-5">
-          <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-gold-500" />
-          <div className="min-w-0 flex-1"><div className="font-medium text-ink">Une proposition attend votre décision</div><div className="truncate text-sm text-ink-muted">{pending.detail}</div></div>
-          <ArrowRight className="h-5 w-5 text-ink-muted transition group-hover:translate-x-0.5 group-hover:text-ink" />
-        </Link>
-      )}
-
-      {/* decision */}
       <DecisionBox inputRef={ask} />
 
-      {/* holdings + activity */}
-      {has && <div className="mt-16 grid gap-14 lg:grid-cols-[1fr_280px]">
-        <section>
-          <div className="flex items-baseline justify-between">
-            <h2 className="font-display text-2xl font-medium text-ink">Placements</h2>
-            {has && <Link to="/placements" className="text-sm text-ink-muted hover:text-ink">Tout voir</Link>}
-          </div>
-          {h.loading && !h.data ? <Spinner /> : has ? (
-            <ul className="mt-3 divide-y divide-line">{h.data.holdings.slice(0, 6).map((x: any) => <HoldingRow key={x.asset_id} h={x} />)}</ul>
-          ) : (
-            <div className="mt-4">
-              <p className="text-ink-muted">Ajoutez ce que vous détenez déjà, ici ou ailleurs, pour que les agents en tiennent compte.</p>
-              <Link to="/placements?ajouter=1"><Button variant="secondary" className="mt-4"><Plus className="h-4 w-4" /> Ajouter mes placements</Button></Link>
-            </div>
-          )}
-        </section>
-        <section>
-          <div className="flex items-baseline justify-between">
-            <h2 className="font-display text-2xl font-medium text-ink">Activité</h2>
-            <Link to="/decisions" className="text-sm text-ink-muted hover:text-ink">Tout voir</Link>
-          </div>
-          <ul className="mt-3 divide-y divide-line">
-            {(act.data?.items || []).slice(0, 5).map((i: any, n: number) => {
-              const body = (
-                <div className="py-3.5">
-                  <div className="text-xs text-ink-muted">{date(i.at)}</div>
-                  <div className="mt-0.5 line-clamp-2 text-sm leading-snug text-ink">{i.title}</div>
-                </div>
-              );
-              return <li key={n}>{i.mandate_id ? <Link to={`/mandats/${i.mandate_id}`} className="block hover:opacity-70">{body}</Link> : body}</li>;
-            })}
-          </ul>
-        </section>
-      </div>}
+      {has && (
+        <div className="mt-14 grid gap-12 lg:grid-cols-[minmax(0,1fr)_280px]">
+          <section className="min-w-0">
+            <SectionHead title="Placements" to="/placements" />
+            <Stagger className="mt-2">
+              {h.data.holdings.slice(0, 6).map((x: any) => <HoldingRow key={x.asset_id} h={x} />)}
+            </Stagger>
+          </section>
+          <section className="min-w-0">
+            <SectionHead title="Activité" to="/decisions" />
+            <Stagger className="mt-2">
+              {(act.data?.items || []).slice(0, 5).map((i: any, n: number) => {
+                const body = (
+                  <div className="border-b border-line py-3.5">
+                    <div className="text-xs text-ink-muted">{date(i.at)}</div>
+                    <div className="mt-0.5 line-clamp-2 text-sm leading-snug text-ink">{i.title}</div>
+                  </div>
+                );
+                return <StaggerItem key={n}>{i.mandate_id ? <Link to={`/mandats/${i.mandate_id}`} className="block transition-opacity hover:opacity-70">{body}</Link> : body}</StaggerItem>;
+              })}
+            </Stagger>
+          </section>
+        </div>
+      )}
       <ErrorBox error={h.error} />
+    </PageIn>
+  );
+}
+
+function Chip({ children, tone }: { children: React.ReactNode; tone: "gain" | "loss" | "neutral" }) {
+  return (
+    <span className={clsx("tabular-nums inline-flex items-center rounded-full px-3 py-1 text-[13px] font-medium",
+      tone === "gain" ? "bg-gain-50 text-gain-700" : tone === "loss" ? "bg-accent-50 text-accent-700" : "bg-ink/[0.04] text-ink-soft")}>{children}</span>
+  );
+}
+
+function SectionHead({ title, to }: { title: string; to: string }) {
+  return (
+    <div className="flex items-baseline justify-between">
+      <h2 className="font-display text-[22px] font-semibold tracking-[-0.03em] text-ink">{title}</h2>
+      <Link to={to} className="group inline-flex items-center gap-1 text-sm text-ink-muted hover:text-ink">Tout voir <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" /></Link>
     </div>
   );
 }
 
 export function HoldingRow({ h }: { h: any }) {
-  const up = (h.day_change ?? 0) >= 0;
   return (
-    <li>
-      <Link to={`/placement/${encodeURIComponent(h.asset_id)}`} className="group flex items-center gap-4 py-4" data-testid="holding-row">
-        <TickerLogo id={h.asset_id} size={42} />
+    <StaggerItem>
+      <Link to={`/placement/${encodeURIComponent(h.asset_id)}`} className="group flex items-center gap-4 border-b border-line py-3.5" data-testid="holding-row">
+        <motion.span whileHover={{ scale: 1.06 }} transition={spring}><TickerLogo id={h.asset_id} size={40} /></motion.span>
         <div className="min-w-0 flex-1">
-          <div className="font-medium text-ink group-hover:underline">{sym(h.asset_id)}</div>
+          <div className="font-semibold tracking-[-0.01em] text-ink">{sym(h.asset_id)}</div>
           <div className="truncate text-sm text-ink-muted">{friendly(h.asset_id, h.name)}{h.accounts?.length ? ` · ${h.accounts.join(", ")}` : ""}</div>
         </div>
         <div className="text-right">
-          <div className="tabular font-medium text-ink">{cad(h.value_cad, 2)}</div>
+          <div className="tabular-nums font-medium text-ink">{cad(h.value_cad, 2)}</div>
           {h.gain_cad != null
-            ? <div className={clsx("tabular text-sm", h.gain_cad >= 0 ? "text-emerald-700" : "text-accent-700")}>{signed(h.gain_cad, 0)} ({signedPct(h.gain_pct)})</div>
-            : h.day_change_pct != null && <div className={clsx("tabular text-sm", up ? "text-emerald-700" : "text-accent-700")}>{signedPct(h.day_change_pct)}</div>}
+            ? <div className={clsx("tabular-nums text-sm", h.gain_cad >= 0 ? "text-gain-700" : "text-accent-700")}>{signed(h.gain_cad, 0)} ({signedPct(h.gain_pct)})</div>
+            : h.day_change_pct != null && <div className={clsx("tabular-nums text-sm", (h.day_change ?? 0) >= 0 ? "text-gain-700" : "text-accent-700")}>{signedPct(h.day_change_pct)}</div>}
         </div>
       </Link>
-    </li>
+    </StaggerItem>
   );
 }
 
-/** « Que voulez-vous faire ? » — the entry point of the agent workflow: one large line, no box. */
+/** « Que voulez-vous faire ? » — the entry point of the agent workflow. */
 export function DecisionBox({ inputRef }: { inputRef?: React.RefObject<HTMLTextAreaElement> }) {
   const { portfolio } = useApp();
   const nav = useNavigate();
@@ -163,61 +147,67 @@ export function DecisionBox({ inputRef }: { inputRef?: React.RefObject<HTMLTextA
     const r = (req ?? text).trim();
     if (!r) return;
     setBusy(true); setError(null);
-    try {
-      const j = await api.post<{ job_id: string }>("/mandates", { request: r, portfolio_id: portfolio?.portfolio_id });
-      nav(`/mandats/en-cours/${j.job_id}?q=${encodeURIComponent(r)}`);
-    } catch (e) { setError(e as ApiError); setBusy(false); }
+    try { await launchMandate(nav, r, portfolio?.portfolio_id); } catch (e) { setError(e as ApiError); setBusy(false); }
   };
   return (
-    <section className="mt-16">
-      <h2 className="font-display text-[32px] font-medium leading-tight text-ink sm:text-[40px]">Que voulez-vous faire<br className="hidden sm:block" /> avec votre argent ?</h2>
-      <form onSubmit={(e) => { e.preventDefault(); start(); }} className="mt-6 flex items-end gap-3 border-b-2 border-ink pb-2">
+    <section className="mt-14">
+      <div className="flex items-center gap-2 text-sm font-medium text-primary-600"><Sparkles className="h-4 w-4" /> Prendre une décision</div>
+      <h2 className="mt-2 font-display text-[34px] font-semibold leading-[1.05] tracking-tightest text-ink sm:text-[44px]">Que voulez-vous faire<br className="hidden sm:block" /> avec votre argent ?</h2>
+      <form onSubmit={(e) => { e.preventDefault(); start(); }}
+        className="mt-6 flex items-end gap-3 rounded-[22px] glass hairline p-2 pl-5 transition-shadow focus-within:shadow-glow">
         <textarea ref={inputRef} rows={1} value={text} onChange={(e) => setText(e.target.value)} data-testid="mandate-input"
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); start(); } }}
           placeholder="J'ai 10 000 $ à investir…"
-          className="max-h-40 min-h-[48px] flex-1 resize-none bg-transparent py-2 text-[22px] text-ink outline-none placeholder:text-ink-muted/60 sm:text-[26px]" />
-        <button type="submit" disabled={busy || !text.trim()} data-testid="mandate-start" aria-label="Lancer l'analyse"
-          className="mb-1 grid h-12 w-12 shrink-0 place-items-center rounded-full bg-gold-500 text-ink transition hover:bg-gold-400 disabled:bg-canvas disabled:text-ink-muted">
-          {busy ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-ink/30 border-t-ink" /> : <ArrowUpRight className="h-5 w-5" />}
-        </button>
+          className="max-h-40 min-h-[52px] flex-1 resize-none bg-transparent py-3 text-[19px] tracking-[-0.01em] text-ink outline-none placeholder:text-ink-muted/70" />
+        <motion.button type="submit" disabled={busy || !text.trim()} data-testid="mandate-start" aria-label="Lancer l'analyse"
+          whileTap={{ scale: 0.92 }} transition={spring}
+          className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-primary-500 text-white shadow-glow transition-colors hover:bg-primary-600 disabled:bg-ink/[0.06] disabled:text-ink-muted disabled:shadow-none">
+          {busy ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" /> : <ArrowUpRight className="h-5 w-5" />}
+        </motion.button>
       </form>
       <div className="mt-4 flex flex-wrap gap-2">
-        {SUGGESTIONS.map((e) => <button key={e} onClick={() => { setText(e); start(e); }} className="rounded-full bg-canvas px-4 py-2 text-sm text-ink transition hover:bg-line">{e}</button>)}
+        {SUGGESTIONS.map((e) => (
+          <motion.button key={e} whileTap={{ scale: 0.96 }} onClick={() => { setText(e); start(e); }}
+            className="rounded-full hairline bg-white/60 px-4 py-2 text-sm text-ink transition-colors hover:bg-white">{e}</motion.button>
+        ))}
       </div>
-      <p className="mt-4 text-sm text-ink-muted">Nos agents analysent votre profil, vos placements et le marché, vérifient chaque chiffre, puis vous proposent des ordres. Rien n'est fait sans votre accord.</p>
+      <p className="mt-4 max-w-2xl text-sm text-ink-muted">Nos agents analysent votre profil, vos placements et le marché, vérifient chaque chiffre, puis vous proposent des ordres. Rien n'est fait sans votre accord.</p>
       {error && <div className="mt-3"><ErrorBox error={error} /></div>}
     </section>
   );
 }
 
-/** Empty account: connect an existing brokerage account (simulated) or enter holdings by hand; the agents analyse right away. */
+/** Empty account: connect an existing brokerage account (simulated) or enter holdings by hand. */
 function Connect() {
   const { me, setPortfolioId, reload } = useApp();
   const nav = useNavigate();
   const [manual, setManual] = useState(false);
   const [busy, setBusy] = useState(false);
   return (
-    <section className="mt-12 border-y border-line py-8" data-testid="connect">
-      <h2 className="font-display text-[32px] font-medium leading-tight text-ink">Connectez votre portefeuille</h2>
-      <p className="mt-2 max-w-xl text-ink-soft">Reliez le compte où sont déjà vos placements. Nos agents vérifient tout de suite s'il respecte votre profil {me!.profile.risk_profile_label.toLowerCase()}.</p>
-      <div className="mt-6 flex flex-wrap items-center gap-3">
-        <Button size="lg" onClick={() => nav("/connecter")} data-testid="connect-account">Connecter mon compte de placement <ArrowRight className="h-4 w-4" /></Button>
-        <Button size="lg" variant="ghost" onClick={() => setManual(!manual)}>Entrer mes placements à la main</Button>
-      </div>
-      {manual && (
-        <div className="mt-6">
-          {busy ? <Spinner label="Les agents démarrent l'analyse…" /> : (
-            <HoldingsEditor personaId={me!.profile.persona_id} submitLabel="Analyser mon portefeuille" initial={[]}
-              onSaved={async (pf) => { setBusy(true); setPortfolioId(pf.portfolio_id); await reload(); await launchMandate(nav, REVIEW, pf.portfolio_id); }} />
-          )}
+    <Glass className="mt-6 px-6 py-7 sm:px-9" glow>
+      <div data-testid="connect">
+        <span className="grid h-11 w-11 place-items-center rounded-2xl bg-primary-50 text-primary-600"><Link2 className="h-5 w-5" /></span>
+        <h2 className="mt-4 font-display text-[30px] font-semibold leading-tight tracking-tightest text-ink">Connectez votre portefeuille</h2>
+        <p className="mt-2 max-w-xl text-ink-soft">Reliez le compte où sont déjà vos placements. Nos agents vérifient tout de suite s'il respecte votre profil {me!.profile.risk_profile_label.toLowerCase()}.</p>
+        <div className="mt-6 flex flex-wrap items-center gap-2">
+          <Button size="lg" variant="gold" onClick={() => nav("/connecter")} data-testid="connect-account">Connecter mon compte de placement <ArrowRight className="h-4 w-4" /></Button>
+          <Button size="lg" variant="ghost" onClick={() => setManual(!manual)}><Plus className="h-4 w-4" /> Entrer mes placements à la main</Button>
         </div>
-      )}
-      <p className="mt-5 flex items-center gap-2 text-xs text-ink-muted"><Upload className="h-3.5 w-3.5" /> Simulation : aucun identifiant n'est demandé et aucun vrai compte n'est contacté.</p>
-    </section>
+        {manual && (
+          <motion.div className="mt-6" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}>
+            {busy ? <Spinner label="Les agents démarrent l'analyse…" /> : (
+              <HoldingsEditor personaId={me!.profile.persona_id} submitLabel="Analyser mon portefeuille" initial={[]}
+                onSaved={async (pf) => { setBusy(true); setPortfolioId(pf.portfolio_id); await reload(); await launchMandate(nav, REVIEW, pf.portfolio_id); }} />
+            )}
+          </motion.div>
+        )}
+        <p className="mt-5 text-xs text-ink-muted">Simulation : aucun identifiant n'est demandé et aucun vrai compte n'est contacté.</p>
+      </div>
+    </Glass>
   );
 }
 
-/** Does my portfolio match my profile? The answer in one line, the problems in plain words, and a button to fix it. */
+/** Does my portfolio match my profile? One meter, the problems in plain words, one action. */
 function Health({ pending }: { pending?: any }) {
   const { portfolio } = useApp();
   const nav = useNavigate();
@@ -225,30 +215,40 @@ function Health({ pending }: { pending?: any }) {
   const [busy, setBusy] = useState(false);
   if (!d.data || d.data.fits === null) return null;
   const ok = d.data.fits;
+  const n = d.data.problems.length;
+  const CHECKS = 7; // rules the diagnosis can raise
   return (
-    <section className="mt-12 border-y border-line py-7" data-testid="diagnosis">
-      <div className="flex items-start gap-3">
-        <span className={clsx("mt-1 grid h-6 w-6 shrink-0 place-items-center rounded-full", ok ? "bg-emerald-600" : "bg-accent-600")}>
-          {ok ? <Check className="h-3.5 w-3.5 text-white" strokeWidth={3} /> : <span className="text-xs font-bold text-white">{d.data.problems.length}</span>}
-        </span>
-        <div className="min-w-0 flex-1">
-          <h2 className="font-display text-2xl font-medium leading-snug text-ink">{d.data.headline}</h2>
-          {!ok && (
-            <ul className="mt-3 space-y-2">
-              {d.data.problems.slice(0, 3).map((p: any) => (
-                <li key={p.rule_id} className="text-[15px]"><span className="font-medium text-ink">{p.title}.</span> <span className="text-ink-muted">{p.detail}</span></li>
-              ))}
-              {d.data.problems.length > 3 && <li className="text-sm text-ink-muted">+ {d.data.problems.length - 3} autre(s) point(s)</li>}
-            </ul>
-          )}
-          {!ok && (
-            <Button className="mt-5" disabled={busy} data-testid="fix-portfolio"
+    <Glass className="mt-6 px-6 py-6 sm:px-9">
+      <div data-testid="diagnosis">
+        <div className="flex items-start gap-4">
+          <span className={clsx("grid h-11 w-11 shrink-0 place-items-center rounded-2xl", ok ? "bg-gain-50 text-gain-700" : "bg-accent-50 text-accent-700")}>
+            {ok ? <Check className="h-5 w-5" strokeWidth={2.5} /> : <ShieldAlert className="h-5 w-5" />}
+          </span>
+          <div className="min-w-0 flex-1">
+            <h2 className="font-display text-[22px] font-semibold leading-snug tracking-[-0.03em] text-ink">{d.data.headline}</h2>
+            <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+              <Meter value={(CHECKS - n) / CHECKS} tone={ok ? "gain" : n > 2 ? "loss" : "primary"} className="w-full max-w-[220px] sm:flex-1" />
+              <span className="tabular-nums text-sm text-ink-muted">{ok ? "Toutes les limites respectées" : `${n} point${n > 1 ? "s" : ""} à corriger`}</span>
+            </div>
+          </div>
+        </div>
+        {!ok && (
+          <Stagger className="mt-5 space-y-2.5 sm:pl-[60px]">
+            {d.data.problems.slice(0, 3).map((p: any) => (
+              <StaggerItem key={p.rule_id} className="text-[15px] leading-relaxed"><span className="font-medium text-ink">{p.title}.</span> <span className="text-ink-muted">{p.detail}</span></StaggerItem>
+            ))}
+            {n > 3 && <StaggerItem className="text-sm text-ink-muted">+ {n - 3} autre(s) point(s)</StaggerItem>}
+          </Stagger>
+        )}
+        {!ok && (
+          <div className="mt-6 sm:pl-[60px]">
+            <Button variant="gold" disabled={busy} data-testid="fix-portfolio"
               onClick={async () => { if (pending) { nav(`/mandats/${pending.mandate_id}`); return; } setBusy(true); await launchMandate(nav, "Analyse et rééquilibre mon portefeuille", portfolio?.portfolio_id); }}>
               {busy ? "Les agents démarrent…" : pending ? "Voir la correction proposée" : "Demander aux agents de corriger"} <ArrowRight className="h-4 w-4" />
             </Button>
-          )}
-        </div>
+          </div>
+        )}
       </div>
-    </section>
+    </Glass>
   );
 }

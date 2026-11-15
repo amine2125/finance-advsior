@@ -1,29 +1,35 @@
 import clsx from "clsx";
 import { AlertTriangle, CheckCircle2, ChevronDown, Info, Loader2, XCircle } from "lucide-react";
+import { motion } from "framer-motion";
 import { ReactNode, useState } from "react";
+import { spring } from "./motion";
 import { ApiError } from "../services/api";
 
 type BtnVariant = "primary" | "gold" | "navy" | "secondary" | "ghost" | "danger" | "onDark";
+/** Tactile button: springs down on press. « gold » is the single accent (cobalt) for the one main action of a screen. */
 export function Button({ children, variant = "primary", size = "md", className, ...p }: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: BtnVariant; size?: "sm" | "md" | "lg" }) {
   return (
-    <button
-      {...p}
+    <motion.button
+      whileTap={p.disabled ? undefined : { scale: 0.97 }}
+      whileHover={p.disabled ? undefined : { y: -1 }}
+      transition={spring}
+      {...(p as any)}
       className={clsx(
-        "inline-flex items-center justify-center gap-2 rounded-full font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-40",
+        "inline-flex select-none items-center justify-center gap-2 rounded-full font-medium tracking-[-0.01em] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 focus-visible:ring-offset-canvas disabled:cursor-not-allowed disabled:opacity-40",
         size === "sm" && "h-8 px-3.5 text-sm",
         size === "md" && "h-10 px-5 text-sm",
         size === "lg" && "h-12 px-6 text-[15px]",
-        (variant === "primary" || variant === "navy") && "bg-ink text-white hover:bg-black",
-        variant === "gold" && "bg-gold-500 text-ink hover:bg-gold-400",
-        variant === "secondary" && "border border-line bg-white text-ink hover:border-ink/30",
-        variant === "ghost" && "text-ink-soft hover:bg-canvas hover:text-ink",
+        (variant === "primary" || variant === "navy") && "bg-ink text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] hover:bg-black",
+        variant === "gold" && "bg-primary-500 text-white shadow-glow hover:bg-primary-600",
+        variant === "secondary" && "glass hairline text-ink hover:bg-white",
+        variant === "ghost" && "text-ink-soft hover:bg-ink/[0.04] hover:text-ink",
         variant === "danger" && "text-accent-700 hover:bg-accent-50",
-        variant === "onDark" && "border border-white/25 text-white hover:bg-white/10",
+        variant === "onDark" && "border border-white/20 text-white hover:bg-white/10",
         className,
       )}
     >
       {children}
-    </button>
+    </motion.button>
   );
 }
 
@@ -47,7 +53,7 @@ export function Card({ title, subtitle, action, children, className, pad = true 
 
 const TONES = {
   neutral: "bg-canvas text-ink-soft",
-  good: "bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200",
+  good: "bg-gain-50 text-gain-700 ring-1 ring-gain-600",
   warn: "bg-amber-50 text-amber-800 ring-1 ring-amber-200",
   bad: "bg-accent-50 text-accent-700 ring-1 ring-accent-100",
   info: "bg-brand-50 text-brand-800 ring-1 ring-brand-100",
@@ -62,7 +68,7 @@ export function Notice({ tone = "info", title, children, className }: { tone?: "
   return (
     <div className={clsx("flex gap-3 rounded-xl p-3.5 text-sm",
       tone === "info" && "bg-brand-50 text-brand-800", tone === "warn" && "bg-amber-50 text-amber-900",
-      tone === "bad" && "bg-accent-50 text-accent-700", tone === "good" && "bg-emerald-50 text-emerald-900", className)}>
+      tone === "bad" && "bg-accent-50 text-accent-700", tone === "good" && "bg-gain-50 text-gain-700", className)}>
       <Icon className="mt-0.5 h-4 w-4 shrink-0" />
       <div>{title && <div className="font-semibold">{title}</div>}{children && <div className={clsx(title && "mt-0.5", "opacity-90")}>{children}</div>}</div>
     </div>
@@ -98,7 +104,7 @@ export function Stat({ label, value, hint, tone }: { label: string; value: React
   return (
     <div className="rounded-2xl border border-line bg-white p-4 shadow-card">
       <div className="text-xs font-medium text-ink-soft">{label}</div>
-      <div className={clsx("tabular mt-1 text-2xl font-bold tracking-tight", tone === "bad" ? "text-accent-700" : tone === "warn" ? "text-amber-700" : tone === "good" ? "text-emerald-700" : "text-brand-800")}>{value}</div>
+      <div className={clsx("tabular mt-1 text-2xl font-bold tracking-tight", tone === "bad" ? "text-accent-700" : tone === "warn" ? "text-amber-700" : tone === "good" ? "text-gain-700" : "text-brand-800")}>{value}</div>
       {hint && <div className="mt-1 text-xs text-ink-muted">{hint}</div>}
     </div>
   );
@@ -181,7 +187,7 @@ export function RiskLevel({ tier, compact }: { tier: string; compact?: boolean }
       <span className="flex items-end gap-[2px]">
         {[1, 2, 3].map((i) => (
           <span key={i} className={clsx("w-1.5 rounded-sm", i === 1 ? "h-2" : i === 2 ? "h-3" : "h-4",
-            i <= n ? (n === 3 ? "bg-accent-600" : n === 2 ? "bg-amber-500" : "bg-emerald-600") : "bg-line")} />
+            i <= n ? (n === 3 ? "bg-accent-600" : n === 2 ? "bg-amber-500" : "bg-gain-600") : "bg-line")} />
         ))}
       </span>
       {!compact && <span>{label}</span>}

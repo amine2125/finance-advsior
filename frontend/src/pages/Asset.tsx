@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { ArrowLeft, ExternalLink } from "lucide-react";
+import { ArrowLeft, ArrowRight, ExternalLink } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ValueChart } from "../components/charts";
@@ -9,7 +9,9 @@ import { useApi, useJob } from "../hooks/useApi";
 import { useApp } from "../hooks/useApp";
 import { friendly, kind } from "../lib/assets";
 import { cad, date, pct } from "../lib/format";
-import { api } from "../services/api";
+import { api, ApiError } from "../services/api";
+import { Glass, Segmented } from "../components/motion";
+import { launchMandate } from "./Home";
 
 const RANGES: [string, number][] = [["1M", 30], ["3M", 90], ["1A", 365], ["5A", 1830]];
 const RISK: Record<string, string> = { LOW: "Faible", MEDIUM: "Moyen", HIGH: "Élevé" };
@@ -57,11 +59,9 @@ export default function AssetPage() {
             <div className="flex items-start justify-between gap-4">
               <div>
                 <div className="tabular font-display text-[52px] font-medium leading-none text-ink">{last != null ? `${last.toLocaleString("fr-CA", { maximumFractionDigits: 2 })} ${cur}` : "…"}</div>
-                {chg != null && <div className={clsx("tabular text-sm", chg >= 0 ? "text-emerald-700" : "text-accent-700")}>{chg >= 0 ? "+" : "−"}{pct(Math.abs(chg), 2)} sur la période</div>}
+                {chg != null && <div className={clsx("tabular text-sm", chg >= 0 ? "text-gain-700" : "text-accent-700")}>{chg >= 0 ? "+" : "−"}{pct(Math.abs(chg), 2)} sur la période</div>}
               </div>
-              <div className="flex rounded-full border border-line p-0.5">
-                {RANGES.map(([l, d]) => <button key={l} onClick={() => setDays(d)} className={clsx("rounded-full px-3 py-1 text-xs font-medium", days === d ? "bg-ink text-white" : "text-ink-muted hover:text-ink")}>{l}</button>)}
-              </div>
+              <Segmented value={days} onChange={setDays} options={RANGES.map(([l, d]) => [d, l] as [number, string])} size="sm" />
             </div>
             <div className="mt-5">{series.length > 1 ? <ValueChart series={series} height={240} /> : <Spinner />}</div>
             <p className="mt-2 text-xs text-ink-muted">Cours de clôture en {cur}, au {date(series.at(-1)?.date)}.</p>
@@ -74,18 +74,40 @@ export default function AssetPage() {
             <Fig label="Dans votre portefeuille" value={mine ? cad(mine.value_cad) : "—"} />
           </div>
 
-          <section className="mt-6 flex flex-wrap items-center justify-between gap-4 border-t border-line py-6">
-            <div>
-              <h2 className="font-display text-xl font-medium text-ink">Est-ce une bonne idée pour vous ?</h2>
-              <p className="mt-0.5 text-sm text-ink-muted">Les agents vérifient avec votre profil et vos placements.</p>
-            </div>
-            <Button variant="gold" onClick={() => nav(`/?demande=${encodeURIComponent(`Je veux mettre 1 000 $ dans ${friendly(assetId, a.data.name)}`)}`)}>Demander aux agents</Button>
-          </section>
+          <Ask assetId={assetId} name={friendly(assetId, a.data.name)} />
 
           <News assetId={assetId} />
         </>
       )}
     </div>
+  );
+}
+
+const AMOUNTS: [number, string][] = [[500, "500 $"], [1000, "1 000 $"], [2500, "2 500 $"], [5000, "5 000 $"]];
+
+/** « Est-ce une bonne idée pour moi ? » — launches the agents directly on this exact security (no re-typing, no ambiguity). */
+function Ask({ assetId, name }: { assetId: string; name: string }) {
+  const nav = useNavigate();
+  const { portfolio } = useApp();
+  const [amount, setAmount] = useState(1000);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<ApiError | null>(null);
+  const go = async () => {
+    setBusy(true); setErr(null);
+    try {
+      await launchMandate(nav, `Je veux mettre ${cad(amount)} dans ${sym(assetId)}`, portfolio?.portfolio_id, { kind: "buy_asset", amount_cad: amount, asset_id: assetId });
+    } catch (e) { setErr(e as ApiError); setBusy(false); }
+  };
+  return (
+    <Glass className="mt-6 p-6" glow>
+      <h2 className="font-display text-[22px] font-semibold tracking-tight text-ink">Est-ce une bonne idée pour vous ?</h2>
+      <p className="mt-1 text-sm text-ink-muted">Les agents vérifient {name} avec votre profil et vos placements actuels.</p>
+      <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+        <Segmented value={amount} onChange={setAmount} options={AMOUNTS} size="sm" />
+        <Button variant="gold" onClick={go} disabled={busy} data-testid="ask-agents">{busy ? "Lancement…" : "Analyser"}<ArrowRight className="h-4 w-4" /></Button>
+      </div>
+      <ErrorBox error={err} />
+    </Glass>
   );
 }
 

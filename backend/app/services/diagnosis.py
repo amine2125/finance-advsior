@@ -11,6 +11,19 @@ ORDER = {"LOW": 0, "MEDIUM": 1, "HIGH": 2}
 TIER_FR = {"LOW": "faible", "MEDIUM": "moyen", "HIGH": "élevé"}
 
 
+SHORT = {"budget.growth_band": "Actions et cryptos", "budget.theme_exposure": "Un seul thème", "budget.single_issuer": "Une seule entreprise",
+         "budget.single_sector": "Un seul secteur", "budget.speculative": "Cryptoactifs", "budget.drawdown_review": "Pire baisse passée", "tier": "Risque global"}
+
+
+def _numbers(c: dict, b) -> dict:
+    """Numbers for a visual gauge: measured value against the limit (band for the growth share)."""
+    rid = c["rule_id"]
+    lim = {"budget.growth_band": b.growth_max, "budget.theme_exposure": b.max_single_sector, "budget.single_issuer": b.max_single_issuer,
+           "budget.single_sector": b.max_single_sector, "budget.speculative": b.max_speculative, "budget.drawdown_review": b.drawdown_review}.get(rid)
+    subject = c["measured"].split("(")[-1].rstrip(")") if "(" in c["measured"] else None
+    return {"value": c.get("measured_value"), "limit_value": lim, "limit_min": b.growth_min if rid == "budget.growth_band" else None, "subject": subject}
+
+
 def _sentence(c: dict, level: str) -> tuple[str, str] | None:
     rid, st, m, lim = c["rule_id"], c["status"], c["measured"], c["limit"]
     if st in ("OK", "UNKNOWN"):
@@ -41,11 +54,12 @@ def diagnose(xr: dict, persona: InvestorProfile) -> dict:
     for c in pa.get("budget_checks", []):
         s = _sentence(c, level)
         if s:
-            problems.append({"rule_id": c["rule_id"], "title": s[0], "detail": s[1]})
+            problems.append({"rule_id": c["rule_id"], "title": s[0], "detail": s[1], "short": SHORT.get(c["rule_id"], s[0]), **_numbers(c, persona.budget)})
     pt, at = pa.get("portfolio_tier"), pa.get("allowed_tier")
     if pt in ORDER and at in ORDER and ORDER[pt] > ORDER[at]:
         problems.append({"rule_id": "tier", "title": "Risque global trop élevé",
-                         "detail": f"Le risque mesuré de l'ensemble est {TIER_FR[pt]}; votre profil {level} permet un risque {TIER_FR[at]}."})
+                         "detail": f"Le risque mesuré de l'ensemble est {TIER_FR[pt]}; votre profil {level} permet un risque {TIER_FR[at]}.",
+                         "short": SHORT["tier"], "value": ORDER[pt], "limit_value": ORDER[at], "limit_min": None, "subject": None, "tiers": [pt, at]})
     order = ["budget.growth_band", "budget.theme_exposure", "budget.speculative", "budget.single_issuer", "budget.single_sector", "tier", "budget.drawdown_review"]
     problems.sort(key=lambda p: order.index(p["rule_id"]) if p["rule_id"] in order else 99)
     return {"fits": not problems, "profile_level": persona.risk_profile_label, "problems": problems,

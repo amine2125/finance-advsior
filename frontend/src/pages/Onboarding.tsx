@@ -6,6 +6,8 @@ import { AdvisorAvatar, ADVISOR_NAME } from "../components/Advisor";
 import { Logo } from "../components/Layout";
 import { Button, Choice, ErrorBox, Explain, inputCls, Spinner } from "../components/ui";
 import { useApp } from "../hooks/useApp";
+import { motion } from "framer-motion";
+import { Glass, softSpring, Stagger, StaggerItem } from "../components/motion";
 import { cad, pct } from "../lib/format";
 import { api, ApiError } from "../services/api";
 
@@ -238,7 +240,7 @@ function StepView({ id, a, set, preview, error }: { id: string; a: A; set: (p: A
               return (
                 <button key={v} type="button" onClick={() => set({ [id]: v })} data-testid={`${id}-${v}`}
                   className={clsx("flex items-center justify-between rounded-2xl border p-4 text-left font-semibold transition",
-                    show && v === qz.good ? "border-emerald-500 bg-emerald-50 text-emerald-900" : chosen ? "border-accent-600 bg-accent-50 text-accent-700" : "border-line bg-white text-ink hover:border-brand-300")}>
+                    show && v === qz.good ? "border-gain-500 bg-gain-50 text-gain-700" : chosen ? "border-accent-600 bg-accent-50 text-accent-700" : "border-line bg-white text-ink hover:border-brand-300")}>
                   {l}{show && v === qz.good ? <CheckCircle2 className="h-5 w-5" /> : chosen ? <XCircle className="h-5 w-5" /> : null}
                 </button>
               );
@@ -282,12 +284,12 @@ function StepView({ id, a, set, preview, error }: { id: string; a: A; set: (p: A
                   <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand-800 font-semibold text-white">{v}</span>
                   <div className="grid flex-1 grid-cols-[1fr_1fr] items-center gap-0">
                     <div className="flex justify-end pr-1"><div className="h-3 rounded-l-full bg-accent-600" style={{ width: `${(-worst / 32) * 100}%` }} /></div>
-                    <div className="flex border-l-2 border-ink-muted/40 pl-1"><div className="h-3 rounded-r-full bg-emerald-600" style={{ width: `${(best / 32) * 100}%` }} /></div>
+                    <div className="flex border-l-2 border-ink-muted/40 pl-1"><div className="h-3 rounded-r-full bg-gain-600" style={{ width: `${(best / 32) * 100}%` }} /></div>
                   </div>
                 </div>
                 <div className="mt-2 flex justify-between text-xs sm:text-sm" style={{ paddingLeft: 52 }}>
                   <span className="text-accent-700">Pire année : <b>{cad(10000 * (1 + worst / 100))}</b> ({worst} %)</span>
-                  <span className="text-emerald-700">Meilleure année : <b>{cad(10000 * (1 + best / 100))}</b> (+{best} %)</span>
+                  <span className="text-gain-700">Meilleure année : <b>{cad(10000 * (1 + best / 100))}</b> (+{best} %)</span>
                 </div>
               </button>
             ))}
@@ -360,97 +362,136 @@ const MEANING: Record<string, string> = {
   Modéré: "Un équilibre entre stabilité et croissance, avec des hauts et des bas modérés.",
   Élevé: "La croissance à long terme, en acceptant de fortes baisses temporaires.",
 };
+const LEVEL_SCALE = ["Prudent", "Faible à modéré", "Modéré", "Élevé"];
+const KNOW_SCALE = ["Débutant", "Débutant", "Intermédiaire", "Avancé"];
 
-export function Result({ p, error, name }: { p: any; error?: ApiError | null; name?: string }) {
+/** The profile as pictures: the level on its scale, the three measures (the lowest decides), the situation, what it means for the money. */
+export function Result({ p, error, name, action }: { p: any; error?: ApiError | null; name?: string; action?: ReactNode }) {
   if (error) return <ErrorBox error={error} />;
   if (!p) return <Spinner label="J'analyse vos réponses…" />;
   const k = p.kyc;
   const s = k?.snapshot || {};
+  const level = Math.max(0, LEVEL_SCALE.indexOf(p.risk_profile_label));
+  const b = p.budget;
+  const lowered = (r: string) => r.includes("→");
+  const measures = k ? [
+    { key: "tol", label: "Ce que vous êtes prêt à risquer", value: k.tolerance.index, text: k.tolerance.level, binding: k.binding.includes("tolérance"),
+      reasons: (k.tolerance.reasons || []).filter((r: string) => r.includes("compte plus")) },
+    { key: "cap", label: "Ce que votre situation permet", value: k.capacity.index, text: k.capacity.level, binding: k.binding.includes("capacité"),
+      reasons: (k.capacity.reasons || []).filter(lowered) },
+    ...(k.knowledge.level ? [{ key: "know", label: "Ce que vous connaissez", value: k.knowledge.index === 0 ? 1 : k.knowledge.index === 1 ? 2 : 3, text: k.knowledge.level,
+      binding: k.binding === "connaissances", reasons: [], scale: KNOW_SCALE, hint: `quiz ${k.knowledge.quiz_correct}/${k.knowledge.quiz_total}` }] : []),
+  ] : [];
   return (
-    <div className="space-y-5" data-testid="kyc-result">
-      <div className="flex items-start gap-3"><AdvisorAvatar size={44} /><div>
-        <p className="text-sm text-ink-muted">Voici ce que je retiens de vous{name ? `, ${name}` : ""}</p>
-        <h1 className="text-3xl font-semibold tracking-tight text-brand-800">Profil {p.risk_profile_label.toLowerCase()}</h1>
-        <p className="mt-1 text-ink-soft">{MEANING[p.risk_profile_label]}</p>
-      </div></div>
+    <div className="space-y-10" data-testid="kyc-result">
+      {/* 1. the level */}
+      <Glass className="p-6 sm:p-8" glow>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3"><AdvisorAvatar size={36} /><p className="text-sm text-ink-muted">Voici ce que je retiens de vous{name ? `, ${name}` : ""}</p></div>
+          {action}
+        </div>
+        <h1 className="mt-6 font-display text-[40px] font-semibold leading-none tracking-tightest text-ink sm:text-[52px]">Profil <span className="text-primary-600">{p.risk_profile_label.toLowerCase()}</span></h1>
+        <p className="mt-3 max-w-xl text-[17px] leading-relaxed text-ink-soft">{MEANING[p.risk_profile_label]}</p>
+        <div className="mt-7 grid grid-cols-4 gap-1.5">
+          {LEVEL_SCALE.map((l, i) => (
+            <div key={l}>
+              <motion.div className={clsx("h-2.5 rounded-full", i <= level ? "bg-primary-500" : "bg-ink/[0.07]")} style={{ originX: 0 }}
+                initial={{ scaleX: 0 }} animate={{ scaleX: 1 }} transition={{ ...softSpring, delay: 0.15 + i * 0.08 }} />
+              <div className={clsx("mt-2 text-xs", i === level ? "font-semibold text-ink" : "text-ink-muted")}>{l}</div>
+            </div>
+          ))}
+        </div>
+        <div className="mt-7 grid grid-cols-3 gap-2 sm:gap-3">
+          <Rule label="En actions" value={`${Math.round(b.growth_min * 100)}–${pct(b.growth_max, 0)}`} />
+          <Rule label="1 entreprise" value={`max ${pct(b.max_single_issuer, 0)}`} />
+          <Rule label="Cryptoactifs" value={b.max_speculative > 0 ? `max ${pct(b.max_speculative, 0)}` : "aucun"} />
+        </div>
+      </Glass>
 
+      {/* 2. why this level */}
       {k && (
-        <div className="rounded-2xl bg-white p-5 shadow-card sm:p-6">
-          <p className="text-sm font-bold text-brand-800">Trois choses déterminent votre profil. La plus basse l'emporte.</p>
-          <div className="mt-4 space-y-4">
-            <Gauge label="Ce que vous êtes prêt à risquer" sub="votre tolérance" value={k.tolerance.index} text={k.tolerance.level} binding={k.binding.includes("tolérance")}
-              reasons={(k.tolerance.reasons || []).filter((r: string) => r.includes("compte plus"))} />
-            <Gauge label="Ce que votre situation permet" sub="votre capacité" value={k.capacity.index} text={k.capacity.level} binding={k.binding.includes("capacité")}
-              reasons={k.capacity.reasons || []} />
-            {k.knowledge.level && <Gauge label="Ce que vous connaissez" sub={`quiz : ${k.knowledge.quiz_correct}/${k.knowledge.quiz_total}`} value={k.knowledge.index === 0 ? 1 : k.knowledge.index === 1 ? 2 : 3} text={k.knowledge.level} binding={k.binding === "connaissances"} scale={["", "Débutant", "Intermédiaire", "Avancé"]} />}
-            {(k.other_caps || []).map((r: string) => <p key={r} className="flex gap-2 text-sm text-ink"><span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-gold-500" />{r}</p>)}
-          </div>
-          {k.gap_note && <Insight tone="warn">{k.gap_note}</Insight>}
-          {k.tolerance.note && <Insight tone="warn">{k.tolerance.note}</Insight>}
-        </div>
-      )}
-
-      {k && Object.keys(s).length > 1 && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {s.monthly_margin !== undefined && <Fig label="Marge par mois" value={cad(s.monthly_margin)} bad={s.monthly_margin <= 0} />}
-          {s.emergency_months !== undefined && <Fig label="Coussin de sécurité" value={`${String(s.emergency_months).replace(".", ",")} mois`} bad={s.emergency_months < 3} />}
-          <Fig label="Dettes (hors hypothèque)" value={cad(s.debts_cad)} bad={s.debts_cad > 0} />
-          {s.net_worth_excl_home !== undefined && <Fig label="Avoir net (hors maison)" value={cad(s.net_worth_excl_home)} />}
-        </div>
-      )}
-
-      {k?.before_investing?.length > 0 && (
-        <div className="rounded-2xl bg-white p-5 shadow-card sm:p-6">
-          <p className="font-semibold text-ink">Avant d'investir en bourse, je vous conseille :</p>
-          <ol className="mt-3 space-y-3">
-            {k.before_investing.map((st: any, n: number) => (
-              <li key={st.kind} className="flex gap-3"><span className="tabular grid h-6 w-6 shrink-0 place-items-center rounded-full bg-gold-500 text-xs font-semibold text-ink">{n + 1}</span>
-                <div><div className="font-medium text-ink">{st.title}</div><div className="text-sm text-ink-muted">{st.text}</div></div></li>
+        <section>
+          <h2 className="font-display text-[22px] font-semibold tracking-tight text-ink">Pourquoi ce profil</h2>
+          <p className="mt-1 text-sm text-ink-muted">Trois mesures. La plus basse décide, pour vous protéger.</p>
+          <Stagger as="div" className="mt-5 space-y-2.5">
+            {measures.map((m: any) => (
+              <StaggerItem as="div" key={m.key} className={clsx("rounded-[20px] p-4 sm:p-5", m.binding ? "bg-surface hairline shadow-glow" : "bg-ink/[0.03]")}>
+                <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                  <span className="text-[15px] font-medium text-ink">{m.label}{m.hint && <span className="ml-1.5 text-xs font-normal text-ink-muted">{m.hint}</span>}</span>
+                  <span className="flex items-center gap-2">
+                    {m.binding && <span className="rounded-full bg-primary-500 px-2.5 py-0.5 text-[11px] font-semibold text-white">C'est elle qui décide</span>}
+                    <span className={clsx("text-sm font-semibold", m.binding ? "text-primary-600" : "text-ink")}>{m.text}</span>
+                  </span>
+                </div>
+                <Dots value={m.value} active={m.binding} />
+                {m.reasons.map((r: string) => (
+                  <p key={r} className="mt-3 flex gap-2.5 text-sm leading-snug text-ink-soft"><span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-primary-500" />{shortReason(r)}</p>
+                ))}
+              </StaggerItem>
             ))}
-          </ol>
-        </div>
+            {(k.other_caps || []).map((r: string) => <p key={r} className="flex gap-2.5 px-1 text-sm text-ink-soft"><span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-primary-500" />{r}</p>)}
+          </Stagger>
+          {k.tolerance.note && <p className="mt-4 text-sm leading-relaxed text-ink-muted">{k.tolerance.note}</p>}
+          {k.tolerance.index > k.capacity.index && (
+            <p className="mt-4 text-sm leading-relaxed text-ink-muted">Vous êtes prêt à risquer plus. Si votre situation change (par exemple un horizon plus long), votre profil peut monter.</p>
+          )}
+        </section>
       )}
 
-      <div className="rounded-2xl bg-white p-5 shadow-card sm:p-6">
-        <p className="font-bold text-brand-800">Concrètement, pour vos placements :</p>
-        <ul className="mt-3 space-y-2 text-sm text-ink">
-          <li>• Entre <b>{pct(p.budget.growth_min, 0)} et {pct(p.budget.growth_max, 0)}</b> en actions, le reste en placements stables.</li>
-          <li>• Jamais plus de <b>{pct(p.budget.max_single_issuer, 0)}</b> dans une seule entreprise.</li>
-          <li>• {p.budget.max_speculative > 0 ? <>Au plus <b>{pct(p.budget.max_speculative, 0)}</b> en cryptoactifs.</> : <>Pas de cryptoactifs pour l'instant.</>}</li>
-        </ul>
-        <Explain label="Le détail de mon raisonnement">
-          <ol className="list-decimal space-y-1 pl-4">{(p.derivation || []).map((d: string, n: number) => <li key={n}>{d}</li>)}</ol>
-        </Explain>
-      </div>
+      {/* 3. before investing */}
+      {k?.before_investing?.length > 0 && (
+        <section>
+          <h2 className="font-display text-[22px] font-semibold tracking-tight text-ink">Avant d'investir</h2>
+          <Stagger as="ol" className="mt-4 space-y-2.5">
+            {k.before_investing.map((st: any, n: number) => (
+              <StaggerItem key={st.kind} className="flex gap-4 rounded-[20px] bg-ink/[0.03] p-4">
+                <span className="tabular-nums grid h-7 w-7 shrink-0 place-items-center rounded-full bg-ink text-xs font-semibold text-white">{n + 1}</span>
+                <div><div className="font-medium text-ink">{st.title}</div><div className="mt-0.5 text-sm leading-snug text-ink-muted">{st.text}</div></div>
+              </StaggerItem>
+            ))}
+          </Stagger>
+        </section>
+      )}
+
+      {/* 4. situation */}
+      {k && Object.keys(s).length > 1 && (
+        <section>
+          <h2 className="font-display text-[22px] font-semibold tracking-tight text-ink">Votre situation</h2>
+          <div className="mt-4 grid grid-cols-2 overflow-hidden rounded-[20px] hairline sm:grid-cols-4">
+            {s.monthly_margin !== undefined && <Fig label="Marge par mois" value={cad(s.monthly_margin)} bad={s.monthly_margin <= 0} />}
+            {s.emergency_months !== undefined && <Fig label="Coussin de sécurité" value={`${Math.round(s.emergency_months)} mois`} bad={s.emergency_months < 3} />}
+            <Fig label="Dettes" value={cad(s.debts_cad)} bad={s.debts_cad > 0} />
+            {s.net_worth_excl_home !== undefined && <Fig label="Avoir net (hors maison)" value={cad(s.net_worth_excl_home)} />}
+          </div>
+          <Explain label="Le détail de mon raisonnement">
+            <ol className="list-decimal space-y-1 pl-4">{(p.derivation || []).map((d: string, n: number) => <li key={n}>{d}</li>)}</ol>
+          </Explain>
+        </section>
+      )}
     </div>
   );
 }
 
-const LEVEL_SCALE = ["Prudent", "Faible à modéré", "Modéré", "Élevé"];
+/** « Horizon de 2 ans : l'argent … → au plus « Prudent » » → the plain cause, without the arrow notation. */
+const shortReason = (r: string) => r.replace(/\s*→\s*au plus « [^»]+ »/, "").replace(/\s*→\s*« [^»]+ »/, "").replace("an(s)", "ans");
 
-function Gauge({ label, sub, value, text, binding, reasons, scale }: { label: string; sub: string; value: number; text: string; binding?: boolean; reasons?: string[]; scale?: string[] }) {
+function Rule({ label, value }: { label: string; value: string }) {
+  return <div className="rounded-2xl bg-ink/[0.04] px-3 py-3 sm:px-4"><div className="text-xs text-ink-muted">{label}</div><div className="tabular-nums mt-0.5 whitespace-nowrap font-display text-base font-semibold tracking-tight text-ink sm:text-xl">{value}</div></div>;
+}
+
+function Dots({ value, active }: { value: number; active?: boolean }) {
   return (
-    <div className={clsx("rounded-xl p-3", binding && "bg-gold-50")}>
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <div><span className="font-semibold text-ink">{label}</span> <span className="text-xs text-ink-muted">· {sub}</span></div>
-        <span className="text-sm font-bold text-brand-800">{text}{binding && <span className="ml-2 rounded-full bg-gold-500 px-2 py-0.5 text-[10px] font-semibold uppercase text-ink">fixe la limite</span>}</span>
-      </div>
-      <div className="mt-2 grid grid-cols-4 gap-1">{[0, 1, 2, 3].map((n) => <span key={n} className={clsx("h-2 rounded-full", n <= value ? "bg-brand-800" : "bg-line")} />)}</div>
-      <div className="mt-1 grid grid-cols-4 gap-1 text-[11px]">{(scale || LEVEL_SCALE).map((l, n) => <span key={l} className={clsx(n === value ? "font-semibold text-ink" : "text-ink-muted")}>{l}</span>)}</div>
-      {reasons && reasons.length > 0 && (
-        <ul className="mt-2.5 space-y-1">
-          {reasons.map((r) => {
-            const lowered = r.includes("→");
-            return <li key={r} className="flex gap-2 text-sm"><span className={clsx("mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full", lowered ? "bg-gold-500" : "bg-emerald-600")} /><span className={lowered ? "text-ink" : "text-ink-muted"}>{r.replace("an(s)", "ans")}</span></li>;
-          })}
-        </ul>
-      )}
+    <div className="mt-3 grid grid-cols-4 gap-1">
+      {[0, 1, 2, 3].map((n) => (
+        <motion.span key={n} className={clsx("h-1.5 rounded-full", n <= value ? (active ? "bg-primary-500" : "bg-ink") : "bg-ink/[0.07]")} style={{ originX: 0 }}
+          initial={{ scaleX: 0 }} animate={{ scaleX: 1 }} transition={{ ...softSpring, delay: 0.2 + n * 0.05 }} />
+      ))}
     </div>
   );
 }
 
 function Fig({ label, value, bad }: { label: string; value: string; bad?: boolean }) {
-  return <div className="rounded-2xl bg-white p-4 shadow-card"><div className="text-xs text-ink-muted">{label}</div><div className={clsx("tabular mt-1 text-lg font-semibold", bad ? "text-accent-700" : "text-ink")}>{value}</div></div>;
+  return <div className="border-line bg-surface/70 p-4 [&:not(:last-child)]:border-r"><div className="text-xs text-ink-muted">{label}</div><div className={clsx("tabular-nums mt-1 font-display text-xl font-semibold tracking-tight", bad ? "text-accent-700" : "text-ink")}>{value}</div></div>;
 }
 
 // ------------------------------------------------------------------------------------------------ small building blocks
@@ -469,7 +510,7 @@ const L = ({ label, children }: { label: string; children: ReactNode }) => <labe
 const Sub = ({ children, first }: { children: ReactNode; first?: boolean }) => <div className={clsx("mb-2 text-sm font-bold text-ink", first ? "" : "mt-6")}>{children}</div>;
 
 function Insight({ tone, children }: { tone: "good" | "warn" | "bad" | "info"; children: ReactNode }) {
-  return <div className={clsx("mt-5 rounded-xl border-l-2 bg-canvas px-4 py-3 text-sm text-ink", tone === "good" ? "border-emerald-600" : tone === "warn" ? "border-gold-500" : tone === "bad" ? "border-accent-600" : "border-ink")}>{children}</div>;
+  return <div className={clsx("mt-5 rounded-xl border-l-2 bg-canvas px-4 py-3 text-sm text-ink", tone === "good" ? "border-gain-600" : tone === "warn" ? "border-gold-500" : tone === "bad" ? "border-accent-600" : "border-ink")}>{children}</div>;
 }
 
 function Money({ value, onChange, testid }: { value: number | null; onChange: (v: number | null) => void; testid?: string }) {

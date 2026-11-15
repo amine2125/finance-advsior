@@ -3,10 +3,19 @@
 @tailwind utilities;
 
 html { color-scheme: light; }
-body { background: #ffffff; }
+body { background: #f6f4ef; color: #151413; -webkit-font-smoothing: antialiased; }
+/* ambient radial glows behind the page (accent at very low opacity) */
+.ambient { position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background:
+    radial-gradient(60rem 30rem at 85% -10%, rgba(51,80,255,0.10), transparent 60%),
+    radial-gradient(40rem 26rem at -10% 20%, rgba(255,184,120,0.10), transparent 60%),
+    radial-gradient(50rem 30rem at 50% 110%, rgba(51,80,255,0.05), transparent 60%); }
+.glass { background: rgba(251,250,247,0.72); -webkit-backdrop-filter: saturate(160%) blur(18px); backdrop-filter: saturate(160%) blur(18px); }
+.hairline { box-shadow: 0 0 0 1px rgba(21,20,19,0.06), inset 0 1px 0 rgba(255,255,255,0.75); }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; } }
 h1, h2, h3 { text-wrap: balance; }
 .tabular { font-variant-numeric: tabular-nums; }
-::selection { background: #e6e5e0; }
+::selection { background: #dde3ff; }
 .tabular { font-variant-numeric: tabular-nums; }
 .prose-chat p { margin: 0.35rem 0; }
 .prose-chat p:first-child { margin-top: 0; }

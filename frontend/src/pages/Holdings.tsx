@@ -3,6 +3,7 @@ import { Check, ChevronDown, Pencil, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { SplitBar } from "../components/charts";
+import { PageIn, Segmented, Stagger, Tabs } from "../components/motion";
 import HoldingsEditor from "../components/HoldingsEditor";
 import { Button, ErrorBox, Spinner } from "../components/ui";
 import { checkLabel, checkText, useAnalysis } from "../hooks/useAnalysis";
@@ -36,11 +37,11 @@ export default function Holdings() {
   const has = (h.data?.holdings || []).length > 0;
 
   return (
-    <div className="mx-auto max-w-3xl px-5 py-8 sm:">
+    <PageIn className="mx-auto max-w-3xl px-5 pb-16 pt-10">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="font-display text-4xl font-medium text-ink">Placements</h1>
-          {has && <p className="tabular mt-1 text-sm text-ink-muted">{cad(h.data.total_value_cad, 2)}{h.data.gain_cad != null && <> · <span className={h.data.gain_cad >= 0 ? "text-emerald-700" : "text-accent-700"}>{signed(h.data.gain_cad, 0)} ({signedPct(h.data.gain_pct)}) depuis vos achats</span></>} · <span className={h.data.day_change_cad >= 0 ? "text-emerald-700" : "text-accent-700"}>{signed(h.data.day_change_cad)} aujourd'hui</span></p>}
+          <h1 className="font-display text-[40px] font-semibold leading-none tracking-tightest text-ink">Placements</h1>
+          {has && <p className="tabular-nums mt-3 text-sm text-ink-muted">{cad(h.data.total_value_cad, 2)}{h.data.gain_cad != null && <> · <span className={h.data.gain_cad >= 0 ? "text-gain-700" : "text-accent-700"}>{signed(h.data.gain_cad, 0)} ({signedPct(h.data.gain_pct)}) depuis vos achats</span></>} · <span className={h.data.day_change_cad >= 0 ? "text-gain-700" : "text-accent-700"}>{signed(h.data.day_change_cad)} aujourd'hui</span></p>}
         </div>
         <Button variant="secondary" size="sm" onClick={() => setEditing(!editing)}>{editing ? <><X className="h-4 w-4" /> Fermer</> : <><Pencil className="h-4 w-4" /> Modifier</>}</Button>
       </div>
@@ -56,11 +57,7 @@ export default function Holdings() {
       )}
 
       {has && (
-        <div className="mt-7 flex gap-6 border-b border-line">
-          {([["list", "Liste"], ["mix", "Répartition"]] as const).map(([k, l]) => (
-            <button key={k} onClick={() => setTab(k)} className={clsx("-mb-px border-b-2 pb-3 text-sm font-medium", tab === k ? "border-ink text-ink" : "border-transparent text-ink-muted hover:text-ink")}>{l}</button>
-          ))}
-        </div>
+        <div className="mt-8"><Tabs value={tab} onChange={setTab} options={[["list", "Liste"], ["mix", "Répartition"]]} /></div>
       )}
 
       {h.loading && !h.data && <Spinner />}
@@ -69,11 +66,7 @@ export default function Holdings() {
       {has && tab === "list" && (
         <>
           <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
-            <div className="flex gap-1.5">
-              {FILTERS.map(([k, l]) => (
-                <button key={k} onClick={() => setFilter(k)} className={clsx("rounded-full px-4 py-1.5 text-sm font-medium transition", filter === k ? "bg-ink text-white" : "text-ink-soft hover:bg-white")}>{l}</button>
-              ))}
-            </div>
+            <Segmented value={filter} onChange={setFilter} options={FILTERS} />
             <label className="relative flex items-center gap-1 text-sm text-ink-soft">
               <select value={sort} onChange={(e) => setSort(e.target.value)} className="appearance-none bg-transparent pr-5 font-medium text-ink outline-none" aria-label="Trier">
                 {Object.entries(SORTS).map(([k, [l]]) => <option key={k} value={k}>{l}</option>)}
@@ -81,10 +74,12 @@ export default function Holdings() {
               <ChevronDown className="pointer-events-none absolute right-0 h-4 w-4" />
             </label>
           </div>
-          <ul className="mt-4 overflow-hidden divide-y divide-line border-y border-line" data-testid="holdings-list">
-            {rows.map((x: any) => <HoldingRow key={x.asset_id} h={x} />)}
-            {!rows.length && <li className="py-8 text-center text-sm text-ink-muted">Aucun placement dans cette catégorie.</li>}
-          </ul>
+          <div className="mt-3" data-testid="holdings-list">
+            <Stagger key={filter + sort}>
+              {rows.map((x: any) => <HoldingRow key={x.asset_id} h={x} />)}
+            </Stagger>
+            {!rows.length && <p className="py-8 text-center text-sm text-ink-muted">Aucun placement dans cette catégorie.</p>}
+          </div>
         </>
       )}
 
@@ -97,7 +92,7 @@ export default function Holdings() {
           <Button className="mt-5" onClick={() => setEditing(true)}>Ajouter mes placements</Button>
         </div>
       )}
-    </div>
+    </PageIn>
   );
 }
 
@@ -121,12 +116,12 @@ function Mix() {
       <section className="border-t border-line">
         <div className="flex items-center justify-between pt-6">
           <h2 className="font-display text-xl font-medium text-ink">Vos limites</h2>
-          <span className={clsx("text-sm font-medium", bad.length ? "text-accent-700" : "text-emerald-700")}>{bad.length ? `${bad.length} dépassée${bad.length > 1 ? "s" : ""}` : "Toutes respectées"}</span>
+          <span className={clsx("text-sm font-medium", bad.length ? "text-accent-700" : "text-gain-700")}>{bad.length ? `${bad.length} dépassée${bad.length > 1 ? "s" : ""}` : "Toutes respectées"}</span>
         </div>
         <ul className="mt-2 pb-2">
           {checks.map((c) => (
             <li key={c.rule_id} className="flex gap-3 py-3">
-              {c.status === "OK" ? <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" /> : <X className="mt-0.5 h-4 w-4 shrink-0 text-accent-600" />}
+              {c.status === "OK" ? <Check className="mt-0.5 h-4 w-4 shrink-0 text-gain-600" /> : <X className="mt-0.5 h-4 w-4 shrink-0 text-accent-600" />}
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap justify-between gap-x-3 text-sm"><span className="font-medium text-ink">{checkLabel(c)}</span><span className="tabular text-ink-muted">{c.measured} · limite {c.limit}</span></div>
                 {c.status !== "OK" && <p className="mt-0.5 text-sm text-ink-muted">{checkText(c)}</p>}
@@ -136,7 +131,7 @@ function Mix() {
         </ul>
         {bad.length > 0 && (
           <div className="border-t border-line py-4">
-            <Button onClick={() => nav(`/?demande=${encodeURIComponent("Analyse et rééquilibre mon portefeuille")}`)}>Demander aux agents de corriger</Button>
+            <Button onClick={() => launchMandate(nav, REVIEW, portfolio?.portfolio_id)}>Demander aux agents de corriger</Button>
           </div>
         )}
       </section>

@@ -5,6 +5,7 @@ import Layout from "./components/Layout";
 import { ErrorBox, Spinner } from "./components/ui";
 import { AppProvider, useApp } from "./hooks/useApp";
 import "./index.css";
+import { MotionRoot } from "./components/motion";
 import About from "./pages/About";
 import AssetPage from "./pages/Asset";
 import { Decisions, MandateResult, MandateRun } from "./pages/Mandate";
@@ -68,10 +69,12 @@ function Shell() {
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <BrowserRouter>
-      <AppProvider>
-        <Shell />
-      </AppProvider>
-    </BrowserRouter>
+    <MotionRoot>
+      <BrowserRouter>
+        <AppProvider>
+          <Shell />
+        </AppProvider>
+      </BrowserRouter>
+    </MotionRoot>
   </React.StrictMode>,
 );
