@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+# Node
+node_modules/
+dist/
+.vite/
+coverage/
+# CDK
+infra/cdk.out/
+infra/build/
+# Data caches (raw downloads are re-creatable; built datapack is reproducible)
+data/cache/
+data/build/
+# Local runtime state
+.ulysse/
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
+# Secrets (never commit)
+.env
+.env.*
+*.pem
+infra/.venv/

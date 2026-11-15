@@ -1,0 +1,23 @@
+ticker,project,article,former_titles,note
+RY.TO,en.wikipedia,Royal_Bank_of_Canada,,
+TD.TO,en.wikipedia,Toronto-Dominion_Bank,,
+MFC.TO,en.wikipedia,Manulife,Manulife_Financial,moved Manulife Financial -> Manulife on 2016-06-22 (MediaWiki move log)
+ENB.TO,en.wikipedia,Enbridge,,
+CNQ.TO,en.wikipedia,Canadian_Natural_Resources,,
+CNR.TO,en.wikipedia,Canadian_National_Railway,,
+FTS.TO,en.wikipedia,Fortis_Inc.,,
+ATD.TO,en.wikipedia,Alimentation_Couche-Tard,,
+SHOP.TO,en.wikipedia,Shopify,,
+CSU.TO,en.wikipedia,Constellation_Software,,article created 2017-11 (page id 55923897): no attention data before
+AAPL,en.wikipedia,Apple_Inc.,,
+MSFT,en.wikipedia,Microsoft,,
+NVDA,en.wikipedia,Nvidia,,
+GOOGL,en.wikipedia,Alphabet_Inc.,,
+AMZN,en.wikipedia,Amazon_(company),Amazon.com,moved Amazon.com -> Amazon (company) on 2017-09-26 (MediaWiki move log)
+TSLA,en.wikipedia,"Tesla,_Inc.",Tesla_Motors|Tesla_Inc.,"moved Tesla Motors -> Tesla Inc. on 2017-02-01 (MediaWiki move log), later -> Tesla, Inc."
+JPM,en.wikipedia,JPMorgan_Chase,,
+JNJ,en.wikipedia,Johnson_&_Johnson,,
+PG,en.wikipedia,Procter_&_Gamble,,
+XOM,en.wikipedia,ExxonMobil,,
+BTC-USD,en.wikipedia,Bitcoin,,
+ETH-USD,en.wikipedia,Ethereum,,

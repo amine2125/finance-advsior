@@ -1,0 +1,43 @@
+{
+  "regles": {
+    "controverse_importante": "Définition ULYSSE (modifiable par l'utilisateur) : procédure judiciaire ou administrative engagée par une autorité publique sur un enjeu environnemental ou social, documentée par une source vérifiable lue et citée mot pour mot (dépôt réglementaire, communiqué officiel ou agence de presse).",
+    "exclusion_activite": "Une exclusion par la méthodologie d'un indice ESG reconnu pour une ACTIVITÉ (ex. pétrole et gaz) n'est pas une controverse : elle est montrée comme contexte, et la clause « controverses » reste en « données insuffisantes » faute de preuve de controverse.",
+    "sans_preuve": "Aucune preuve dans la base à la date : « données insuffisantes ». ULYSSE n'utilise aucune cote ESG propriétaire."
+  },
+  "sources": {
+    "ESG-SRC-1": {"titre": "Vanguard ESG U.S. Stock ETF — fiche (Fact sheet)", "editeur": "Vanguard", "url": "https://fund-docs.vanguard.com/F4393.pdf",
+                  "publie_le": "2026-09-30", "consulte_le": "2026-11-14", "verification": "PDF téléchargé, texte extrait et lu (pypdf)"},
+    "ESG-SRC-2": {"titre": "FTSE Global Choice Index Series — Ground Rules, v5.0", "editeur": "FTSE Russell (LSEG)",
+                  "url": "https://www.lseg.com/content/dam/ftse-russell/en_us/documents/ground-rules/ftse-global-choice-index-series-ground-rules.pdf",
+                  "publie_le": "2026-08-01", "consulte_le": "2026-11-14", "verification": "PDF téléchargé, texte extrait et lu (pypdf) ; date de publication = mois indiqué sur la couverture (août 2026)"},
+    "ESG-SRC-3": {"titre": "Exxon Mobil Corporation — Form 10-K, exercice 2025", "editeur": "SEC EDGAR (déposé par Exxon Mobil)",
+                  "url": "https://www.sec.gov/Archives/edgar/data/34088/000003408826000045/xom-20251231.htm",
+                  "publie_le": "2026-02-18", "consulte_le": "2026-11-14", "verification": "page lue (outil de lecture web), Item 1"},
+    "ESG-SRC-4": {"titre": "Supreme Court rules for Michigan in its fight to shut down an aging energy pipeline", "editeur": "The Associated Press (via WTOP)",
+                  "url": "https://wtop.com/business-finance/2026/04/supreme-court-rules-for-michigan-in-its-fight-to-shut-down-an-aging-energy-pipeline/",
+                  "publie_le": "2026-04-22", "consulte_le": "2026-11-14", "verification": "page lue (outil de lecture web)"}
+  },
+  "preuves": [
+    {"id": "ESG-1", "type": "methodologie_fonds", "sujets": ["ESGV"], "source": "ESG-SRC-1",
+     "extrait": "Seeks to track the performance of the FTSE US All Cap Choice Index.",
+     "enonce": "ESGV suit l'indice FTSE US All Cap Choice."},
+    {"id": "ESG-2", "type": "methodologie_fonds", "sujets": ["ESGV"], "source": "ESG-SRC-1",
+     "extrait": "Specifically excludes stocks of certain companies related to the following: [...] nuclear power, and coal, oil, or gas.",
+     "enonce": "La fiche d'ESGV indique que l'indice exclut les sociétés liées au charbon, au pétrole ou au gaz."},
+    {"id": "ESG-3", "type": "methodologie_fonds", "sujets": ["ESGV"], "source": "ESG-SRC-1",
+     "extrait": "Excludes stocks of companies that do not meet certain labor, human rights, environmental, and anti-corruption standards.",
+     "enonce": "L'indice d'ESGV exclut aussi les sociétés qui ne respectent pas certaines normes du travail, des droits de la personne, de l'environnement et de lutte contre la corruption."},
+    {"id": "ESG-4", "type": "methodologie_indice", "sujets": ["ESGV"], "source": "ESG-SRC-2",
+     "extrait": "Companies involved in oil and gas exploration, production, refining, processing, transportation and/or storage. Equal to or greater than 5% of revenues",
+     "enonce": "Les règles FTSE (annexe A) excluent les sociétés tirant au moins 5 % de leurs revenus de l'exploration, la production, le raffinage, la transformation, le transport ou le stockage de pétrole et de gaz."},
+    {"id": "ESG-5", "type": "activite", "sujets": ["XOM"], "source": "ESG-SRC-3",
+     "extrait": "Our principal business involves exploration for, and production of, crude oil and natural gas",
+     "enonce": "Selon son 10-K 2025, l'activité principale d'ExxonMobil est l'exploration et la production de pétrole brut et de gaz naturel.",
+     "categorie_exclue": "petrole_gaz", "exclu_par": ["ESGV"]},
+    {"id": "ESG-6", "type": "controverse", "sujets": ["ENB.TO"], "source": "ESG-SRC-4",
+     "extrait": "Michigan Attorney General Dana Nessel sued in state court in June 2019",
+     "enonce": "La procureure générale du Michigan (autorité publique) poursuit Enbridge en justice depuis juin 2019 au sujet du tronçon de la canalisation Line 5 sous le détroit de Mackinac ; l'affaire était toujours en cours en avril 2026.",
+     "enjeu": "environnement", "autorite_publique": true,
+     "extrait_contexte": "Concerns over the section beneath the straits rupturing and causing a catastrophic spill have been growing since 2017."}
+  ]
+}
