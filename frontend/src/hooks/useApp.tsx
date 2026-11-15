@@ -27,8 +27,8 @@ type Ctx = {
   restart: () => Promise<void>;
   auth: AuthState;
   authConfig: AuthConfig | null;
-  signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string) => Promise<void>;
+  signIn: (email: string, password: string, remember?: boolean) => Promise<void>;
+  signUp: (email: string, password: string, remember?: boolean) => Promise<void>;
   signOut: () => Promise<void>;
 };
 
@@ -71,8 +71,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (cognito) await api.del("/me"); else resetUser();
     window.location.href = "/";
   };
-  const signIn = async (email: string, password: string) => { await cognitoSignIn(email, password); setMe(null); setPid(null); setAuth("signedIn"); };
-  const signUp = async (email: string, password: string) => { await cognitoSignUp(email, password); setMe(null); setPid(null); setAuth("signedIn"); };
+  const signIn = async (email: string, password: string, remember = false) => { await cognitoSignIn(email, password, remember); setMe(null); setPid(null); setAuth("signedIn"); };
+  const signUp = async (email: string, password: string, remember = false) => { await cognitoSignUp(email, password, remember); setMe(null); setPid(null); setAuth("signedIn"); };
   const signOut = async () => { await cognitoSignOut(); setMe(null); setPid(null); setAuth("signedOut"); window.history.replaceState(null, "", "/"); };
 
   return <AppCtx.Provider value={{ me, error, reload, portfolio, setPortfolioId, restart, auth, authConfig, signIn, signUp, signOut }}>{children}</AppCtx.Provider>;

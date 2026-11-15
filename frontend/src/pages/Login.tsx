@@ -26,14 +26,15 @@ export default function Login() {
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [creds, setCreds] = useState(false);
+  const [remember, setRemember] = useState(false);
   const demos = authConfig?.demo_accounts || [];
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setBusy("form"); setErr(null);
     try {
-      if (mode === "up") { await signUp(email, pw); nav("/inscription", { replace: true }); }
-      else { await signIn(email, pw); nav("/", { replace: true }); }
+      if (mode === "up") { await signUp(email, pw, remember); nav("/inscription", { replace: true }); }
+      else { await signIn(email, pw, remember); nav("/", { replace: true }); }
     } catch (x) { setErr((x as Error).message); setBusy(null); }
   };
   const demo = async (d: (typeof demos)[number]) => {
@@ -82,6 +83,10 @@ export default function Login() {
                   <button type="button" onClick={() => setShow(!show)} className="text-ink-muted hover:text-ink" aria-label={show ? "Masquer" : "Afficher"}>{show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button>
                 </span>
                 {mode === "up" && <span className="mt-1.5 block text-xs text-ink-muted">Au moins 8 caractères, avec une majuscule, une minuscule et un chiffre.</span>}
+              </label>
+              <label className="flex cursor-pointer items-center gap-2.5 text-sm text-ink-soft">
+                <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} className="h-4 w-4 accent-[#3350ff]" data-testid="auth-remember" />
+                Rester connecté sur cet appareil
               </label>
               {err && <p className="rounded-2xl bg-accent-50 px-4 py-3 text-sm text-accent-700" role="alert" data-testid="auth-error">{err}</p>}
               <Button size="lg" className="w-full" disabled={!!busy} data-testid="auth-submit">
