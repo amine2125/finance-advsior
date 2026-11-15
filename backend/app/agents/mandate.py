@@ -109,6 +109,34 @@ def parse_request(md, text: str, override: dict | None = None) -> dict:
     return {"kind": kind, "amount_cad": amount, "asset_id": asset.upper() if asset else None, "assets_mentioned": assets, "assumptions": assumptions}
 
 
+GENERIC = set("""argent montant somme portefeuille placement placements fonds fnb etf action actions obligation obligations bourse marché
+marches marchés compte celi reer celiapp reee épargne epargne croissance stabilité stabilite cash dollars dollar mois an ans année
+quelque chose truc trucs ça ca cela ce ces cette un une le la les l du des de mon ma mes son sa ses leur nos vos tout tous""".split())
+RESOLVER_SYSTEM = """Tu associes le placement nommé par un client à un identifiant d'une LISTE fermée. Le client peut faire des fautes,
+utiliser un surnom, un ticker en minuscules ou le nom en français (ex. « btc » → BTC-USD, « la banque royale » → RY.TO).
+Si rien dans la liste ne correspond vraiment, réponds null : n'invente jamais et ne choisis pas « le plus proche » par défaut.
+Réponds UNIQUEMENT en JSON: {"asset_id": "ID" ou null, "named": "le nom tel que compris"}"""
+
+
+def candidate_name(text: str) -> str | None:
+    """The word(s) after « dans / acheter / de … » that look like a specific security, when the regex matcher found none."""
+    t = text.lower().replace("\xa0", " ")
+    m = re.search(r"(?:dans|acheter|achète|achete|investir en|placer en|mettre en|du|de l'|des actions de|des parts de)\s+((?:[a-z0-9&'.\-]+\s*){1,3})", t)
+    if not m:
+        return None
+    words = [w for w in re.split(r"[\s']+", m.group(1)) if w and w not in GENERIC and not re.fullmatch(r"[\d.,k$]+", w)]
+    return " ".join(words[:3]) or None
+
+
+def resolve_with_llm(md, llm, text: str, name: str, model_id: str) -> tuple[str | None, dict | None]:
+    """Last resort for a name the matcher missed: the model picks within the closed universe, or says it is not covered."""
+    universe = "\n".join(f"{aid} | {r['name']} | {r.get('aliases') or ''}" for aid, r in md.universe.iterrows())
+    data, usage = json_call(llm, system=RESOLVER_SYSTEM, user=f"LISTE:\n{universe}\n\nDEMANDE DU CLIENT: {text}\nNOM À ASSOCIER: {name}",
+                            model_id=model_id, max_tokens=120, agent_id="supervisor")
+    aid = data.get("asset_id")
+    return (aid if aid in md.universe.index else None), usage
+
+
 # ------------------------------------------------------------------------------------------------ helpers
 def _amounts(md, pf: Portfolio | None) -> dict[str, float]:
     if pf is None or not pf.holdings:
@@ -311,6 +339,23 @@ def run_mandate(tracker: JobTracker, owner: str, req: dict) -> dict:
     # 2. understand
     tracker.start("supervisor.understand")
     intent = parse_request(md, request, req.get("structured"))
+    unknown_name = None
+    if not intent["asset_id"] and intent["kind"] != "review" and not req.get("structured"):
+        name = candidate_name(request)
+        if name:
+            found = None
+            if llm is not None:
+                try:
+                    found, usage = resolve_with_llm(md, llm, request, name, s.supervisor_model_id)
+                    usages.append(usage)
+                except Exception:  # noqa: BLE001 — the deterministic path below still answers
+                    found = None
+            if found:
+                intent = parse_request(md, request, {"kind": "buy_asset", "asset_id": found, "amount_cad": intent["amount_cad"]})
+                intent["assumptions"].append(f"J'ai compris « {name} » comme {md.asset(found)['name']}.")
+            else:
+                unknown_name = name
+                intent["assumptions"].append(f"Je ne suis pas « {name} » : je propose plutôt un portefeuille diversifié.")
     if intent["kind"] == "review" and (pf is None or not pf.holdings):
         tracker.fail("supervisor.understand", "Aucun placement à analyser et aucun montant à investir")
         raise ValueError("Je n'ai trouvé ni montant à investir ni placements à analyser. Ex. « J'ai 5 000 $ à investir » ou ajoutez vos placements.")
@@ -366,7 +411,7 @@ def run_mandate(tracker: JobTracker, owner: str, req: dict) -> dict:
         ok_amt = amt if verdict["verdict"] == "suitable" else verdict["max_amount_cad"]
         # The verdict tests the request ALONE. If only a size limit is at stake (not a preference, the horizon or the risk level),
         # the request can be combined with diversified funds for the rest: the cap then applies to the combined portfolio.
-        hard = any(r["tone"] == "bad" and not r["text"].startswith(("Limite dépassée", "Cela aggraverait")) for r in verdict["reasons"])
+        hard = any(r["tone"] == "bad" and not r.get("budget") for r in verdict["reasons"])
         meta_a = md.asset(A)
         cap = b.max_speculative if meta_a["asset_class"] == "crypto" else b.max_single_issuer if int(meta_a.get("is_single_issuer", 1)) else None
         # ...but never when the portfolio ALREADY holds too much growth: a single risky security would add to the problem,
@@ -623,6 +668,7 @@ def run_mandate(tracker: JobTracker, owner: str, req: dict) -> dict:
         "mandate_id": mid, "status": "proposed" if orders else "reviewed", "created_at": utcnow(), "request": request or label, "intent": intent, "label": label,
         "headline": headline, "portfolio_id": pf.portfolio_id if pf else None, "profile_level": persona.risk_profile_label, "constraints": constraints,
         "orders": orders, "requested": requested, "governance": gov,
+        "unknown_name": unknown_name,
         "ideas": _ideas(persona, B) if intent["kind"] == "review" and not orders else [], "diagnosis": diagnosis, "before": B, "after": Af, "stress": stress,
         "debate": {"opportunity": view(args["opp"]), "risk": view(args["risk"])}, "explanation": explanation,
         "research": ({"events": [{"title": e["title"], "url": e.get("url"), "published_at": e.get("published_at"), "provider": e.get("provider")}
@@ -685,6 +731,9 @@ def _headline(intent, requested, orders, plan, persona, B) -> str:
                 f"{_pct(plan['stable_share'])} pour la stabilité, {_pct(plan['growth_share'])} pour la croissance.")
     if intent["kind"] == "buy_asset":
         v, n = requested["verdict"], requested["name"]
+        if v == "suitable" and requested.get("tier") == "HIGH":
+            return (f"C'est possible : {_cad(requested['amount_cad'])} dans {n} reste dans vos limites. Mais c'est un placement très risqué : "
+                    f"n'y mettez que de l'argent dont vous pouvez accepter une forte baisse.")
         if v == "suitable":
             return f"Je vous le conseille : {_cad(requested['amount_cad'])} dans {n} respecte vos limites."
         if v == "partial":

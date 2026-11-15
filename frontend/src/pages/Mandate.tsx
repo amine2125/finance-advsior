@@ -184,6 +184,7 @@ function verdict(m: any): { title: string; tone: Tone } {
   const kind = m.intent?.kind;
   if (kind === "buy_asset" && R) {
     const n = sym(R.asset_id);
+    if (R.verdict === "suitable" && R.tier === "HIGH") return { title: `${n} : possible, mais risqué`, tone: "mid" };
     return R.verdict === "suitable" ? { title: `${n} : bonne idée pour vous`, tone: "good" }
       : R.verdict === "partial" ? { title: `${n} : oui, jusqu'à ${cad(R.max_amount_cad)}`, tone: "mid" }
         : { title: `${n} : pas pour vous`, tone: "bad" };
@@ -245,6 +246,9 @@ export function MandateResult() {
           <h1 className="min-w-0 font-display text-[30px] font-semibold leading-[1.05] tracking-tightest text-ink sm:text-[40px]" data-testid="headline-short">{v.title}</h1>
         </div>
         <p className="mt-4 text-[17px] leading-relaxed text-ink-soft" data-testid="headline">{m.headline}</p>
+        {(m.intent?.assumptions || []).map((a: string) => (
+          <p key={a} className="mt-3 flex gap-2.5 rounded-2xl bg-ink/[0.04] px-3.5 py-2.5 text-sm text-ink-soft"><Info className="mt-0.5 h-4 w-4 shrink-0 text-primary-600" />{a}</p>
+        ))}
 
         {kind === "review" && B && A && band && (
           <div className="mt-7"><ZoneBar label="Part en actions et cryptos" min={band.growth_min} max={band.growth_max} before={B.growth_share} after={A.growth_share} /></div>
@@ -301,17 +305,8 @@ export function MandateResult() {
         )}
       </Section>}
 
-      {/* 4. before / after */}
-      {m.orders.length > 0 && A && (
-        <Section title={B ? "Avant et après" : "Votre portefeuille après"}>
-          <div className="space-y-5">
-            {B && <Compare label="Part en actions" before={B.growth_share} after={A.growth_share} digits={0} />}
-            <Compare label="Pire baisse passée" before={B?.max_drawdown} after={A.max_drawdown} digits={1} />
-            {replay && <Compare label="Si 2022 se répétait" before={replay.before} after={replay.after} digits={1} />}
-          </div>
-          <p className="mt-4 text-xs text-ink-muted">Calculé sur les vrais prix des 5 dernières années. Le passé ne garantit pas l'avenir.</p>
-        </Section>
-      )}
+      {/* 4. what the decision changes */}
+      {m.orders.length > 0 && A && <Impact B={B} A={A} replay={replay} band={band} />}
 
       {/* 5. good to know + the profile behind the verdict */}
       {notes.length > 0 && (
@@ -430,7 +425,7 @@ function Section({ title, aside, children, testid }: { title: string; aside?: Re
 }
 
 function VerdictMark({ tone }: { tone: Tone }) {
-  const [bg, I] = tone === "good" ? ["bg-gain-600", Check] : tone === "mid" ? ["bg-primary-500", Check] : ["bg-accent-600", X];
+  const [bg, I] = tone === "good" ? ["bg-gain-600", Check] : tone === "mid" ? ["bg-primary-500", TriangleAlert] : ["bg-accent-600", X];
   return (
     <motion.span initial={{ scale: 0.3, rotate: -30, opacity: 0 }} animate={{ scale: 1, rotate: 0, opacity: 1 }} transition={{ ...spring, delay: 0.1 }}
       className={clsx("mt-1 grid h-11 w-11 shrink-0 place-items-center rounded-full sm:h-12 sm:w-12", bg)}>
@@ -643,25 +638,71 @@ function OrderGroup({ g }: { g: Group }) {
 
 const cleanWhy = (w: string) => (w || "").replace(/^(Avec le produit des ventes|À la place du montant refusé)\s*:\s*/, "").replace(/\s*\(complète ce qui manque dans votre portefeuille\)/, "");
 
-/** Before (grey) vs after (cobalt), same scale; for losses, a shorter bar is better. */
-function Compare({ label, before, after, digits }: { label: string; before?: number | null; after?: number | null; digits: number }) {
-  if (after == null) return null;
-  const max = Math.max(Math.abs(before ?? 0), Math.abs(after), 1e-6);
-  const Row = ({ v, now, tone }: { v: number; now: string; tone: string }) => (
-    <div className="flex items-center gap-3">
-      <span className="w-14 shrink-0 text-xs text-ink-muted">{now}</span>
-      <div className="h-2 flex-1 overflow-hidden rounded-full bg-ink/[0.04]">
-        <motion.div className={clsx("h-full rounded-full", tone)} initial={{ width: 0 }} animate={{ width: `${(Math.abs(v) / max) * 100}%` }} transition={{ ...softSpring, delay: 0.3 }} />
-      </div>
-      <span className={clsx("tabular-nums w-16 shrink-0 text-right text-sm", now === "Après" ? "font-semibold text-ink" : "text-ink-muted")}>{pct(v, digits)}</span>
-    </div>
+/** What the decision changes. Negligible effect → one sentence; otherwise one line per measure on a FIXED scale
+ *  (0–100 % with the profile's zone for the growth share, 0 to −30 % for losses) so a small loss looks small. */
+function Impact({ B, A, replay, band }: { B: any; A: any; replay?: any; band?: any }) {
+  const rows = [
+    { key: "g", label: "Part en actions", before: B?.growth_share, after: A.growth_share, kind: "share" as const, digits: 0 },
+    { key: "d", label: "Pire baisse passée", before: B?.max_drawdown, after: A.max_drawdown, kind: "loss" as const, digits: 1 },
+    ...(replay ? [{ key: "r", label: "Si 2022 se répétait", before: replay.before, after: replay.after, kind: "loss" as const, digits: 1 }] : []),
+  ].filter((r) => r.after != null);
+  const moved = (r: any) => r.before != null && Math.abs(r.after - r.before) >= (r.kind === "share" ? 0.01 : 0.005);
+  const inZone = band && A.growth_share != null && A.growth_share >= band.growth_min - 1e-6 && A.growth_share <= band.growth_max + 1e-6;
+  if (B && !rows.some(moved)) {
+    return (
+      <Section title="Effet sur votre risque">
+        <div className="flex gap-4 rounded-[20px] bg-ink/[0.03] p-4 sm:p-5">
+          <span className={clsx("grid h-10 w-10 shrink-0 place-items-center rounded-full", inZone ? "bg-gain-50 text-gain-700" : "bg-ink/[0.06] text-ink")}><Minus className="h-5 w-5" strokeWidth={2.5} /></span>
+          <p className="text-[15px] leading-relaxed text-ink-soft">
+            <span className="font-medium text-ink">Presque aucun changement.</span> Ce montant est petit par rapport à votre portefeuille :
+            vos actions restent à <b className="tabular-nums font-semibold text-ink">{pct(A.growth_share, 0)}</b>{inZone ? ", dans votre zone" : ""}, et votre pire baisse passée reste autour de <b className="tabular-nums font-semibold text-ink">{pct(A.max_drawdown, 1)}</b>.
+          </p>
+        </div>
+      </Section>
+    );
+  }
+  return (
+    <Section title={B ? "Ce que ça change" : "Votre portefeuille après"}>
+      <div className="space-y-6">{rows.map((r) => <ImpactRow key={r.key} r={r} band={band} />)}</div>
+      <p className="mt-5 text-xs text-ink-muted">Calculé sur les vrais prix des 5 dernières années. Le passé ne garantit pas l'avenir.</p>
+    </Section>
   );
+}
+
+function ImpactRow({ r, band }: { r: any; band?: any }) {
+  const loss = r.kind === "loss";
+  const scale = loss ? Math.max(0.3, Math.abs(r.after), Math.abs(r.before ?? 0)) : 1;
+  const w = (v: number) => `${Math.min(100, (Math.abs(v) / scale) * 100)}%`;
+  const has = r.before != null && Math.abs(r.after - r.before) >= (loss ? 0.005 : 0.01);
+  const d = has ? r.after - r.before : 0;
+  // better = smaller loss; for the growth share, better = closer to the profile's zone
+  const dist = (v: number) => (band ? Math.max(0, band.growth_min - v, v - band.growth_max) : 0);
+  const better = loss ? Math.abs(r.after) < Math.abs(r.before ?? 0) : dist(r.after) < dist(r.before ?? r.after);
+  const worse = loss ? Math.abs(r.after) > Math.abs(r.before ?? 0) : dist(r.after) > dist(r.before ?? r.after);
   return (
     <div>
-      <div className="mb-2 text-sm font-medium text-ink">{label}</div>
-      <div className="space-y-1.5">
-        {before != null && <Row v={before} now="Avant" tone="bg-ink/25" />}
-        <Row v={after} now="Après" tone="bg-primary-500" />
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <span className="text-[15px] font-medium text-ink">{r.label}</span>
+        <span className="tabular-nums flex items-center gap-2 text-[15px]">
+          {has && <><span className="text-ink-muted">{pct(r.before, r.digits)}</span><ArrowRight className="h-3.5 w-3.5 text-ink-muted" /></>}
+          <span className="font-semibold text-ink">{pct(r.after, r.digits)}</span>
+          {has && (
+            <span className={clsx("rounded-full px-2 py-0.5 text-xs font-semibold", better ? "bg-gain-50 text-gain-700" : worse ? "bg-accent-50 text-accent-700" : "bg-ink/[0.05] text-ink-soft")}>
+              {loss ? (better ? "moins de risque" : "plus de risque") : `${d > 0 ? "+" : "−"}${Math.abs(Math.round(d * 100))} pts`}
+            </span>
+          )}
+        </span>
+      </div>
+      <div className="relative mt-3 h-2.5 rounded-full bg-ink/[0.05]">
+        {has && <div className={clsx("absolute inset-y-0 left-0 rounded-full", loss ? "bg-accent-600/25" : "bg-ink/20")} style={{ width: w(r.before) }} />}
+        <motion.div className={clsx("absolute inset-y-0 left-0 rounded-full", loss ? "bg-accent-600" : "bg-primary-500")}
+          initial={{ width: has ? w(r.before) : 0 }} animate={{ width: w(r.after) }} transition={{ type: "spring", stiffness: 70, damping: 18, delay: 0.3 }} />
+        {!loss && band && <div className="absolute -inset-y-1 rounded-full border-2 border-gain-600" style={{ left: `${band.growth_min * 100}%`, width: `${(band.growth_max - band.growth_min) * 100}%` }} title="Votre zone" />}
+      </div>
+      <div className="mt-1.5 flex justify-between text-[11px] text-ink-muted">
+        <span>0 %</span>
+        {!loss && band && <span className="text-gain-700">votre zone {pct(band.growth_min, 0)}–{pct(band.growth_max, 0)}</span>}
+        <span>{loss ? `−${Math.round(scale * 100)} %` : "100 %"}</span>
       </div>
     </div>
   );

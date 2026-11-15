@@ -12,8 +12,8 @@ import { cad, pct } from "../lib/format";
 import { api, ApiError } from "../services/api";
 
 // « Connaître son client » : the interview a bank advisor would do, one question at a time.
-type A = Record<string, any>;
-const EMPTY: A = {
+export type A = Record<string, any>;
+export const EMPTY: A = {
   display_name: "", age: null, household: null, dependants_count: 0, employment: null, income_outlook: null,
   income_net_monthly: null, expenses_monthly: null, savings_cad: null, investments_cad: null, credit_card_debt_cad: 0, other_debt_cad: 0,
   home_owner: null, capital_cad: null, knowledge_self: null, products_held: [], quiz_diversification: null, quiz_bonds: null, quiz_inflation: null,
@@ -21,7 +21,7 @@ const EMPTY: A = {
   volatility_feeling: null, past_behavior: null, crypto_interest: "", esg_preference: false, interests: [], excluded_sectors: [],
 };
 
-const SECTIONS = [
+export const SECTIONS = [
   { id: "vous", label: "Vous", icon: UserRound },
   { id: "finances", label: "Vos finances", icon: Wallet },
   { id: "savoir", label: "Vos connaissances", icon: Brain },
@@ -30,7 +30,7 @@ const SECTIONS = [
 ];
 
 type Step = { section: string; id: string; valid: (a: A) => boolean };
-const STEPS: Step[] = [
+export const STEPS: Step[] = [
   { section: "vous", id: "name", valid: (a) => a.display_name.trim().length > 0 && (a.age === null || (a.age >= 16 && a.age <= 110)) },
   { section: "vous", id: "household", valid: (a) => !!a.household },
   { section: "vous", id: "work", valid: (a) => !!a.employment && !!a.income_outlook },
@@ -129,7 +129,7 @@ export default function Onboarding() {
   );
 }
 
-function payload(a: A) {
+export function payload(a: A) {
   const n = (v: any) => (v === null || v === "" || v === undefined ? null : +v);
   return {
     ...a, age: n(a.age), dependants_count: n(a.dependants_count) ?? 0, income_net_monthly: n(a.income_net_monthly), expenses_monthly: n(a.expenses_monthly),
@@ -140,7 +140,7 @@ function payload(a: A) {
 }
 
 // ------------------------------------------------------------------------------------------------ one question per screen
-function StepView({ id, a, set, preview, error }: { id: string; a: A; set: (p: A) => void; preview: any; error: ApiError | null }) {
+export function StepView({ id, a, set, preview, error }: { id: string; a: A; set: (p: A) => void; preview: any; error: ApiError | null }) {
   const first = a.display_name ? `, ${a.display_name}` : "";
   switch (id) {
     case "name":

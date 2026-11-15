@@ -58,12 +58,14 @@ def mentioned_assets(md, text: str) -> list[str]:
     found = []
     up = text.upper()
     for aid, row in md.universe.iterrows():
-        base = aid.split(".")[0]
+        base = re.split(r"[.\-]", aid)[0]  # RY.TO → RY, BTC-USD → BTC
         if re.search(rf"(?<![A-Z0-9]){re.escape(aid)}(?![A-Z0-9])", up) or (len(base) >= 3 and re.search(rf"(?<![A-Z0-9]){re.escape(base)}(?![A-Z0-9])", up)):
             found.append(aid)
             continue
         names = [str(row["name"]).lower().split(" ")[0]] + [a.strip() for a in str(row.get("aliases") or "").split(";") if a.strip()]
-        if any(len(n) >= 4 and re.search(rf"\b{re.escape(n)}\b", text.lower()) for n in names):
+        first = names[0]  # the first word of the official name must be specific (« canadian », « spdr » are too vague below 4 letters)
+        if (len(first) >= 4 and re.search(rf"\b{re.escape(first)}\b", text.lower())) or \
+                any(len(n) >= 3 and re.search(rf"(?<!\w){re.escape(n)}(?!\w)", text.lower()) for n in names[1:]):
             found.append(aid)
     return found
 

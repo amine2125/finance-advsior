@@ -42,20 +42,53 @@ def _problems(before: dict | None, after: dict) -> list[dict]:
             continue
         prev = b.get(c["rule_id"])
         if prev is None or prev["status"] in ("OK", "UNKNOWN"):
-            out.append({"rule_id": c["rule_id"], "kind": "new", "message": c["message"], "label": c["label"]})
+            out.append({"rule_id": c["rule_id"], "kind": "new", "message": c["message"], "label": c["label"], "value": c.get("measured_value")})
             continue
         pv, av = prev.get("measured_value"), c.get("measured_value")
         if pv is None or av is None:
             continue
         worse = av < pv - 1e-9 if (c["rule_id"] == "budget.drawdown_review" or c["status"] == "BELOW_BAND") else av > pv + 1e-9
         if worse:
-            out.append({"rule_id": c["rule_id"], "kind": "worse", "message": c["message"], "label": c["label"]})
+            out.append({"rule_id": c["rule_id"], "kind": "worse", "message": c["message"], "label": c["label"], "value": av})
     pt, at = pa.get("portfolio_tier"), pa.get("allowed_tier")
     pt_before = ((before or {}).get("persona_assessment") or {}).get("portfolio_tier")
     if pt in ORDER and at in ORDER and ORDER[pt] < 3 and ORDER[pt] > ORDER[at] and (pt_before is None or ORDER.get(pt_before, 0) < ORDER[pt]):
         out.append({"rule_id": "tier", "kind": "new", "label": "Niveau de risque du portefeuille",
                     "message": f"le portefeuille passerait au niveau de risque {TIER_FR[pt]}, au-dessus du niveau {TIER_FR[at]} permis par votre profil"})
     return out
+
+
+def _plain(p: dict, name: str, persona: InvestorProfile) -> str:
+    """One broken limit in words a client understands — the same rule for any security."""
+    b, v, worse = persona.budget, p.get("value"), p.get("kind") == "worse"
+    rid = p["rule_id"]
+    if v is not None:
+        if rid == "budget.growth_band":
+            return (f"Votre portefeuille a déjà trop d'actions et de cryptos ({_pct(v)} ; votre zone : {_pct(b.growth_min)} à {_pct(b.growth_max)}). "
+                    "En ajouter aggraverait le problème." if worse else
+                    f"Avec ce placement, vos actions et cryptos passeraient à {_pct(v)}, au-delà de votre zone ({_pct(b.growth_min)} à {_pct(b.growth_max)}).")
+        if rid == "budget.single_issuer":
+            return f"{name} pèserait {_pct(v)} de votre portefeuille ; le maximum conseillé par entreprise est {_pct(b.max_single_issuer)}."
+        if rid == "budget.speculative":
+            return f"Les cryptoactifs feraient {_pct(v)} de votre portefeuille ; votre profil en permet au plus {_pct(b.max_speculative)}."
+        if rid == "budget.single_sector":
+            return f"Un même secteur ferait {_pct(v)} de votre portefeuille (maximum conseillé : {_pct(b.max_single_sector)}) : ces titres baissent souvent ensemble."
+        if rid == "budget.theme_exposure":
+            return f"Un seul thème porterait jusqu'à {_pct(v)} de votre argent (maximum conseillé : {_pct(b.max_single_sector)})."
+        if rid == "budget.drawdown_review":
+            return (f"Votre portefeuille pourrait perdre jusqu'à {_pct(-v)} dans une mauvaise année, plus que les {_pct(-b.drawdown_review)} "
+                    "que vous avez dit pouvoir accepter.")
+    msg = p["message"].replace("Hors bande: ", "")
+    return msg[0].upper() + msg[1:] + "."
+
+
+def _existing_plain(c: dict, persona: InvestorProfile) -> str:
+    """A limit the portfolio ALREADY breaks (before the purchase), in plain words."""
+    b, v = persona.budget, c.get("measured_value")
+    if c["rule_id"] == "budget.growth_band" and v is not None:
+        return (f"votre portefeuille a peu d'actions ({_pct(v)} ; votre zone : {_pct(b.growth_min)} à {_pct(b.growth_max)})." if c["status"] == "BELOW_BAND" else
+                f"votre portefeuille a déjà trop d'actions ({_pct(v)} ; votre zone : {_pct(b.growth_min)} à {_pct(b.growth_max)}).")
+    return _plain({"rule_id": c["rule_id"], "value": v, "kind": "worse", "message": c.get("message") or c["label"]}, "Un placement", persona)
 
 
 def check_investment(md: MarketData, persona: InvestorProfile, pf: Portfolio | None, asset_id: str, amount_cad: float) -> dict:
@@ -66,8 +99,8 @@ def check_investment(md: MarketData, persona: InvestorProfile, pf: Portfolio | N
     allowed = at["allowed_tier"].value
     crypto = meta["asset_class"] == "crypto"
     extra = {asset_id} if crypto else set()
-    reasons: list[dict] = [{"tone": "info", "text": f"{asset_id} ({meta['name']}) a un risque mesuré {TIER_FR[tier['tier']]} : "
-                            f"variation annuelle typique ± {_pct(tier['volatility'])}, pire baisse sur 5 ans {_pct(tier['max_drawdown'])}."}]
+    reasons: list[dict] = [{"tone": "info", "text": f"{meta['name']} a un risque {TIER_FR[tier['tier']]} : il varie typiquement de ± {_pct(tier['volatility'])} "
+                            f"par année, et sa pire baisse sur 5 ans a été de {_pct(tier['max_drawdown'])}."}]
     base = {"asset_id": asset_id, "name": meta["name"], "amount_cad": amount_cad, "asset_tier": tier, "allowed_tier": allowed,
             "binding_inputs": at["binding_inputs"], "profile_level": persona.risk_profile_label, "data_as_of": md.end_date.date().isoformat(),
             "label": "Vérification de compatibilité avec votre profil (simulation éducative), pas un conseil financier personnalisé."}
@@ -116,10 +149,10 @@ def check_investment(md: MarketData, persona: InvestorProfile, pf: Portfolio | N
         if w_ is None:
             return []
         if single and w_ > persona.budget.max_single_issuer + 1e-9:
-            return [{"rule_id": "budget.single_issuer", "kind": "new", "label": "Poids d'un seul placement",
+            return [{"rule_id": "budget.single_issuer", "kind": "new", "label": "Poids d'un seul placement", "value": w_,
                      "message": f"{asset_id} pèserait {_pct(w_)} de votre portefeuille, au-delà du maximum de {_pct(persona.budget.max_single_issuer)} par entreprise"}]
         if crypto and w_ > persona.budget.max_speculative + 1e-9:
-            return [{"rule_id": "budget.speculative", "kind": "new", "label": "Part spéculative",
+            return [{"rule_id": "budget.speculative", "kind": "new", "label": "Part spéculative", "value": w_,
                      "message": f"{asset_id} pèserait {_pct(w_)} de votre portefeuille, au-delà de votre part spéculative maximale de {_pct(persona.budget.max_speculative)}"}]
         return []
 
@@ -129,7 +162,7 @@ def check_investment(md: MarketData, persona: InvestorProfile, pf: Portfolio | N
 
     after = after_for(amount_cad)
     probs = problems(after)
-    existing = [c["message"] for c in ((before or {}).get("persona_assessment") or {}).get("budget_checks", [])
+    existing = [_existing_plain(c, persona) for c in ((before or {}).get("persona_assessment") or {}).get("budget_checks", [])
                 if c["status"] not in ("OK", "UNKNOWN")]
 
     def snap(x: dict | None) -> dict | None:
@@ -144,17 +177,13 @@ def check_investment(md: MarketData, persona: InvestorProfile, pf: Portfolio | N
     base |= {"before": snap(before), "after": snap(after), "existing_breaches": existing}
     w = (snap(after) or {}).get("weight")
     if not probs:
-        reasons.append({"tone": "good", "text": f"Avec {_cad(amount_cad)}, {asset_id} pèserait {_pct(w)} de votre portefeuille et toutes vos limites restent respectées."})
+        reasons.append({"tone": "good", "text": f"Avec {_cad(amount_cad)}, {meta['name']} pèserait {_pct(w)} de votre portefeuille : toutes vos limites restent respectées."})
         if existing:
-            reasons.append({"tone": "warn", "text": "Votre portefeuille dépasse toutefois déjà certaines limites : " + "; ".join(existing) + "."})
+            reasons.append({"tone": "warn", "text": "À savoir : " + " ".join(existing)})
         return base | {"verdict": "suitable", "headline": "Oui, ce placement est compatible avec votre profil", "max_amount_cad": amount_cad, "reasons": reasons}
 
     for p in probs:
-        msg = p["message"].replace("Hors bande: ", "")
-        if p["rule_id"] == "budget.growth_band":
-            msg = f"part en actions et cryptos de {msg}"
-        reasons.append({"tone": "bad", "text": ("Cela aggraverait une limite déjà dépassée — " if p["kind"] == "worse" else "Limite dépassée — ")
-                        + (msg if msg[:2].isupper() else msg[0].lower() + msg[1:]) + "."})
+        reasons.append({"tone": "bad", "text": _plain(p, meta["name"], persona), "budget": True})  # a size limit, not a hard « no »
     # 4. largest amount without new or worsened breach (binary search, rounded down to 50 $)
     lo, hi = 0.0, amount_cad
     for _ in range(8):

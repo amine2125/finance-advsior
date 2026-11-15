@@ -14,4 +14,4 @@ export function TickerLogo({ id, size = 40 }: { id: string; size?: number }) {
   );
 }
 
-export const sym = (id: string) => id.replace(/\.TO$/, "");
+export const sym = (id: string) => id.replace(/\.TO$/, "").replace(/-USD$/, "");
