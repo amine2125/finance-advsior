@@ -48,6 +48,14 @@ Avec la section « Comptes et base de données » remplie, le serveur local util
 DynamoDB que la version déployée ; sans elle, il démarre en mode bac à sable (sans connexion, fichiers JSON locaux).
 Les clés temporaires d'un atelier AWS expirent après quelques heures : recollez-en de nouvelles dans `.env` et relancez l'API.
 
+## Pour les débutants
+
+- **De l'argent pour apprendre** : chaque compte reçoit un solde fictif (le montant prévu dans le questionnaire, sinon 10 000 $).
+  Investir le dépense, vendre le remplit, « Ajouter des fonds » en ajoute ; une demande ne dépasse jamais le solde disponible.
+- **Visite guidée** au premier passage (relançable depuis le menu du compte), **« Comment ça marche ? »** sur chaque écran.
+- **Apprendre** : sept leçons de 2 minutes (investir, actions/obligations/FNB, risque, diversification, intérêts composés avec
+  un calculateur, émotions et frais, comment AEGIS aide), et une carte « Bien démarrer » qui suit la progression.
+
 ## Parcours : un mandat d'investissement agentique
 
 1. **Connaître son client** (~20 questions) : tolérance, capacité, connaissances ; la plus basse fixe le profil. Chaque réponse

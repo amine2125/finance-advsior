@@ -72,6 +72,16 @@ test("investor states a request, agents propose verified orders, risky request c
   await shot(page, "06-kyc-result");
   await page.getByTestId("confirm").click();
 
+  // Newcomers: simulated money to invest, a guided tour of the app (it starts by itself), lessons and a checklist.
+  await expect(page.getByTestId("cash-value")).toContainText("10 000,00", { timeout: 30_000 });
+  await expect(page.getByTestId("tour")).toBeVisible({ timeout: 15_000 });
+  await shot(page, "07-tour");
+  await page.getByTestId("tour-next").click();
+  await page.getByTestId("tour-next").click();
+  await page.getByTestId("tour-skip").click();
+  await expect(page.getByTestId("tour")).toBeHidden();
+  await expect(page.getByTestId("starter")).toBeVisible();
+
   // The agentic mandate: the user states what they want, the agents work in front of them, then a verified proposal.
   await expect(page.getByTestId("mandate-input")).toBeVisible({ timeout: 30_000 });
   await shot(page, "07-mandate-home");
@@ -108,6 +118,9 @@ test("investor states a request, agents propose verified orders, risky request c
 
   await page.goto("/profil");
   await shot(page, "13-profile");
+  await page.goto("/apprendre/temps");
+  await expect(page.getByTestId("lesson")).toContainText("intérêts composés");
+  await shot(page, "13b-lesson");
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");

@@ -4,6 +4,7 @@ import { ArrowRight, Check, ChevronRight, LogOut, Pencil, RotateCcw, X } from "l
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { PageIn, softSpring, spring, Stagger, StaggerItem } from "../components/motion";
+import HowItWorks from "../components/HowItWorks";
 import { Button, ErrorBox } from "../components/ui";
 import { useApp } from "../hooks/useApp";
 import { cad } from "../lib/format";
@@ -61,6 +62,7 @@ export default function Profile() {
 
   return (
     <PageIn className="mx-auto max-w-3xl px-5 pb-16 pt-8">
+      <div className="mb-4 flex justify-end"><HowItWorks topic="profile" /></div>
       <Result p={me!.profile} name={me!.profile.display_name}
         action={<Button variant="secondary" size="sm" onClick={() => (hasAnswers ? answersRef.current?.scrollIntoView({ behavior: "smooth" }) : nav("/inscription"))} data-testid="edit-answers">
           <Pencil className="h-4 w-4" /> Ma situation a changé</Button>} />

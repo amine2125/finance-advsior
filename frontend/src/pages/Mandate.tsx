@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Glass, PageIn, softSpring, spring, Stagger, StaggerItem, Tabs } from "../components/motion";
 import { sym, TickerLogo } from "../components/Ticker";
+import HowItWorks from "../components/HowItWorks";
 import { Button, ErrorBox, Spinner } from "../components/ui";
 import { useApi } from "../hooks/useApi";
 import { useApp } from "../hooks/useApp";
@@ -236,7 +237,10 @@ export function MandateResult() {
 
   return (
     <PageIn className="mx-auto max-w-2xl px-5 pb-44 pt-8" testid="proposal">
-      <Link to="/decisions" className="inline-flex items-center gap-1 text-sm text-ink-muted hover:text-ink"><ArrowLeft className="h-4 w-4" /> Décisions</Link>
+      <div className="flex items-center justify-between gap-3">
+        <Link to="/decisions" className="inline-flex items-center gap-1 text-sm text-ink-muted hover:text-ink"><ArrowLeft className="h-4 w-4" /> Décisions</Link>
+        <HowItWorks topic="proposal" />
+      </div>
 
       {/* 1. verdict */}
       <Glass className="mt-6 p-6 sm:p-8" glow>
@@ -849,7 +853,8 @@ export function Decisions() {
   return (
     <PageIn className="mx-auto max-w-3xl px-5 pb-16 pt-10">
       <div className="flex items-end justify-between gap-4">
-        <h1 className="font-display text-[40px] font-semibold leading-none tracking-tightest text-ink">Décisions</h1>
+        <div><div className="mb-3"><HowItWorks topic="decisions" /></div>
+        <h1 className="font-display text-[40px] font-semibold leading-none tracking-tightest text-ink">Décisions</h1></div>
         <Link to="/"><Button variant="gold">Nouvelle décision</Button></Link>
       </div>
       {loading && !data && <Spinner />}

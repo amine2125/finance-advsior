@@ -25,7 +25,7 @@ _BASE = dict(credit_card_debt_cad=0, other_debt_cad=0, esg_preference=False, int
 
 DEMO: list[dict] = [
     {"key": "amira", "email": "amira@demo.aegis-finance.ca", "name": "Amira",
-     "tagline": "26 ans · profil élevé · croissance, technologie et un peu de crypto",
+     "tagline": "26 ans · profil élevé · croissance, technologie et un peu de crypto", "cash": 5000.0,
      "answers": dict(display_name="Amira", age=26, household="single", dependants_count=0, employment="permanent", income_outlook="up",
                      income_net_monthly=4800, expenses_monthly=3000, savings_cad=15000, investments_cad=25000, home_owner=False, capital_cad=10000,
                      knowledge_self="basic", products_held=["savings", "etf", "stocks", "crypto"], quiz_diversification="b", quiz_bonds="b",
@@ -35,7 +35,7 @@ DEMO: list[dict] = [
      "accounts": {"CELI": [("QQQ", 6000, "2023-03-15"), ("NVDA", 4000, "2023-06-01"), ("SHOP.TO", 2500, "2024-02-12"), ("MSFT", 3000, "2023-09-20")],
                   "Non enregistré": [("BTC-USD", 2500, "2024-01-15"), ("XIU.TO", 4000, "2022-11-01"), ("ESGV", 3000, "2023-01-10")]}},
     {"key": "mateo", "email": "mateo@demo.aegis-finance.ca", "name": "Mateo",
-     "tagline": "41 ans · profil modéré · deux enfants, préférences ESG",
+     "tagline": "41 ans · profil modéré · deux enfants, préférences ESG", "cash": 10000.0,
      "answers": dict(display_name="Mateo", age=41, household="couple_kids", dependants_count=2, employment="permanent", income_outlook="stable",
                      income_net_monthly=7500, expenses_monthly=5600, savings_cad=42000, investments_cad=50000, home_owner=True, capital_cad=50000,
                      knowledge_self="good", products_held=["savings", "mutual_funds", "etf"], quiz_diversification="b", quiz_bonds="a",
@@ -45,7 +45,7 @@ DEMO: list[dict] = [
      "accounts": {"REER": [("ESGV", 11000, "2022-06-15"), ("XIU.TO", 8000, "2022-10-03"), ("XBB.TO", 13000, "2023-02-01")],
                   "CELI": [("AGG", 8000, "2023-05-15"), ("XBB.TO", 5000, "2024-03-01"), ("FTS.TO", 2500, "2023-08-10"), ("CNR.TO", 2500, "2024-05-20")]}},
     {"key": "robert", "email": "robert@demo.aegis-finance.ca", "name": "Robert",
-     "tagline": "59 ans · profil faible à modéré · attiré par les titres populaires",
+     "tagline": "59 ans · profil faible à modéré · attiré par les titres populaires", "cash": 20000.0,
      "answers": dict(display_name="Robert", age=59, household="couple", dependants_count=0, employment="permanent", income_outlook="stable",
                      income_net_monthly=6500, expenses_monthly=4500, savings_cad=40000, investments_cad=100000, home_owner=True, capital_cad=100000,
                      knowledge_self="basic", products_held=["savings", "gic", "mutual_funds", "stocks"], quiz_diversification="b", quiz_bonds="b",
@@ -85,7 +85,12 @@ def _portfolio(owner: str, persona_id: str, spec: dict) -> Portfolio:
 def seed_if_empty(owner: str, email: str | None) -> bool:
     """Creates the demo investor's profile, answers and portfolio the first time the demo account is used (or after a reset)."""
     spec = BY_EMAIL.get((email or "").lower())
-    if spec is None or ps.list_personas(owner):
+    if spec is None:
+        return False
+    if ps.list_personas(owner):
+        from . import wallet
+        if wallet.get(owner, create=False) is None:  # demo accounts created before simulated cash existed
+            wallet.set_start(owner, spec["cash"])
         return False
     answers = OnboardingAnswers(**{**_BASE, **spec["answers"]})
     profile, derivation = build_profile(answers)
@@ -95,4 +100,6 @@ def seed_if_empty(owner: str, email: str | None) -> bool:
                                             "at": dt.datetime.utcnow().isoformat(), "demo": spec["key"]})
     pf = _portfolio(owner, saved.persona_id, spec)
     store.put(owner, "PORTFOLIO", pf.portfolio_id, pf.model_dump(mode="json"))
+    from . import wallet
+    wallet.set_start(owner, spec["cash"])
     return True

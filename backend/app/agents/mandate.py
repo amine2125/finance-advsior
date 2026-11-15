@@ -352,6 +352,18 @@ def run_mandate(tracker: JobTracker, owner: str, req: dict) -> dict:
             else:
                 unknown_name = name
                 intent["assumptions"].append(f"Je ne suis pas « {name} » : je propose plutôt un portefeuille diversifié.")
+    if intent["kind"] in ("invest", "buy_asset"):  # simulated cash: never propose to spend more than the account holds
+        from ..services import wallet
+        avail = wallet.cash(owner)
+        if avail < 50:
+            tracker.fail("supervisor.understand", "Aucun solde disponible à investir")
+            raise ValueError("Vous n'avez pas d'argent disponible à investir. Ajoutez des fonds (simulation) depuis l'accueil, "
+                             "ou demandez plutôt « Rééquilibre mon portefeuille ».")
+        if (intent["amount_cad"] or 0) > avail:
+            asked = intent["amount_cad"]
+            intent["amount_cad"] = float(int(avail))
+            intent["assumptions"].append(f"Votre solde disponible est de {_cad(avail)} : je propose {_cad(intent['amount_cad'])} "
+                                         f"au lieu de {_cad(asked)}.")
     if intent["kind"] == "review" and (pf is None or not pf.holdings):
         tracker.fail("supervisor.understand", "Aucun placement à analyser et aucun montant à investir")
         raise ValueError("Je n'ai trouvé ni montant à investir ni placements à analyser. Ex. « J'ai 5 000 $ à investir » ou ajoutez vos placements.")
@@ -781,6 +793,8 @@ def approve(owner: str, mandate_id: str) -> dict:
         raise NotFound("mandat introuvable")
     if m["status"] != "proposed":
         raise ValueError("ce mandat a déjà été traité")
+    from ..services import wallet
+    wallet.apply_orders(owner, m["orders"], f"Décision approuvée : « {m['request'][:60]} »")  # refused if cash is short
     md = get_market_data()
     pf = ps.get_portfolio(owner, m["portfolio_id"]) if m.get("portfolio_id") else None
     amounts = _amounts(md, pf)

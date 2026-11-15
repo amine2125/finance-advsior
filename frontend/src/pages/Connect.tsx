@@ -3,6 +3,7 @@ import { ArrowLeft, Check, Eye, Lock, Search, ShieldCheck } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button, ErrorBox, Spinner } from "../components/ui";
+import HowItWorks from "../components/HowItWorks";
 import { useApi } from "../hooks/useApi";
 import { useApp } from "../hooks/useApp";
 import { cad, pct } from "../lib/format";
@@ -44,6 +45,7 @@ export default function Connect() {
 
   return (
     <div className="mx-auto max-w-lg px-5 pb-20 pt-8" data-testid="connect-flow">
+      <div className="float-right"><HowItWorks topic="connect" /></div>
       {step === "pick" ? <Link to="/" className="inline-flex items-center gap-1 text-sm text-ink-muted hover:text-ink"><ArrowLeft className="h-4 w-4" /> Accueil</Link>
         : <button onClick={() => setStep(step === "accounts" ? "consent" : "pick")} className="inline-flex items-center gap-1 text-sm text-ink-muted hover:text-ink"><ArrowLeft className="h-4 w-4" /> Retour</button>}
 

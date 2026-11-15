@@ -109,7 +109,7 @@ function AdvisorPanel({ open, setOpen, msgs, running, job, send, reset }:
   return (
     <>
       {!open && (
-        <button onClick={() => setOpen(true)} data-testid="advisor-open" aria-label="Parler à Léa, votre conseillère"
+        <button onClick={() => setOpen(true)} data-testid="advisor-open" data-tour="lea" aria-label="Parler à Léa, votre conseillère"
           title="Une question ? Parlez à Léa"
           className="fixed bottom-20 right-4 z-40 grid h-14 w-14 place-items-center rounded-full bg-ink text-white shadow-lift transition hover:scale-105 hover:bg-black md:bottom-6 md:right-6">
           <MessageCircle className="h-6 w-6" />

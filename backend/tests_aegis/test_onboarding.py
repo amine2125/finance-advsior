@@ -187,6 +187,7 @@ def test_mandate_agentic_workflow_on_users_own_portfolio(client, real_md, monkey
     p = client.post("/api/v1/onboarding", headers=h, json=BASE | dict(objective="income", horizon_years=4, max_decline=0.15, crypto_interest="no")).json()
     client.post("/api/v1/portfolios", headers=h, json={"name": "pf", "persona_id": p["persona_id"], "holdings": [
         {"asset_id": "XIU.TO", "amount_cad": 40000}, {"asset_id": "XBB.TO", "amount_cad": 40000}, {"asset_id": "RY.TO", "amount_cad": 10000}]})
+    assert client.post("/api/v1/wallet/deposit", headers=h, json={"amount_cad": 30000}).json()["cash_cad"] == 40000
     # a hyped single stock, too risky for this profile: refused, money redirected, every step traced
     m, job = _run_mandate(client, h, "Je veux mettre 20 000 $ dans NVIDIA")
     assert m["requested"]["verdict"] == "not_suitable" and all(o["asset_id"] != "NVDA" for o in m["orders"])
@@ -240,3 +241,25 @@ def test_connected_account_is_realistic_and_minimal_correction_keeps_good_funds(
     m, _ = _run_mandate(client, h, "Analyse et rééquilibre mon portefeuille")
     assert m["diagnosis"]["fits"] is False and not [g for g in m["governance"] if g["status"] == "breach"]
     get_settings.cache_clear()
+
+
+def test_cash_caps_requests_and_approval_spends_it(client, real_md, monkeypatch):
+    """Every account starts with simulated money; a request never spends more than is available; approval spends it."""
+    registry.reset_market_data(real_md)
+    monkeypatch.setenv("AEGIS_JOB_RUNNER", "inline")
+    from app.config import get_settings
+    get_settings.cache_clear()
+    h = {"X-AEGIS-User": "u-cash-0001"}
+    client.post("/api/v1/onboarding", headers=h, json=BASE | dict(objective="balanced", horizon_years=10, max_decline=0.25))
+    assert client.get("/api/v1/me", headers=h).json()["cash"]["cash_cad"] == 10000  # default starting balance
+    m, _ = _run_mandate(client, h, "J'ai 25 000 $ à investir")
+    assert abs(sum(o["amount_cad"] for o in m["orders"]) - 10000) < 1
+    assert any("solde disponible" in a for a in m["intent"]["assumptions"])
+    assert client.post(f"/api/v1/mandates/{m['mandate_id']}/approve", headers=h).status_code == 200
+    assert client.get("/api/v1/me", headers=h).json()["cash"]["cash_cad"] < 1
+    j = client.post("/api/v1/mandates", headers=h, json={"request": "J'ai 1 000 $ à investir"}).json()
+    job = client.get(f"/api/v1/jobs/{j['job_id']}", headers=h).json()
+    assert job["status"] == "failed" and "pas d'argent disponible" in job["error"]
+    g = client.put("/api/v1/guide", headers=h, json={"tour_done": True, "lesson_done": "investir"}).json()
+    assert g["tour_done"] and g["lessons"] == ["investir"]
+

@@ -5,6 +5,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { SplitBar } from "../components/charts";
 import { PageIn, Segmented, Stagger, Tabs } from "../components/motion";
 import HoldingsEditor from "../components/HoldingsEditor";
+import HowItWorks from "../components/HowItWorks";
 import { Button, ErrorBox, Spinner } from "../components/ui";
 import { checkLabel, checkText, useAnalysis } from "../hooks/useAnalysis";
 import { useApi } from "../hooks/useApi";
@@ -40,6 +41,7 @@ export default function Holdings() {
     <PageIn className="mx-auto max-w-3xl px-5 pb-16 pt-10">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
+          <div className="mb-3"><HowItWorks topic="placements" /></div>
           <h1 className="font-display text-[40px] font-semibold leading-none tracking-tightest text-ink">Placements</h1>
           {has && <p className="tabular-nums mt-3 text-sm text-ink-muted">{cad(h.data.total_value_cad, 2)}{h.data.gain_cad != null && <> · <span className={h.data.gain_cad >= 0 ? "text-gain-700" : "text-accent-700"}>{signed(h.data.gain_cad, 0)} ({signedPct(h.data.gain_pct)}) depuis vos achats</span></>} · <span className={h.data.day_change_cad >= 0 ? "text-gain-700" : "text-accent-700"}>{signed(h.data.day_change_cad)} aujourd'hui</span></p>}
         </div>

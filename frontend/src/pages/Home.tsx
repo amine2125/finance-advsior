@@ -1,13 +1,15 @@
 import clsx from "clsx";
 import { motion } from "framer-motion";
-import { ArrowRight, ArrowUpRight, Check, Flame, Link2, Plus, ShieldAlert, Sparkles } from "lucide-react";
+import { ArrowRight, ArrowUpRight, BookOpen, Check, Compass, Flame, Link2, Plus, ShieldAlert, Sparkles, Wallet, X } from "lucide-react";
 import { useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ValueChart } from "../components/charts";
 import HoldingsEditor from "../components/HoldingsEditor";
 import { CountUp, Glass, Meter, PageIn, Segmented, spring, Stagger, StaggerItem } from "../components/motion";
 import { TickerLogo, sym } from "../components/Ticker";
+import HowItWorks from "../components/HowItWorks";
 import { Button, ErrorBox, Spinner } from "../components/ui";
+import { ESSENTIALS } from "../lib/lessons";
 import { useApi } from "../hooks/useApi";
 import { useApp } from "../hooks/useApp";
 import { friendly } from "../lib/assets";
@@ -30,6 +32,7 @@ export const signedPct = (v: number | null | undefined) => (v == null ? "" : `${
 /** Accueil : le solde, sa santé vis-à-vis du profil, « que voulez-vous faire ? », les placements et l'activité. */
 export default function Home() {
   const { me } = useApp();
+  const cash = me?.cash?.cash_cad ?? 0;
   const p = me!.profile;
   const h = useApi<any>("/holdings");
   const [days, setDays] = useState(365);
@@ -42,13 +45,18 @@ export default function Home() {
 
   return (
     <PageIn className="mx-auto max-w-[920px] px-5 pb-20 pt-8 sm:px-8 sm:pt-12">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm text-ink-muted">Bonjour {p.display_name}</p>
+        <HowItWorks topic="home" />
+      </div>
+      <StarterCard />
       {/* balance */}
-      <Glass glow className="px-6 pb-4 pt-7 sm:px-9 sm:pt-9">
+      <div data-tour="balance"><Glass glow className="px-6 pb-4 pt-7 sm:px-9 sm:pt-9">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="text-sm text-ink-muted">Mon portefeuille · profil {p.risk_profile_label.toLowerCase()}</p>
+            <p className="text-sm text-ink-muted">Valeur totale · profil {p.risk_profile_label.toLowerCase()}</p>
             <p className="mt-2 font-display text-[48px] font-semibold leading-none tracking-tightest text-ink sm:text-[64px]" data-testid="total-value">
-              {h.data ? <CountUp value={h.data.total_value_cad} format={(v) => cad(v, 2)} /> : "…"}
+              {h.data ? <CountUp value={h.data.total_value_cad + cash} format={(v) => cad(v, 2)} /> : "…"}
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
               {has && h.data.gain_cad != null && <Chip tone={h.data.gain_cad >= 0 ? "gain" : "loss"}>{signed(h.data.gain_cad, 0)} · {signedPct(h.data.gain_pct)} depuis vos achats</Chip>}
@@ -63,8 +71,9 @@ export default function Home() {
             <ValueChart series={hist.data.series} height={240} />
           </motion.div>
         )}
-        {!has && h.data && <div className="h-4" />}
-      </Glass>
+        {!has && h.data && <div className="h-2" />}
+        <CashRow />
+      </Glass></div>
 
       {h.data && !has && <Connect />}
       {has && <Health pending={pending} />}
@@ -187,7 +196,7 @@ export function DecisionBox({ inputRef }: { inputRef?: React.RefObject<HTMLTextA
     try { await launchMandate(nav, r, portfolio?.portfolio_id); } catch (e) { setError(e as ApiError); setBusy(false); }
   };
   return (
-    <section className="mt-14">
+    <section className="mt-14" data-tour="decide">
       <div className="flex items-center gap-2 text-sm font-medium text-primary-600"><Sparkles className="h-4 w-4" /> Prendre une décision</div>
       <h2 className="mt-2 font-display text-[34px] font-semibold leading-[1.05] tracking-tightest text-ink sm:text-[44px]">Que voulez-vous faire<br className="hidden sm:block" /> avec votre argent ?</h2>
       <form onSubmit={(e) => { e.preventDefault(); start(); }}
@@ -222,7 +231,7 @@ function Connect() {
   const [busy, setBusy] = useState(false);
   return (
     <Glass className="mt-6 px-6 py-7 sm:px-9" glow>
-      <div data-testid="connect">
+      <div data-testid="connect" data-tour="connect">
         <span className="grid h-11 w-11 place-items-center rounded-2xl bg-primary-50 text-primary-600"><Link2 className="h-5 w-5" /></span>
         <h2 className="mt-4 font-display text-[30px] font-semibold leading-tight tracking-tightest text-ink">Connectez votre portefeuille</h2>
         <p className="mt-2 max-w-xl text-ink-soft">Reliez le compte où sont déjà vos placements. Nos agents vérifient tout de suite s'il respecte votre profil {me!.profile.risk_profile_label.toLowerCase()}.</p>
@@ -255,7 +264,7 @@ function Health({ pending }: { pending?: any }) {
   const n = d.data.problems.length;
   const CHECKS = 7; // rules the diagnosis can raise
   return (
-    <Glass className="mt-6 px-6 py-6 sm:px-9">
+    <div data-tour="health"><Glass className="mt-6 px-6 py-6 sm:px-9">
       <div data-testid="diagnosis">
         <div className="flex items-start gap-4">
           <span className={clsx("grid h-11 w-11 shrink-0 place-items-center rounded-2xl", ok ? "bg-gain-50 text-gain-700" : "bg-accent-50 text-accent-700")}>
@@ -286,6 +295,104 @@ function Health({ pending }: { pending?: any }) {
           </div>
         )}
       </div>
+    </Glass></div>
+  );
+}
+
+const DEPOSITS: [number, string][] = [[1000, "1 000 $"], [5000, "5 000 $"], [10000, "10 000 $"], [25000, "25 000 $"]];
+
+/** Simulated cash: what can be invested now, one tap to ask the agents how to invest it, and fictional top-ups. */
+function CashRow() {
+  const { me, reload, portfolio } = useApp();
+  const nav = useNavigate();
+  const cash = me?.cash?.cash_cad ?? 0;
+  const [adding, setAdding] = useState(false);
+  const [amount, setAmount] = useState(5000);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<ApiError | null>(null);
+  const invest = async () => {
+    setBusy(true); setErr(null);
+    const amt = Math.floor(cash);
+    try { await launchMandate(nav, `J'ai ${cad(amt)} à investir`, portfolio?.portfolio_id, { kind: "invest", amount_cad: amt }); }
+    catch (e) { setErr(e as ApiError); setBusy(false); }
+  };
+  const add = async () => {
+    setBusy(true); setErr(null);
+    try { await api.post("/wallet/deposit", { amount_cad: amount }); await reload(); setAdding(false); }
+    catch (e) { setErr(e as ApiError); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div className="mt-4 border-t border-line pt-4" data-tour="cash" data-testid="cash">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <span className="grid h-10 w-10 place-items-center rounded-full bg-primary-50 text-primary-600"><Wallet className="h-4 w-4" /></span>
+          <div>
+            <div className="text-xs text-ink-muted">Disponible à investir · argent fictif</div>
+            <div className="tabular-nums font-display text-xl font-semibold tracking-tight text-ink" data-testid="cash-value">{cad(cash, 2)}</div>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {cash >= 50 && <Button size="sm" variant="gold" onClick={invest} disabled={busy} data-testid="invest-cash">Investir ce montant <ArrowRight className="h-3.5 w-3.5" /></Button>}
+          <Button size="sm" variant="secondary" onClick={() => setAdding(!adding)} data-testid="add-funds"><Plus className="h-3.5 w-3.5" /> Ajouter des fonds</Button>
+        </div>
+      </div>
+      {adding && (
+        <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} className="mt-3 flex flex-wrap items-center gap-2">
+          <Segmented value={amount} onChange={setAmount} options={DEPOSITS} size="sm" />
+          <Button size="sm" onClick={add} disabled={busy} data-testid="confirm-deposit">{busy ? "Ajout…" : "Ajouter"}</Button>
+          <span className="text-xs text-ink-muted">Argent fictif, pour apprendre sans risque.</span>
+        </motion.div>
+      )}
+      <ErrorBox error={err} />
+    </div>
+  );
+}
+
+/** « Bien démarrer » : three steps for newcomers (tour, the essential lessons, a first decision). Hides itself when done. */
+function StarterCard() {
+  const { me, reload } = useApp();
+  const nav = useNavigate();
+  const decisions = useApi<any>("/mandates");
+  const g = me?.guide;
+  if (!g || g.dismissed) return null;
+  const read = ESSENTIALS.filter((id) => g.lessons.includes(id));
+  const decided = (decisions.data?.mandates || []).some((m: any) => m.status === "approved" || m.status === "reviewed");
+  const steps = [
+    { done: g.tour_done, title: "Faire le tour de l'app", sub: "2 minutes pour voir où se trouve chaque chose.", icon: Compass,
+      action: () => window.dispatchEvent(new Event("aegis:tour")), cta: "Commencer" },
+    { done: read.length === ESSENTIALS.length, title: "Comprendre l'essentiel", sub: `${read.length} sur ${ESSENTIALS.length} leçons : investir, le risque, diversifier.`, icon: BookOpen,
+      action: () => nav(`/apprendre/${ESSENTIALS.find((id) => !g.lessons.includes(id)) || ESSENTIALS[0]}`), cta: read.length ? "Continuer" : "Lire" },
+    { done: decided, title: "Prendre une première décision", sub: "Demandez aux agents comment investir votre solde.", icon: Sparkles,
+      action: () => document.querySelector('[data-tour="decide"]')?.scrollIntoView({ behavior: "smooth", block: "center" }), cta: "Essayer" },
+  ];
+  const n = steps.filter((s) => s.done).length;
+  if (n === steps.length) return null;
+  const dismiss = async () => { await api.put("/guide", { dismissed: true }).catch(() => undefined); reload(); };
+  return (
+    <Glass className="mb-6 p-5 sm:p-6" glow>
+      <div className="flex items-start justify-between gap-3" data-testid="starter">
+        <div>
+          <div className="text-sm font-medium text-primary-600">Bien démarrer</div>
+          <h2 className="mt-0.5 font-display text-[22px] font-semibold tracking-tight text-ink">Nouveau dans l'investissement ? On vous guide.</h2>
+        </div>
+        <button onClick={dismiss} className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-ink-muted hover:bg-ink/[0.05]" aria-label="Masquer"><X className="h-4 w-4" /></button>
+      </div>
+      <div className="mt-3 flex items-center gap-3"><Meter value={n / steps.length} tone="primary" className="w-40" /><span className="tabular-nums text-xs text-ink-muted">{n} sur {steps.length}</span></div>
+      <Stagger as="div" className="mt-4 space-y-2">
+        {steps.map((s) => (
+          <StaggerItem as="div" key={s.title} className="flex items-center gap-3 rounded-2xl bg-white/60 p-3 hairline">
+            <span className={clsx("grid h-9 w-9 shrink-0 place-items-center rounded-full", s.done ? "bg-gain-600 text-white" : "bg-primary-50 text-primary-600")}>
+              {s.done ? <Check className="h-4 w-4" strokeWidth={3} /> : <s.icon className="h-4 w-4" />}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className={clsx("block text-sm font-medium", s.done ? "text-ink-muted line-through" : "text-ink")}>{s.title}</span>
+              <span className="block text-xs text-ink-muted">{s.sub}</span>
+            </span>
+            {!s.done && <Button size="sm" variant="secondary" onClick={s.action}>{s.cta}</Button>}
+          </StaggerItem>
+        ))}
+      </Stagger>
     </Glass>
   );
 }

@@ -12,6 +12,8 @@ export type Me = {
   data_start: string;
   dataset_origin: string;
   email?: string | null;
+  cash?: { cash_cad: number; start_cad?: number; moves: { at: string; kind: string; amount_cad: number; label: string }[] } | null;
+  guide?: { tour_done: boolean; lessons: string[]; dismissed: boolean };
 };
 
 export type AuthState = "loading" | "signedOut" | "signedIn";

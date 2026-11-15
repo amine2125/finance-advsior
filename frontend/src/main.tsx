@@ -16,6 +16,7 @@ import Onboarding from "./pages/Onboarding";
 import Profile from "./pages/Profile";
 import Welcome from "./pages/Welcome";
 import Login from "./pages/Login";
+import Learn, { LessonPage } from "./pages/Learn";
 
 class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { error: Error | null }> {
   state = { error: null as Error | null };
@@ -60,6 +61,8 @@ function Shell() {
               <Route path="/placement/:id" element={<AssetPage />} />
               <Route path="/a-propos" element={<About />} />
               <Route path="/profil" element={<Profile />} />
+              <Route path="/apprendre" element={<Learn />} />
+              <Route path="/apprendre/:id" element={<LessonPage />} />
               <Route path="/assistant" element={<Navigate to="/" replace />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>

@@ -161,6 +161,7 @@ def me(owner: str = Depends(owner_id), acct: Account | None = Depends(current_ac
     if acct is not None and get_settings().demo_accounts_enabled:
         from ..services import demo_accounts
         demo_accounts.seed_if_empty(owner, acct.email)
+    from ..services import wallet
     profiles = ps.list_personas(owner)
     meta = get_store().get(owner, "META", "onboarding") or {}
     md = get_market_data()
@@ -169,7 +170,9 @@ def me(owner: str = Depends(owner_id), acct: Account | None = Depends(current_ac
             "answers": meta.get("answers"),
             "portfolios": [p.model_dump(mode="json") for p in ps.list_portfolios(owner)],
             "data_as_of": md.end_date.date().isoformat(), "data_start": md.start_date.date().isoformat(),
-            "dataset_origin": md.origin, "email": acct.email if acct else None}
+            "dataset_origin": md.origin, "email": acct.email if acct else None,
+            "cash": _wallet_out(wallet.get(owner)) if profiles else None,
+            "guide": get_store().get(owner, "META", "guide") or {"tour_done": False, "lessons": [], "dismissed": False}}
 
 
 # ------------------------------------------------------------------------------------------------ holdings / history / activity
@@ -344,7 +347,11 @@ def get_mandate(mandate_id: str, owner: str = Depends(owner_id)):
 @router.post("/mandates/{mandate_id}/approve")
 def approve_mandate(mandate_id: str, owner: str = Depends(owner_id)):
     from ..agents.mandate import approve
-    return approve(owner, mandate_id)
+    from ..services.wallet import InsufficientCash
+    try:
+        return approve(owner, mandate_id)
+    except InsufficientCash as exc:
+        raise HTTPException(status_code=409, detail={"code": "insufficient_cash", "message": str(exc)}) from exc
 
 
 @router.post("/mandates/{mandate_id}/reject")
@@ -370,6 +377,47 @@ def asset_signals(asset_id: str):
     if not md.has_asset(asset_id):
         raise HTTPException(status_code=404, detail={"code": "unknown_asset", "message": "Actif hors de l'univers couvert."})
     return {"facts": sig.asset_facts(asset_id, md.asset(asset_id)["name"])}
+
+
+# ------------------------------------------------------------------------------------------------ cash and guidance
+class DepositReq(BaseModel):
+    amount_cad: float = Field(gt=0, le=100_000)
+
+
+@router.post("/wallet/deposit")
+def wallet_deposit(req: DepositReq, owner: str = Depends(owner_id)):
+    """Adds simulated money to invest (no real money)."""
+    from ..services import wallet
+    if not ps.list_personas(owner):
+        raise HTTPException(status_code=409, detail={"code": "not_onboarded", "message": "Répondez d'abord au questionnaire."})
+    return _wallet_out(wallet.deposit(owner, req.amount_cad))
+
+
+class GuideReq(BaseModel):
+    tour_done: bool | None = None
+    lesson_done: str | None = Field(default=None, max_length=40)
+    dismissed: bool | None = None
+
+
+@router.put("/guide")
+def guide(req: GuideReq, owner: str = Depends(owner_id)):
+    """Newcomer guidance progress (guided tour, lessons read), kept with the account so it follows the person everywhere."""
+    st = get_store()
+    g = st.get(owner, "META", "guide") or {"tour_done": False, "lessons": [], "dismissed": False}
+    if req.tour_done is not None:
+        g["tour_done"] = req.tour_done
+    if req.dismissed is not None:
+        g["dismissed"] = req.dismissed
+    if req.lesson_done and req.lesson_done not in g["lessons"]:
+        g["lessons"].append(req.lesson_done)
+    st.put(owner, "META", "guide", g)
+    return g
+
+
+def _wallet_out(w: dict | None) -> dict | None:
+    if not w:
+        return None
+    return {"cash_cad": w["cash_cad"], "start_cad": w.get("start_cad"), "moves": w.get("moves", [])[:8]}
 
 
 # ------------------------------------------------------------------------------------------------ about
