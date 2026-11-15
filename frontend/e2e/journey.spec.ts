@@ -7,7 +7,7 @@ const shot = (page: any, name: string) => page.screenshot({ path: `${SHOTS}/${na
 
 test("investor states a request, agents propose verified orders, risky request challenged", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByText("Investir, avec quelqu'un")).toBeVisible();
+  await expect(page.getByText("Investir, avec un accompagnement")).toBeVisible();
   await shot(page, "01-welcome");
   // Accounts (Amazon Cognito): a fresh account each run, then straight to the questionnaire.
   await page.getByTestId("auth-mode").getByText("Créer un compte").click();

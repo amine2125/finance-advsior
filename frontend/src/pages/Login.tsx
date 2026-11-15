@@ -49,7 +49,7 @@ export default function Login() {
       <main className="relative mx-auto grid max-w-6xl gap-12 px-5 pb-16 pt-4 sm:px-6 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] lg:pt-14">
         <section className="min-w-0">
           <motion.h1 initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="font-display text-[42px] font-semibold leading-[1.02] tracking-tightest text-ink sm:text-[60px]">
-            Investir, avec quelqu'un qui vérifie pour vous.
+            Investir, avec un accompagnement qui <span className="inline-block whitespace-nowrap rounded-[0.14em] bg-primary-500/15 px-[0.12em] pb-[0.02em] pt-[0.1em] align-baseline leading-[0.78] text-primary-600">VOUS</span> ressemble.
           </motion.h1>
           <p className="mt-5 max-w-xl text-lg leading-relaxed text-ink-soft">Dites ce que vous voulez faire de votre argent. Des agents analysent votre profil, vos placements et le marché, puis vous proposent quoi faire, en expliquant pourquoi.</p>
           <Stagger as="ol" className="mt-10 hidden space-y-5 lg:block">
