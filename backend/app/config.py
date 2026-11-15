@@ -17,6 +17,8 @@ def _load_dotenv(path: Path) -> None:
         line = line.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
+        if line.startswith("export "):  # lines pasted from a terminal (« export KEY=value ») work too
+            line = line[len("export "):].strip()
         k, v = line.split("=", 1)
         v = v.strip().strip('"').strip("'")
         if k.strip() and v:

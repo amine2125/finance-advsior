@@ -67,7 +67,7 @@ export function AdvisorProvider({ children }: { children: ReactNode }) {
         setConv(final.result.conversation_id);
         setMsgs((x) => [...x, { role: "assistant", text: clean(final.result.answer), meta: final.result }]);
       } else {
-        setMsgs((x) => [...x, { role: "assistant", text: "Désolé, je n'ai pas pu répondre cette fois-ci. " + (final.error || ""), error: true }]);
+        setMsgs((x) => [...x, { role: "assistant", text: friendlyError(final.error), error: true }]);
       }
     } catch (e) {
       setMsgs((x) => [...x, { role: "assistant", text: (e as ApiError).message, error: true }]);
@@ -186,4 +186,11 @@ function Bubble({ role, children, error }: { role: "user" | "assistant"; childre
       </div>
     </div>
   );
+}
+
+/** Never show a raw cloud error to the client: an AI outage is said plainly, with what still works. */
+function friendlyError(e?: string | null): string {
+  if (e && /bedrock|token|credential|throttl|access ?denied|converse/i.test(e))
+    return "Je suis momentanément indisponible (service d'IA hors ligne). Les agents peuvent quand même analyser vos demandes depuis l'accueil, avec une explication simplifiée.";
+  return "Désolé, je n'ai pas pu répondre cette fois-ci. Réessayez dans un instant.";
 }
