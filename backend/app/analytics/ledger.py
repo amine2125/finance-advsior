@@ -78,9 +78,3 @@ class MetricLedger:
             led._records[k] = MetricRecord(**v)
         return led
 
-    def compact_lines(self, limit: int | None = None) -> str:
-        lines = []
-        for rec in list(self._records.values())[: limit or None]:
-            win = f" [{rec.window_start}→{rec.window_end}]" if rec.window_start else ""
-            lines.append(f"{rec.metric_id} | {rec.label} | {rec.display}{win}")
-        return "\n".join(lines)

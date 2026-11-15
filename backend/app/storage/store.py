@@ -17,7 +17,7 @@ from typing import Protocol
 
 from ..config import get_settings
 
-KINDS = {"PORTFOLIO", "PERSONA", "ANALYSIS", "SNAPSHOT", "DEBATE", "ALERT", "JOB", "REPORT", "CONV", "HYPE", "HYP", "RESEARCH", "REPLAY", "META"}
+KINDS = {"PORTFOLIO", "PERSONA", "ANALYSIS", "SNAPSHOT", "DEBATE", "ALERT", "JOB", "REPORT", "CONV", "HYPE", "HYP", "RESEARCH", "REPLAY", "META", "GOAL", "MANDATE"}
 _SAFE = re.compile(r"^[A-Za-z0-9_.\-]{1,80}$")
 
 
@@ -33,6 +33,7 @@ class Store(Protocol):
     def get(self, owner: str, kind: str, item_id: str) -> dict | None: ...
     def list(self, owner: str, kind: str, limit: int = 50) -> list[dict]: ...
     def delete(self, owner: str, kind: str, item_id: str) -> None: ...
+    def ids(self, owner: str, kind: str) -> list[str]: ...
 
 
 class LocalStore:
@@ -72,6 +73,11 @@ class LocalStore:
         p = self._path(owner, kind, item_id)
         if p.exists():
             p.unlink()
+
+    def ids(self, owner, kind):
+        _check(owner, kind, "x")
+        d = self.root / owner / kind
+        return [f.stem for f in d.glob("*.json")] if d.exists() else []
 
 
 class DynamoStore:
@@ -117,8 +123,34 @@ class DynamoStore:
         _check(owner, kind, item_id)
         self.table.delete_item(Key={"PK": f"USER#{owner}", "SK": f"{kind}#{item_id}"})
 
+    def ids(self, owner, kind):
+        from boto3.dynamodb.conditions import Key
+
+        _check(owner, kind, "x")
+        out, start = [], None
+        while True:
+            kw = {"KeyConditionExpression": Key("PK").eq(f"USER#{owner}") & Key("SK").begins_with(f"{kind}#"), "ProjectionExpression": "SK"}
+            if start:
+                kw["ExclusiveStartKey"] = start
+            r = self.table.query(**kw)
+            out += [i["SK"].split("#", 1)[1] for i in r.get("Items", [])]
+            start = r.get("LastEvaluatedKey")
+            if not start:
+                return out
+
 
 _store: Store | None = None
+
+
+def delete_owner(owner: str) -> int:
+    """Erase every record of one account (« Tout effacer »). Returns how many records were removed."""
+    st = get_store()
+    n = 0
+    for kind in sorted(KINDS):
+        for item_id in st.ids(owner, kind):
+            st.delete(owner, kind, item_id)
+            n += 1
+    return n
 
 
 def get_store() -> Store:

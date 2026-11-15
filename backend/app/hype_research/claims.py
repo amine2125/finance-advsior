@@ -87,7 +87,6 @@ def verify_claims(claims: list[dict], clusters: list[dict], filings: list[dict] 
     for c in claims:
         cl = by_cluster.get(c["cluster_id"], {})
         evidence = cl.get("members", [])
-        indep = 1 if cl else 0
         same = [o for o in claims if o is not c and o["claim_type"] == c["claim_type"] and o.get("direction") == c.get("direction")
                 and o["cluster_id"] != c["cluster_id"] and _similar(o["proposition"], c["proposition"])]
         pubs = set(cl.get("publishers", []))

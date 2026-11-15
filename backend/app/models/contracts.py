@@ -106,6 +106,7 @@ class InvestorProfile(BaseModel):
     excluded_sectors: list[str] = []
     benchmark_id: str = "BLEND_BALANCED"
     budget: RiskBudget
+    kyc: dict | None = None  # « Connaître son client » : tolérance, capacité, connaissances, bilan financier, étapes avant d'investir
     watchlist: list[str] = []
     notifications_opt_in: bool = False
     quiet_hours: str | None = None
@@ -160,16 +161,6 @@ class PortfolioCreate(BaseModel):
 # ---------------------------------------------------------------------------------------------
 # Evidence ledger
 # ---------------------------------------------------------------------------------------------
-class DataSourceReference(BaseModel):
-    source_id: str
-    provider: str
-    dataset: str
-    url: str | None = None
-    license_note: str | None = None
-    extracted_at: str | None = None
-    coverage_start: str | None = None
-    coverage_end: str | None = None
-    origin: str | None = None
 
 
 class MetricRecord(BaseModel):
@@ -187,57 +178,6 @@ class MetricRecord(BaseModel):
     source_ids: list[str] = []
     quality_flags: list[str] = []
     calculation_version: str = ""
-
-
-class EvidenceRecord(BaseModel):
-    evidence_id: str
-    kind: Literal["filing", "news_article", "market_snapshot", "attention_series", "fixture"]
-    provider: str
-    publisher: str | None = None
-    title: str | None = None
-    canonical_url: str | None = None
-    published_at: str | None = None
-    event_at: str | None = None
-    retrieved_at: str
-    claim_extracted_at: str | None = None
-    is_original: bool | None = None
-    corrected_or_retracted: bool | None = None
-    duplicate_cluster_id: str | None = None
-    access_rights: str = "metadata only; follow provider terms"
-    content_hash: str | None = None
-    language: str | None = None
-    is_fixture: bool = False
-    injection_flags: list[str] = []
-    extra: dict[str, Any] = {}
-
-
-class NewsEvent(BaseModel):
-    event_id: str
-    asset_id: str
-    title: str
-    event_type: str
-    occurred_at: str | None = None
-    published_at: str | None = None
-    evidence_ids: list[str]
-    primary_source: bool
-    status: ClaimStatus
-    url: str | None = None
-
-
-class ClaimVerification(BaseModel):
-    claim_id: str
-    proposition: str
-    claim_type: str
-    asset_id: str | None
-    source_evidence_ids: list[str]
-    cluster_ids: list[str] = []
-    independent_reports: int = 0
-    status: ClaimStatus
-    info_class: InfoClass
-    rationale: str
-    supporting_ids: list[str] = []
-    contradicting_ids: list[str] = []
-    testable_hypothesis_id: str | None = None
 
 
 # ---------------------------------------------------------------------------------------------
@@ -324,54 +264,12 @@ class VerificationResult(BaseModel):
     passed: bool
 
 
-class CorrectionEntry(BaseModel):
-    at: str = Field(default_factory=utcnow)
-    stage: str
-    original: str
-    issue: str
-    action: str
-
-
-class SupervisorDecision(BaseModel):
-    analysis_id: str
-    user_question: str
-    persona_id: str | None
-    findings: list[dict[str, Any]]
-    opportunity_argument: str
-    risk_argument: str
-    persona_summary: str
-    accepted_claims: list[dict[str, Any]]
-    rejected_or_unverified_claims: list[dict[str, Any]]
-    conflicts: list[dict[str, Any]]
-    final_assessment: dict[str, Any]
-    scenario_options: list[dict[str, Any]]
-    limitations: list[str]
-    source_references: list[str]
-    calculation_references: list[str]
-    verified_event_references: list[str] = []
-    hype_attention_assessment: dict[str, Any] | None = None
-    persona_hype_fit_assessment: dict[str, Any] | None = None
-    corrections: list[CorrectionEntry] = []
-    next_step: str = ""
-    abstained: bool = False
-    created_at: str = Field(default_factory=utcnow)
-    data_as_of: str
-
-
-class ScenarioDefinition(BaseModel):
-    kind: Literal["shock", "historical_replay"]
-    name: str = "Scénario personnalisé"
-    shocks: dict[str, float] = {}   # keys: sector:<name>, asset_class:<name>, asset:<id>, fx:USDCAD, default
-    start_date: str | None = None
-    end_date: str | None = None
-    rebalancing: Literal["none", "monthly"] = "none"
-
-
 class AgentTraceStep(BaseModel):
     step_id: str
     agent_id: str
     label: str
     status: Literal["pending", "running", "done", "failed", "skipped"] = "pending"
+    engine: Literal["calcul", "ia", "mixte"] | None = None  # deterministic Python, a language model, or both (shown in the trace)
     started_at: str | None = None
     ended_at: str | None = None
     model_id: str | None = None
@@ -384,7 +282,7 @@ class AgentTraceStep(BaseModel):
 class Job(BaseModel):
     job_id: str
     owner_id: str
-    kind: Literal["debate", "chat", "hype", "replay", "report", "investigate"]
+    kind: Literal["debate", "chat", "hype", "replay", "report", "investigate", "mandate"]
     status: Literal["queued", "running", "done", "failed"] = "queued"
     steps: list[AgentTraceStep] = []
     request: dict[str, Any] = {}
@@ -393,28 +291,6 @@ class Job(BaseModel):
     error: str | None = None
     created_at: str = Field(default_factory=utcnow)
     updated_at: str = Field(default_factory=utcnow)
-
-
-class RiskAlert(BaseModel):
-    alert_id: str
-    owner_id: str
-    portfolio_id: str
-    persona_id: str | None
-    rule_id: str
-    severity: Severity
-    title: str
-    trigger: str
-    affected_assets: list[str]
-    data_date: str
-    metrics: dict[str, Any]
-    persona_constraint: str | None = None
-    explanation: str
-    status: Literal["new", "reviewed", "dismissed"] = "new"
-    simulated_replay: bool = False
-    replay_id: str | None = None
-    dedup_key: str
-    delivery: str = "in-app only (notification delivery not configured)"
-    created_at: str = Field(default_factory=utcnow)
 
 
 class AnalysisSnapshot(BaseModel):

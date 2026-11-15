@@ -164,14 +164,14 @@ def stressed_correlation(returns: pd.DataFrame, weights: dict[str, float], ppy: 
     end = roll.idxmin()
     end_pos = returns.index.get_loc(end)
     win = returns.iloc[end_pos - window + 1:end_pos + 1]
-    c_s = win.corr().fillna(0).to_numpy()
+    c_s = win.corr().fillna(0).to_numpy(copy=True)  # pandas 3 (copy-on-write) returns a read-only view otherwise
     np.fill_diagonal(c_s, 1.0)
     cols = list(returns.columns)
     w = np.array([weights.get(c, 0.0) for c in cols])
     vols = returns.std(ddof=1).to_numpy() * math.sqrt(ppy)
     d = np.diag(vols)
     stressed_var = float(w @ d @ c_s @ d @ w)
-    normal_corr = returns.corr().fillna(0).to_numpy()
+    normal_corr = returns.corr().fillna(0).to_numpy(copy=True)
     np.fill_diagonal(normal_corr, 1.0)
     normal_var = float(w @ d @ normal_corr @ d @ w)
     return {
@@ -196,12 +196,14 @@ def rolling_avg_corr(returns: pd.DataFrame, weights: dict[str, float], window: i
 def risk_free_rate(md: MarketData, start: str, end: str) -> dict:
     if md.macro.empty:
         return {"value": 0.0, "source_id": None, "note": "taux sans risque indisponible: 0 utilisé"}
-    m = md.macro[(md.macro["series_id"] == "CA_TBILL_3M") & (md.macro["date"] >= start) & (md.macro["date"] <= end)
-                 & (md.macro["pit_safe"] == 1)]
-    if m.empty:
-        return {"value": 0.0, "source_id": None, "note": "taux sans risque indisponible: 0 utilisé"}
-    return {"value": float(m["value"].mean()) / 100, "source_id": str(m["source_id"].iloc[0]),
-            "note": "moyenne du bon du Trésor canadien 3 mois sur la fenêtre"}
+    labels = {"CA_TBILL_3M": "bon du Trésor canadien 3 mois", "CA_POLICY_RATE": "taux directeur de la Banque du Canada"}
+    for sid, label in labels.items():  # first available, point-in-time safe series wins
+        m = md.macro[(md.macro["series_id"] == sid) & (md.macro["date"] >= start) & (md.macro["date"] <= end)
+                     & (md.macro["pit_safe"] == 1)]
+        if not m.empty:
+            return {"value": float(m["value"].mean()) / 100, "source_id": str(m["source_id"].iloc[0]),
+                    "note": f"moyenne du {label} sur la fenêtre", "series_id": sid}
+    return {"value": 0.0, "source_id": None, "note": "taux sans risque indisponible: 0 utilisé"}
 
 
 def portfolio_risk_metrics(md: MarketData, weights: dict[str, float], as_of: pd.Timestamp,
@@ -257,9 +259,12 @@ def portfolio_risk_metrics(md: MarketData, weights: dict[str, float], as_of: pd.
             "excess_return": float(pidx.iloc[-1] - bidx.iloc[-1]), "tracking_error": te,
             "n_obs": int(len(common)), "note": "même devise (CAD), même fenêtre, rendements totaux (adj_close)",
         }
-        bmap = {d: float(v) for d, v in bidx.items()}
+        # Crypto trades every day, the benchmark only on market days: carry the last known index value over
+        # weekends/holidays (no change on a closed market). Before the first common day there is no value (null).
+        bfull = bidx.reindex(value_index.index).ffill()
         for row in series:
-            row["benchmark"] = round(bmap.get(pd.Timestamp(row["date"]), np.nan), 5)
+            v = bfull.get(pd.Timestamp(row["date"]))
+            row["benchmark"] = round(float(v), 5) if v is not None and np.isfinite(v) else None
     out["series"] = series
     return out
 

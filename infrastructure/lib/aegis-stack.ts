@@ -8,20 +8,19 @@ import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
 import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as logs from "aws-cdk-lib/aws-logs";
 import * as iam from "aws-cdk-lib/aws-iam";
-import * as sns from "aws-cdk-lib/aws-sns";
-import * as kms from "aws-cdk-lib/aws-kms";
 import * as apigw from "aws-cdk-lib/aws-apigatewayv2";
 import * as integrations from "aws-cdk-lib/aws-apigatewayv2-integrations";
 import * as cloudfront from "aws-cdk-lib/aws-cloudfront";
 import * as origins from "aws-cdk-lib/aws-cloudfront-origins";
-import * as scheduler from "aws-cdk-lib/aws-scheduler";
 import * as cw from "aws-cdk-lib/aws-cloudwatch";
+import * as cognito from "aws-cdk-lib/aws-cognito";
 
 /**
  * Smallest credible AWS footprint for AEGIS:
  *  CloudFront (+ private S3 SPA) -> /api/* -> API Gateway HTTP API -> Lambda (FastAPI) -> async worker Lambda (multi-agent jobs)
- *  Amazon Bedrock (Converse) for every agent call; DynamoDB single table; private S3 data bucket; EventBridge Scheduler daily scan;
- *  SNS for opt-in alert delivery; CloudWatch logs (EMF token/latency metrics) + dashboard.
+ *  Amazon Bedrock (Converse) for every agent call; DynamoDB single table; private S3 data bucket;
+ *  CloudWatch logs (EMF token/latency metrics) + dashboard.
+ *  Amazon Cognito user pool for sign-up / sign-in (the API validates each access token; passwords never reach our code).
  */
 export class AegisStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -38,7 +37,7 @@ export class AegisStack extends cdk.Stack {
     });
     const dataDir = path.join(repo, "data", "active");
     if (!fs.existsSync(path.join(dataDir, "prices_daily.csv"))) {
-      throw new Error("data/active is empty: run scripts/import_datathon_zip.py or scripts/bootstrap_public_data.py before deploying");
+      throw new Error("data/active is empty: run `make data` before deploying");
     }
     new s3deploy.BucketDeployment(this, "DeployDataset", {
       sources: [s3deploy.Source.asset(dataDir)], destinationBucket: dataBucket, destinationKeyPrefix: "datasets/active/", prune: true,
@@ -51,8 +50,24 @@ export class AegisStack extends cdk.Stack {
       pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true }, removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
 
-    const topic = new sns.Topic(this, "AlertTopic", {
-      displayName: `${appName} Guardian alerts (simulation)`, masterKey: kms.Alias.fromAliasName(this, "SnsKey", "alias/aws/sns"),
+    // ---------------------------------------------------------------- accounts (Amazon Cognito)
+    // Datathon demo: new accounts are confirmed at once (no e-mail code to wait for), so judges can sign up and test immediately.
+    const autoConfirm = new lambda.Function(this, "AutoConfirmFunction", {
+      runtime: lambda.Runtime.NODEJS_20_X, handler: "index.handler", timeout: cdk.Duration.seconds(5),
+      code: lambda.Code.fromInline(
+        "exports.handler=async(e)=>{e.response.autoConfirmUser=true;if(e.request.userAttributes&&e.request.userAttributes.email){e.response.autoVerifyEmail=true;}return e;};"),
+      description: "Cognito pre-sign-up: confirm demo accounts immediately",
+    });
+    const userPool = new cognito.UserPool(this, "UserPool", {
+      userPoolName: `${appName}-users`, selfSignUpEnabled: true, signInAliases: { email: true }, signInCaseSensitive: false,
+      standardAttributes: { email: { required: true, mutable: true } },
+      passwordPolicy: { minLength: 8, requireLowercase: true, requireUppercase: true, requireDigits: true, requireSymbols: false },
+      accountRecovery: cognito.AccountRecovery.EMAIL_ONLY, lambdaTriggers: { preSignUp: autoConfirm },
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+    const userPoolClient = userPool.addClient("WebClient", {
+      authFlows: { userPassword: true, userSrp: true }, generateSecret: false, preventUserExistenceErrors: true,
+      accessTokenValidity: cdk.Duration.hours(1), idTokenValidity: cdk.Duration.hours(1), refreshTokenValidity: cdk.Duration.days(30),
     });
 
     // ---------------------------------------------------------------- compute
@@ -65,9 +80,11 @@ export class AegisStack extends cdk.Stack {
       AEGIS_APP_NAME: appName, AEGIS_ENV: "aws", AEGIS_STORAGE_BACKEND: "dynamodb", AEGIS_DYNAMODB_TABLE: table.tableName,
       AEGIS_DATA_BUCKET: dataBucket.bucketName, AEGIS_DATA_PREFIX: "datasets/active/", AEGIS_BEDROCK_REGION: this.region,
       AEGIS_AGENT_MODEL_ID: agentModel, AEGIS_SUPERVISOR_MODEL_ID: supervisorModel, AEGIS_LLM_ENABLED: "true",
-      AEGIS_JOB_RUNNER: "lambda", AEGIS_WEB_RESEARCH_ENABLED: "true", AEGIS_ALERT_TOPIC_ARN: topic.topicArn,
+      AEGIS_JOB_RUNNER: "lambda", AEGIS_WEB_RESEARCH_ENABLED: "true",
       AEGIS_CORS_ORIGINS: "http://localhost:5173", AEGIS_SEC_USER_AGENT: "AEGIS datathon prototype aegis-demo@example.org",
       AEGIS_LOCAL_STORE: "/tmp/aegis-local", AEGIS_LLM_TIMEOUT_S: "90",
+      AEGIS_AUTH: "cognito", AEGIS_COGNITO_REGION: this.region, AEGIS_COGNITO_USER_POOL_ID: userPool.userPoolId,
+      AEGIS_COGNITO_CLIENT_ID: userPoolClient.userPoolClientId, AEGIS_DEMO_ACCOUNTS: "true",
     };
     const worker = new lambda.Function(this, "WorkerFunction", {
       runtime: lambda.Runtime.PYTHON_3_12, architecture: lambda.Architecture.X86_64, handler: "app.lambda_handler.worker_handler", code,
@@ -95,8 +112,6 @@ export class AegisStack extends cdk.Stack {
       }));
     }
     worker.grantInvoke(api);
-    topic.grantPublish(worker);
-    topic.grantPublish(api);
 
     // ---------------------------------------------------------------- API
     const httpApi = new apigw.HttpApi(this, "HttpApi", {
@@ -140,21 +155,8 @@ export class AegisStack extends cdk.Stack {
       });
     }
 
-    // ---------------------------------------------------------------- scheduled Guardian scan (deterministic, no LLM)
-    const schedRole = new iam.Role(this, "SchedulerRole", { assumedBy: new iam.ServicePrincipal("scheduler.amazonaws.com") });
-    worker.grantInvoke(schedRole);
-    new scheduler.CfnSchedule(this, "DailyGuardianScan", {
-      description: "AEGIS daily Guardian scan of monitored simulated portfolios", flexibleTimeWindow: { mode: "OFF" },
-      scheduleExpression: "cron(0 11 * * ? *)", scheduleExpressionTimezone: "America/Toronto",
-      target: { arn: worker.functionArn, roleArn: schedRole.roleArn, input: JSON.stringify({ task: "guardian_scan" }),
-                retryPolicy: { maximumRetryAttempts: 0 } },
-    });
-
     // ---------------------------------------------------------------- observability
-    const metric = (name: string, stat = "Sum") => new cw.Metric({ namespace: "AEGIS/Agents", metricName: name, statistic: stat,
-      dimensionsMap: {}, period: cdk.Duration.minutes(5) });
-    const agentIds = ["opportunity_agent.r1", "risk_agent.r1", "opportunity_agent.r2", "risk_agent.r2", "persona_agent", "supervisor.synthesis",
-      "supervisor.correction", "copilot", "market_intelligence.claim_extraction"];
+    const agentIds = ["opportunity_agent.r1", "risk_agent.r1", "explainer", "copilot", "supervisor", "market_intelligence.claim_extraction"];
     new cw.Dashboard(this, "Dashboard", {
       dashboardName: `${appName}-agents`,
       widgets: [[
@@ -167,13 +169,13 @@ export class AegisStack extends cdk.Stack {
         new cw.GraphWidget({ title: "Lambda – durée (p90)", width: 12, left: [api.metricDuration({ statistic: "p90" }), worker.metricDuration({ statistic: "p90" })] }),
       ]],
     });
-    void metric;
 
     new cdk.CfnOutput(this, "AppUrl", { value: `https://${distribution.distributionDomainName}` });
     new cdk.CfnOutput(this, "ApiEndpoint", { value: httpApi.apiEndpoint });
     new cdk.CfnOutput(this, "TableName", { value: table.tableName });
     new cdk.CfnOutput(this, "DataBucketName", { value: dataBucket.bucketName });
     new cdk.CfnOutput(this, "WorkerFunctionName", { value: worker.functionName });
-    new cdk.CfnOutput(this, "AlertTopicArn", { value: topic.topicArn });
+    new cdk.CfnOutput(this, "UserPoolId", { value: userPool.userPoolId });
+    new cdk.CfnOutput(this, "UserPoolClientId", { value: userPoolClient.userPoolClientId });
   }
 }

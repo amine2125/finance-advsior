@@ -1,4 +1,8 @@
-"""Personas and simulated portfolios (CRUD, CSV import, demo seeding)."""
+"""Investor profiles and simulated portfolios (CRUD, CSV import).
+
+Nothing is pre-seeded: every profile comes from the user's onboarding answers and every portfolio from
+what the user enters. The datathon reference personas live in `seed.py` and are only loaded on explicit request.
+"""
 from __future__ import annotations
 
 import csv
@@ -9,40 +13,49 @@ import pandas as pd
 from ..analytics.portfolio import quantities_from_amounts
 from ..data.loader import DataUnavailableError
 from ..data.registry import get_market_data
+from ..errors import NotFound
 from ..ids import new_id
 from ..models import InvestorProfile, Portfolio, PortfolioCreate, PortfolioHolding, utcnow
 from ..storage.store import get_store
-from .seed import DEMO_PORTFOLIOS, OFFICIAL_PERSONAS
-
-
-from ..errors import NotFound  # noqa: E402,F401
 
 
 def list_personas(owner: str) -> list[InvestorProfile]:
-    store = get_store()
-    custom = {p["persona_id"]: InvestorProfile(**p) for p in store.list(owner, "PERSONA", 100)}
-    out = [custom.get(p.persona_id, p) for p in OFFICIAL_PERSONAS]
-    out += [p for pid, p in custom.items() if pid not in {o.persona_id for o in OFFICIAL_PERSONAS}]
-    return out
+    items = [InvestorProfile(**p) for p in get_store().list(owner, "PERSONA", 100)]
+    return sorted(items, key=lambda p: p.created_at, reverse=True)
 
 
 def get_persona(owner: str, persona_id: str) -> InvestorProfile:
     stored = get_store().get(owner, "PERSONA", persona_id)
-    if stored:
-        return InvestorProfile(**stored)
-    for p in OFFICIAL_PERSONAS:
-        if p.persona_id == persona_id:
-            return p
-    raise NotFound(f"persona {persona_id} introuvable")
+    if not stored:
+        raise NotFound(f"profil {persona_id} introuvable")
+    return InvestorProfile(**stored)
+
+
+def resolve_persona(owner: str, persona_id: str | None = None, pf: Portfolio | None = None) -> InvestorProfile:
+    """Explicit id, else the portfolio's profile, else the user's most recent profile. Never a default persona."""
+    pid = persona_id or (pf.persona_id if pf else None)
+    if pid:
+        return get_persona(owner, pid)
+    items = list_personas(owner)
+    if not items:
+        raise NotFound("Aucun profil investisseur: complétez d'abord l'inscription.")
+    return items[0]
+
+
+def resolve_portfolio(owner: str, portfolio_id: str | None = None) -> Portfolio:
+    if portfolio_id:
+        return get_portfolio(owner, portfolio_id)
+    items = list_portfolios(owner)
+    if not items:
+        raise NotFound("Aucun portefeuille: ajoutez vos placements ou démarrez de zéro.")
+    return items[0]
 
 
 def save_persona(owner: str, profile: InvestorProfile) -> InvestorProfile:
     existing = get_store().get(owner, "PERSONA", profile.persona_id)
     if existing:
         profile.budget.version = int(existing.get("budget", {}).get("version", 1)) + 1
-    elif any(p.persona_id == profile.persona_id for p in OFFICIAL_PERSONAS):
-        profile.budget.version = 2
-        profile.is_official = True
+        profile.created_at = existing.get("created_at", profile.created_at)
     get_store().put(owner, "PERSONA", profile.persona_id, profile.model_dump(mode="json"))
     return profile
 
@@ -65,27 +78,12 @@ def create_portfolio(owner: str, req: PortfolioCreate, is_demo: bool = False, de
     return pf
 
 
-def ensure_demo_portfolios(owner: str) -> None:
-    store = get_store()
-    if store.get(owner, "META", "seeded"):
-        return
-    md = get_market_data()
-    for d in DEMO_PORTFOLIOS:
-        if not all(md.has_asset(h["asset_id"]) for h in d["holdings"]):
-            continue  # demo depends on assets absent from the loaded universe
-        req = PortfolioCreate(name=d["name"], persona_id=d["persona_id"], holdings=d["holdings"], target_weights=d.get("target_weights"))
-        create_portfolio(owner, req, is_demo=True, demo_id=d["demo_id"])
-    store.put(owner, "META", "seeded", {"at": utcnow()})
-    store.put("system", "META", f"owner-{owner}", {"owner": owner, "at": utcnow()})
-
-
 def list_portfolios(owner: str) -> list[Portfolio]:
-    ensure_demo_portfolios(owner)
-    return [Portfolio(**p) for p in get_store().list(owner, "PORTFOLIO", 100)]
+    items = [Portfolio(**p) for p in get_store().list(owner, "PORTFOLIO", 100)]
+    return sorted(items, key=lambda p: p.created_at, reverse=True)
 
 
 def get_portfolio(owner: str, portfolio_id: str) -> Portfolio:
-    ensure_demo_portfolios(owner)
     d = get_store().get(owner, "PORTFOLIO", portfolio_id)
     if not d:
         raise NotFound(f"portefeuille {portfolio_id} introuvable")

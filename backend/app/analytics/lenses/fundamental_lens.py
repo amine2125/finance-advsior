@@ -1,7 +1,6 @@
 """Lens 1 (fundamentals, SEC EDGAR XBRL) and Lens 2 (reverse DCF) - US operating companies only."""
 from __future__ import annotations
 
-import datetime as dt
 
 import pandas as pd
 
@@ -12,7 +11,7 @@ from ...models import InfoClass, LensStatus
 from .. import fundamentals as F
 from ..ledger import MetricLedger
 from ..risk import beta, simple_returns
-from ..valuation import dcf_value, implied_growth, sensitivity_grid
+from ..valuation import dcf_value, implied_growth
 
 L1_BLIND = ["Ne dit rien du prix payé", "Rétrospectif, avec un délai de publication",
             "Pénalise les entreprises dont les actifs sont surtout incorporels"]
@@ -139,11 +138,3 @@ def run(md: MarketData, asset_id: str, as_of: pd.Timestamp, led: MetricLedger, b
     return lens1, lens2
 
 
-def fixture_check() -> dict:
-    """The 8A.3 fixture, exposed for the methodology page."""
-    v = dcf_value(100, 0.10, 5, 0.09, 0.025, 200, 40)
-    return {"inputs": {"fcf0": 100, "growth": 0.10, "years": 5, "r": 0.09, "g": 0.025, "net_debt": 200, "shares": 40},
-            "result": {k: v[k] for k in ("pv_explicit", "pv_terminal", "enterprise_value", "terminal_share", "value_per_share")},
-            "sensitivity": sensitivity_grid(100, 0.10, 5, [0.08, 0.09, 0.10], [0.02, 0.025, 0.03], 200, 40),
-            "reverse": {str(px): implied_growth(px, 100, 5, 0.09, 0.025, 200, 40) for px in (40, 60, 80)},
-            "computed_at": dt.datetime.now(dt.timezone.utc).isoformat()}

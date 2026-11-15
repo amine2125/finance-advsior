@@ -1,7 +1,6 @@
 """Hypothetical addition of a position: before/after concentration, risk and persona budget (deterministic)."""
 from __future__ import annotations
 
-import pandas as pd
 
 from ..analytics.ledger import MetricLedger
 from ..analytics.portfolio import quantities_from_amounts

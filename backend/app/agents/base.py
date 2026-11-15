@@ -24,10 +24,10 @@ class JobTracker:
         self.job.updated_at = utcnow()
         get_store().put(self.job.owner_id, "JOB", self.job.job_id, self.job.model_dump(mode="json"), ttl_s=7 * 24 * 3600)
 
-    def add(self, step_id: str, agent_id: str, label: str) -> None:
+    def add(self, step_id: str, agent_id: str, label: str, engine: str | None = None) -> None:
         with self._lock:
             if step_id not in self._steps:
-                s = AgentTraceStep(step_id=step_id, agent_id=agent_id, label=label)
+                s = AgentTraceStep(step_id=step_id, agent_id=agent_id, label=label, engine=engine)
                 self.job.steps.append(s)
                 self._steps[step_id] = s
             self._save()
@@ -96,6 +96,10 @@ class EvidencePacket:
     def metrics_text(self, limit: int = 160) -> str:
         recs = [r for r in self.ledger.records() if r.value is not None and not r.metric_id.startswith("pf.value.")]
         recs = [r for r in recs if r.metric_id.startswith(self.priority_metric_prefixes)]
+        # Order by prefix priority (stable within a prefix) so that the cut at `limit` drops the least important metrics,
+        # never the proposal's own numbers (mnd.*), which are registered last in the ledger.
+        rank = {p: i for i, p in enumerate(self.priority_metric_prefixes)}
+        recs.sort(key=lambda r: next(rank[p] for p in self.priority_metric_prefixes if r.metric_id.startswith(p)))
         lines = []
         for r in recs[:limit]:
             win = f" [{r.window_start}→{r.window_end}]" if r.window_start else ""

@@ -104,9 +104,9 @@ def diversified_alternatives(weights: dict[str, float], meta: dict[str, dict]) -
         if meta[a]["asset_class"] == "crypto":
             div[a] = w * 0.5
     div.update(keep_singles)
-    for a, add in {"XIU.TO": 0.35, "VEA": 0.35, "XBB.TO": 0.30}.items():
+    for a, add in {"XIU.TO": 0.35, "SPY": 0.35, "XBB.TO": 0.30}.items():
         div[a] = div.get(a, 0.0) + released * add
-    defensive = {"XBB.TO": 0.35, "AGG": 0.20, "XIU.TO": 0.15, "SPY": 0.10, "VEA": 0.08, "GLD": 0.07}
+    defensive = {"XBB.TO": 0.35, "AGG": 0.20, "XIU.TO": 0.15, "SPY": 0.10, "ZST.TO": 0.08, "GLD": 0.07}
     rest = 0.05
     for a, w in sorted(weights.items(), key=lambda kv: -kv[1]):
         if rest <= 0:
@@ -116,8 +116,8 @@ def diversified_alternatives(weights: dict[str, float], meta: dict[str, dict]) -
         rest -= take
     norm = lambda d: {k: v / sum(d.values()) for k, v in d.items() if v > 1e-9}  # noqa: E731
     return {
-        "diversified": {"label": "Diversifié hypothétique : réduit de 60 % les titres individuels, de 50 % la crypto, réalloue vers XIU.TO/VEA/XBB.TO",
+        "diversified": {"label": "Diversifié hypothétique : réduit de 60 % les titres individuels, de 50 % la crypto, réalloue vers XIU.TO/SPY/XBB.TO",
                         "weights": norm(div)},
-        "defensive": {"label": "Défensif hypothétique : 55 % obligations, 33 % actions larges, 7 % or, 5 % positions actuelles",
+        "defensive": {"label": "Défensif hypothétique : 63 % obligations (dont 8 % ultra-courtes), 25 % actions larges, 7 % or, 5 % positions actuelles",
                       "weights": norm(defensive)},
     }

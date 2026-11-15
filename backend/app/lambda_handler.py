@@ -1,7 +1,7 @@
 """AWS Lambda entry points.
 
 * `api_handler`   - API Gateway HTTP API (payload v2) -> FastAPI via Mangum.
-* `worker_handler` - asynchronous jobs ({"task": "job"}) and EventBridge Scheduler scans ({"task": "guardian_scan"}).
+* `worker_handler` - asynchronous agent jobs ({"task": "job"}).
 """
 from __future__ import annotations
 
@@ -27,9 +27,5 @@ def worker_handler(event, context):
 
         execute(event["owner"], event["job_id"])
         return {"ok": True}
-    if task == "guardian_scan":
-        from .guardian.engine import scheduled_scan_all
-
-        return scheduled_scan_all()
     log.warning(json.dumps({"event": "unknown_task", "payload_keys": sorted((event or {}).keys())}))
     return {"ok": False, "error": "unknown task"}

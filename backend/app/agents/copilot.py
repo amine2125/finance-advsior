@@ -11,12 +11,12 @@ from ..analytics.ledger import MetricLedger
 from ..analytics.portfolio import value_holdings
 from ..analytics.scenarios import SHOCK_PRESETS, apply_shock
 from ..config import get_settings
+from ..errors import NotFound
 from ..data.registry import get_market_data
 from ..governance.validator import check_free_text, strip_sentences
 from ..ids import new_id
 from ..methodology import METHODOLOGY
 from ..models import utcnow
-from ..services import jobs
 from ..services import portfolio_service as ps
 from ..services.analysis_service import persona_numbers, run_xray
 from ..services.impact_service import hypothetical_addition
@@ -29,6 +29,10 @@ from .prompts import COPILOT_SYSTEM
 from .quant_agent import compare_alternatives
 
 TOOLS = [
+    {"name": "model_portfolio", "description": "Portefeuille modèle simulé correspondant au profil déclaré de l'utilisateur, pour un montant donné (part Stabilité / Croissance, fonds indiciels qui les composent, ce qu'il aurait fait sur les dernières années). À utiliser pour « que dois-je acheter ? », « comment investir X $ ? », ou pour montrer une alternative simulée.",
+     "schema": {"type": "object", "properties": {"amount_cad": {"type": "number"}}, "required": ["amount_cad"]}},
+    {"name": "check_investment", "description": "À utiliser EN PREMIER pour toute question « puis-je / devrais-je investir X $ dans Y ? ». Verdict déterministe de compatibilité avec le profil de l'utilisateur et son portefeuille (compatible / compatible jusqu'à un montant maximal / non adapté) avec les raisons chiffrées (préférences, horizon, limites du profil).",
+     "schema": {"type": "object", "properties": {"asset_id": {"type": "string"}, "amount_cad": {"type": "number"}}, "required": ["asset_id", "amount_cad"]}},
     {"name": "portfolio_xray", "description": "Radiographie du portefeuille simulé actif: valeur, poids, secteurs, concentration, volatilité, perte max, VaR, corrélations, budget de risque du profil.",
      "schema": {"type": "object", "properties": {}, "required": []}},
     {"name": "asset_analysis", "description": "Analyse d'un actif de l'univers (asset_id = symbole, ex. NVDA, BTC-USD, XIU.TO): niveau de risque calculé, lentilles 1 à 6 (statuts honnêtes), matrice de couverture des modes d'échec.",
@@ -43,9 +47,6 @@ TOOLS = [
      "schema": {"type": "object", "properties": {}, "required": []}},
     {"name": "what_changed", "description": "Compare les deux derniers instantanés d'analyse du portefeuille (effet marché vs composition vs données/méthode).",
      "schema": {"type": "object", "properties": {}, "required": []}},
-    {"name": "start_debate", "description": "Lance un débat adversarial Opportunité vs Risque avec synthèse du Superviseur (asynchrone).",
-     "schema": {"type": "object", "properties": {"question": {"type": "string"}, "asset_id": {"type": "string"}, "amount_cad": {"type": "number"}},
-                "required": []}},
 ]
 
 
@@ -53,12 +54,14 @@ def mentioned_assets(md, text: str) -> list[str]:
     found = []
     up = text.upper()
     for aid, row in md.universe.iterrows():
-        base = aid.split(".")[0]
+        base = re.split(r"[.\-]", aid)[0]  # RY.TO → RY, BTC-USD → BTC
         if re.search(rf"(?<![A-Z0-9]){re.escape(aid)}(?![A-Z0-9])", up) or (len(base) >= 3 and re.search(rf"(?<![A-Z0-9]){re.escape(base)}(?![A-Z0-9])", up)):
             found.append(aid)
             continue
         names = [str(row["name"]).lower().split(" ")[0]] + [a.strip() for a in str(row.get("aliases") or "").split(";") if a.strip()]
-        if any(len(n) >= 4 and re.search(rf"\b{re.escape(n)}\b", text.lower()) for n in names):
+        first = names[0]  # the first word of the official name must be specific (« canadian », « spdr » are too vague below 4 letters)
+        if (len(first) >= 4 and re.search(rf"\b{re.escape(first)}\b", text.lower())) or \
+                any(len(n) >= 3 and re.search(rf"(?<!\w){re.escape(n)}(?!\w)", text.lower()) for n in names[1:]):
             found.append(aid)
     return found
 
@@ -72,6 +75,8 @@ class ToolBox:
         self._xr = None
 
     def xr(self):
+        if self.pf is None or not self.pf.holdings:
+            raise ValueError("la personne n'a encore aucun placement")
         if self._xr is None:
             self._xr = run_xray(self.md, self.pf, self.persona, include_series=False)
             self.led.merge(MetricLedger.from_dict(self._xr["ledger"]))
@@ -133,6 +138,40 @@ class ToolBox:
         return {"scenario": SHOCK_PRESETS[preset]["name"], "metrics": self._m([f"scn.{n}.return", f"scn.{n}.pnl"]), "label": r["label"],
                 "_summary": f"{r['return'] * 100:.1f} %"}
 
+    def t_model_portfolio(self, amount_cad: float):
+        from ..services.plan_service import recommended_plan
+        p = recommended_plan(self.md, self.persona, float(amount_cad), None)
+        self.led.add("plan.amount", "Montant du plan", float(amount_cad), "cad", "saisie de l'utilisateur", info_class="HYPOTHETICAL")
+        self.led.add("plan.growth_share", "Part Croissance du plan", p["growth_share"], "pct", "milieu de la bande du profil", info_class="HYPOTHETICAL")
+        self.led.add("plan.stable_share", "Part Stabilité du plan", p["stable_share"], "pct", "1 - part croissance", info_class="HYPOTHETICAL")
+        for s_ in p["sleeves"]:
+            for h in s_["holdings"]:
+                self.led.add(f"plan.weight.{h['asset_id']}", f"Part de {h['asset_id']} dans le plan", h["share"], "pct", "plan modèle", info_class="HYPOTHETICAL")
+                self.led.add(f"plan.amount.{h['asset_id']}", f"Montant {h['asset_id']} dans le plan", h["amount_cad"], "cad", "plan modèle", info_class="HYPOTHETICAL")
+        hist = p["history"]
+        for k, unit in (("total_return", "pct"), ("annualized_return", "pct"), ("max_drawdown", "pct"), ("value_end", "cad")):
+            if hist.get(k) is not None:
+                self.led.add(f"plan.hist.{k}", f"Plan – historique {k}", hist[k], unit, f"fenêtre {hist['window_start']} → {hist['window_end']}", info_class="COMPUTED_RESULT")
+        self.cards.append({"type": "plan", "amount_cad": amount_cad})
+        return {"profile": p["profile_level"], "growth_share": p["growth_share"], "stable_share": p["stable_share"],
+                "sleeves": [{"label": s_["label"], "share": s_["share"], "funds": [{"asset_id": h["asset_id"], "role": h["role"], "share": h["share"],
+                             "amount_cad": h["amount_cad"]} for h in s_["holdings"]]} for s_ in p["sleeves"]],
+                "history": {k: v for k, v in hist.items() if k != "series"}, "fits_profile": p["fits_profile"], "_summary": f"croissance {p['growth_share']:.0%}"}
+
+    def t_check_investment(self, asset_id: str, amount_cad: float):
+        from ..services.invest_service import check_investment
+        asset_id = self._resolve(asset_id).upper()
+        r = check_investment(self.md, self.persona, self.pf, asset_id, float(amount_cad))
+        self.led.add("inv.amount", "Montant envisagé", float(amount_cad), "cad", "saisie de l'utilisateur", info_class="HYPOTHETICAL")
+        self.led.add("inv.max_amount", f"Montant maximal compatible avec le profil – {asset_id}", r["max_amount_cad"], "cad",
+                     "recherche dichotomique: plus grand montant sans nouvelle limite dépassée", info_class="HYPOTHETICAL")
+        if r.get("after") and r["after"].get("weight") is not None:
+            self.led.add(f"inv.weight_after.{asset_id}", f"Poids de {asset_id} après l'ajout envisagé", r["after"]["weight"], "pct", "valeur_i / total", info_class="HYPOTHETICAL")
+        self.cards.append({"type": "invest_check", "asset_id": asset_id, "amount_cad": amount_cad, "verdict": r["verdict"]})
+        return {"verdict": r["verdict"], "headline": r["headline"], "reasons": [x["text"] for x in r["reasons"]],
+                "metrics": self._m(["inv.amount", "inv.max_amount", f"inv.weight_after.{asset_id}"]), "allowed_tier": r["allowed_tier"],
+                "asset_tier": r["asset_tier"]["tier"], "existing_breaches": r["existing_breaches"], "_summary": r["verdict"]}
+
     def t_hypothetical_addition(self, asset_id: str, amount_cad: float):
         asset_id = self._resolve(asset_id)
         imp, led = hypothetical_addition(self.md, self.pf, self.persona, asset_id.upper(), float(amount_cad),
@@ -151,7 +190,7 @@ class ToolBox:
 
         asset_id = self._resolve(asset_id)
         res = investigate(self.md, asset_id, self.question, self.persona, self.pf, amount_cad)
-        res["portfolio_id"] = self.pf.portfolio_id
+        res["portfolio_id"] = self.pf.portfolio_id if self.pf else None
         get_store().put(self.owner, "HYPE", res["research_id"], res)
         self.led.merge(MetricLedger.from_dict(res["ledger"]))
         self.cards.append({"type": "hype", "research_id": res["research_id"], "asset_id": asset_id.upper()})
@@ -173,22 +212,19 @@ class ToolBox:
         self.cards.append({"type": "what_changed"})
         return (diff or {"message": "Moins de deux instantanés enregistrés pour ce portefeuille"}) | {"_summary": "comparaison"}
 
-    def t_start_debate(self, question: str | None = None, asset_id: str | None = None, amount_cad: float | None = None):
-        job = jobs.submit(self.owner, "debate", {"portfolio_id": self.pf.portfolio_id, "persona_id": self.persona.persona_id,
-                                                 "question": question, "asset_id": asset_id, "amount_cad": amount_cad})
-        self.cards.append({"type": "debate_job", "job_id": job.job_id})
-        return {"job_id": job.job_id, "message": "Débat lancé; résultat dans la Chambre de débat.", "_summary": job.job_id}
-
 
 def run_chat(tracker: JobTracker, owner: str, req: dict) -> dict:
     s = get_settings()
     md = get_market_data()
     message = (req.get("message") or "").strip()[:2000]
-    pf = ps.get_portfolio(owner, req.get("portfolio_id") or "demo1_tech")
-    persona = ps.get_persona(owner, req.get("persona_id") or pf.persona_id or "robert")
+    try:
+        pf = ps.resolve_portfolio(owner, req.get("portfolio_id"))
+    except NotFound:
+        pf = None  # a new client can ask questions before investing
+    persona = ps.resolve_persona(owner, req.get("persona_id"), pf)
     conv_id = req.get("conversation_id") or new_id("conv")
     conv = get_store().get(owner, "CONV", conv_id) or {"conversation_id": conv_id, "messages": [], "created_at": utcnow()}
-    tracker.add("copilot.understand", "copilot", "Compréhension de la question")
+    tracker.add("copilot.understand", "copilot", "Compréhension de la question", "calcul")
     tracker.start("copilot.understand")
     biases = detect_biases(message)
     assets = mentioned_assets(md, message)
@@ -197,9 +233,9 @@ def run_chat(tracker: JobTracker, owner: str, req: dict) -> dict:
     box.question = message
     answer, policy, corrections, usage_tot = "", None, [], {"input_tokens": 0, "output_tokens": 0, "calls": 0}
     if is_prediction_request(message):
-        tracker.add("copilot.forecast_policy", "audit_agent", "Politique de prévision (réponse en quatre parties)")
+        tracker.add("copilot.forecast_policy", "audit_agent", "Politique de prévision (réponse en quatre parties)", "calcul")
         tracker.start("copilot.forecast_policy")
-        target = assets[0] if assets else (pf.holdings[0].asset_id if pf.holdings else "SPY")
+        target = assets[0] if assets else (pf.holdings[0].asset_id if pf and pf.holdings else "SPY")
         policy = four_part_answer(md, target, md.end_date, box.led)
         answer = "\n\n".join(f"**{p['title']}.** {p['text']}" for p in policy["parts"])
         tracker.done("copilot.forecast_policy", f"réponse déterministe pour {target}")
@@ -208,8 +244,14 @@ def run_chat(tracker: JobTracker, owner: str, req: dict) -> dict:
         if llm is None:
             raise LLMError("LLM désactivé: le Copilote nécessite Amazon Bedrock")
         tool_cfg = {"tools": [{"toolSpec": {"name": t["name"], "description": t["description"], "inputSchema": {"json": t["schema"]}}} for t in TOOLS]}
-        system = COPILOT_SYSTEM + f"\n\nPROFIL ACTIF:\n{persona_text(persona)}\nPORTEFEUILLE ACTIF: {pf.name} ({pf.portfolio_id}); " \
+        system = COPILOT_SYSTEM + f"\n\nPROFIL ACTIF:\n{persona_text(persona)}\nPORTEFEUILLE ACTIF: {(pf.name + ' (' + pf.portfolio_id + ')') if pf else 'aucun placement pour le moment'}; " \
                                   f"données au {md.end_date.date()} (mode rejeu historique; aucun flux de marché en direct)."
+        last = sorted(get_store().list(owner, "MANDATE", 10), key=lambda x: x.get("created_at", ""), reverse=True)[:1]
+        if last:
+            lm = last[0]
+            system += ("\nDERNIÈRE PROPOSITION DES AGENTS (statut " + lm["status"] + ") pour « " + lm["request"] + " » : " + lm["headline"]
+                       + " Ordres: " + "; ".join(f"{o['side']} {o['asset_id']}" for o in lm["orders"])
+                       + ". Contrôles non respectés: " + ("; ".join(g["label"] for g in lm["governance"] if g["status"] in ("breach", "blocked", "adjusted")) or "aucun") + ".")
         if biases:
             system += "\nSCHÉMAS DÉTECTÉS DANS LA FORMULATION (à traiter pédagogiquement, sans juger la personne): " + \
                       "; ".join(f"{b['label']}: {b['educational_response']}" for b in biases)
@@ -217,10 +259,10 @@ def run_chat(tracker: JobTracker, owner: str, req: dict) -> dict:
         for m in conv["messages"][-6:]:
             history.append({"role": m["role"], "content": [{"text": m["text"][:1500]}]})
         msgs = history + [{"role": "user", "content": [{"text": message}]}]
-        tracker.add("copilot.reasoning", "copilot", "Choix des outils et rédaction")
+        tracker.add("copilot.reasoning", "copilot", "Choix des outils et rédaction", "ia")
         tracker.start("copilot.reasoning")
         for _ in range(5):
-            r = llm.converse(system=system, messages=msgs, model_id=s.agent_model_id, max_tokens=1800, temperature=0.2, tool_config=tool_cfg,
+            r = llm.converse(system=system, messages=msgs, model_id=s.reasoning_model_id, max_tokens=1800, temperature=0.2, tool_config=tool_cfg,
                              agent_id="copilot")
             usage_tot["input_tokens"] += r["usage"]["input_tokens"]
             usage_tot["output_tokens"] += r["usage"]["output_tokens"]
@@ -238,9 +280,9 @@ def run_chat(tracker: JobTracker, owner: str, req: dict) -> dict:
             msgs.append({"role": "user", "content": results})
         tracker.done("copilot.reasoning", f"{usage_tot['calls']} appel(s) Bedrock", {"model_id": s.agent_model_id, **usage_tot})
         # governance on the final answer
-        tracker.add("audit.answer", "audit_agent", "Audit de la réponse")
+        tracker.add("audit.answer", "audit_agent", "Audit de la réponse", "calcul")
         tracker.start("audit.answer")
-        if not box.led.ids():
+        if not box.led.ids() and pf is not None and pf.holdings:
             box.xr()
         from ..governance.validator import extract_numbers
         extra = persona_numbers(persona) + [v for v, _, _ in extract_numbers(message)]
@@ -251,7 +293,7 @@ def run_chat(tracker: JobTracker, owner: str, req: dict) -> dict:
             corrections.append({"stage": "audit de la réponse", "issues": issues})
             msgs.append({"role": "user", "content": [{"text": "AUDIT: ta réponse contient des éléments non traçables ou interdits: " + "; ".join(issues) +
                                                       ". Réécris la réponse en retirant ou corrigeant ces éléments, sans appeler d'outil."}]})
-            r2 = llm.converse(system=system, messages=msgs, model_id=s.agent_model_id, max_tokens=1500, temperature=0.0, agent_id="copilot.correction",
+            r2 = llm.converse(system=system, messages=msgs, model_id=s.reasoning_model_id, max_tokens=1500, temperature=0.0, agent_id="copilot.correction",
                               tool_config=tool_cfg)
             usage_tot["calls"] += 1
             fixed = r2["text"] or answer
@@ -265,7 +307,7 @@ def run_chat(tracker: JobTracker, owner: str, req: dict) -> dict:
     conv["messages"] += [{"role": "user", "text": message, "at": utcnow()},
                          {"role": "assistant", "text": answer, "at": utcnow(), "message_id": msg_id, "cards": box.cards,
                           "biases": biases, "forecast_policy": policy, "corrections": corrections}]
-    conv["persona_id"], conv["portfolio_id"] = persona.persona_id, pf.portfolio_id
+    conv["persona_id"], conv["portfolio_id"] = persona.persona_id, (pf.portfolio_id if pf else None)
     get_store().put(owner, "CONV", conv_id, conv)
     return {"message_id": msg_id, "conversation_id": conv_id, "answer": answer, "cards": box.cards, "biases": biases,
             "forecast_policy": policy, "corrections": corrections, "usage": usage_tot,

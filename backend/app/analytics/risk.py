@@ -124,11 +124,3 @@ def rolling_window_base_rate(prices: pd.Series, window: int, threshold: float) -
             "gain_windows": int((fwd > 0).sum()), "note": "overlapping windows; observations are not independent"}
 
 
-def spearman(x: list[float], y: list[float]) -> float | None:
-    if len(x) < 3 or len(x) != len(y):
-        return None
-    rx = pd.Series(x).rank().to_numpy()
-    ry = pd.Series(y).rank().to_numpy()
-    if np.std(rx) == 0 or np.std(ry) == 0:
-        return None
-    return float(np.corrcoef(rx, ry)[0, 1])

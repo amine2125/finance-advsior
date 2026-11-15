@@ -4,7 +4,6 @@ from __future__ import annotations
 import datetime as dt
 import re
 
-import pandas as pd
 
 from ..analytics.bias import detect_biases
 from ..analytics.forecast_policy import four_part_answer, is_prediction_request
@@ -67,6 +66,19 @@ def _relevance_terms(md: MarketData, asset_id: str) -> list[str]:
 def _news_query(name: str, asset_id: str) -> str:
     base = re.sub(r"\b(inc|corp|corporation|class a|ltd|plc|co)\b\.?", "", name, flags=re.IGNORECASE).strip(" .,&")
     return f'"{base}"'
+
+
+def research_dates(prices_as_of: dt.date, researched_on: dt.date, nothing_live: bool = False) -> dict:
+    """Prices stop at the dataset's last day; news and filings are read live. Say so when the two differ (énoncé p. 14).
+    `nothing_live`: fixture, or no live source answered, so there is no later information to warn about."""
+    use_fixture = nothing_live
+    gap = 0 if use_fixture else max(0, (researched_on - prices_as_of).days)
+    note = None
+    if gap:
+        note = (f"Les prix s'arrêtent au {prices_as_of.isoformat()}, mais les nouvelles et les dépôts ont été lus le "
+                f"{researched_on.isoformat()} : ils peuvent décrire {gap} jour(s) que les chiffres de risque ne contiennent pas encore.")
+    return {"prices_as_of": prices_as_of.isoformat(), "researched_on": None if use_fixture else researched_on.isoformat(),
+            "gap_days": gap, "note": note}
 
 
 def run_research(md: MarketData, asset_id: str, question: str, persona: InvestorProfile | None, portfolio: Portfolio | None,
@@ -191,6 +203,7 @@ def run_research(md: MarketData, asset_id: str, question: str, persona: Investor
     return {
         "research_id": rid, "asset_id": asset_id, "name": name, "asset_class": meta["asset_class"], "question": question,
         "persona_id": persona.persona_id if persona else None, "created_at": utcnow(), "data_as_of": md.end_date.date().isoformat(),
+        "dates": research_dates(md.end_date.date(), today, use_fixture or not (filings is not None or news_status == "ok" or cg_snap)),
         "is_fixture": use_fixture, "fixture_label": FIXTURE_LABEL if use_fixture else None,
         "identity": {"asset_id": asset_id, "name": name, "exchange": meta.get("exchange"), "currency": meta["currency"],
                      "cik": meta.get("cik") or None, "coingecko_id": meta.get("coingecko_id") or None},

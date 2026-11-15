@@ -1,4 +1,7 @@
-// API client. Same-origin "/api" (Vite proxy locally, CloudFront behaviour on AWS). No credentials live in the browser.
+// API client. Same-origin "/api" (Vite proxy locally, CloudFront behaviour on AWS).
+// Cognito mode: each call carries the account's short-lived access token. Sandbox mode: a random id (tests, offline demo).
+import { accessToken, authMode, signOut } from "./auth";
+
 const BASE = (import.meta as any).env?.VITE_API_BASE || "";
 
 export function userId(): string {
@@ -11,6 +14,16 @@ export function userId(): string {
     localStorage.setItem("aegis.user", id);
   }
   return id;
+}
+
+/** "Recommencer": a fresh sandbox id, so the next visit starts the onboarding from scratch. */
+export function resetUser(): void {
+  localStorage.removeItem("aegis.user");
+}
+
+/** Tells the app the session ended (expired or revoked): it shows the sign-in screen. */
+function signedOutEverywhere() {
+  window.dispatchEvent(new Event("aegis:signedout"));
 }
 
 export class ApiError extends Error {
@@ -26,11 +39,24 @@ export class ApiError extends Error {
 }
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const res = await fetch(`${BASE}/api/v1${path}`, {
-    method,
-    headers: { "Content-Type": "application/json", "X-AEGIS-User": userId() },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
+  let res: Response;
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (authMode() === "cognito") {
+    const t = await accessToken();
+    if (!t) { signedOutEverywhere(); throw new ApiError(401, "unauthenticated", "Connectez-vous pour continuer."); }
+    headers.Authorization = `Bearer ${t}`;
+  } else {
+    headers["X-AEGIS-User"] = userId();
+  }
+  try {
+    res = await fetch(`${BASE}/api/v1${path}`, {
+      method,
+      headers,
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+  } catch {
+    throw new ApiError(0, "network", "Impossible de joindre le serveur. Vérifiez que le backend est démarré.");
+  }
   const text = await res.text();
   let data: any = null;
   try {
@@ -38,9 +64,11 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   } catch {
     data = null;
   }
+  if (res.status === 401 && authMode() === "cognito") { await signOut(); signedOutEverywhere(); }
   if (!res.ok) {
-    const e = data?.error || {};
-    throw new ApiError(res.status, e.code || "http_error", e.message || `Erreur HTTP ${res.status}`, e);
+    const e = data?.error || data?.detail || {};
+    const msg = e.message || (res.status >= 500 || res.status === 0 ? "Le serveur ne répond pas. Vérifiez que le backend est démarré." : `Erreur HTTP ${res.status}`);
+    throw new ApiError(res.status, e.code || "http_error", msg, e);
   }
   return data as T;
 }
@@ -57,6 +85,7 @@ export type JobStep = {
   agent_id: string;
   label: string;
   status: "pending" | "running" | "done" | "failed" | "skipped";
+  engine?: "calcul" | "ia" | "mixte" | null;
   detail?: string | null;
   latency_ms: number;
   input_tokens: number;

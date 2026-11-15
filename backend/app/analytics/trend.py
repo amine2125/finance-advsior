@@ -15,7 +15,7 @@ def moving_average_state(prices: pd.Series, short: int = 50, long: int = 200, sl
     slope = float(ma_l.iloc[-1] / ma_l.iloc[-1 - slope_lag] - 1)
     return {
         "price": last, "ma50": float(ma_s.iloc[-1]), "ma200": float(ma_l.iloc[-1]),
-        "above_ma50": last > ma_s.iloc[-1], "above_ma200": last > ma_l.iloc[-1],
+        "above_ma50": bool(last > ma_s.iloc[-1]), "above_ma200": bool(last > ma_l.iloc[-1]),
         "ma200_slope_20d": slope,
         "falling_knife_caution": bool(last < ma_l.iloc[-1] and slope < 0),
         "distance_to_ma200": last / float(ma_l.iloc[-1]) - 1,

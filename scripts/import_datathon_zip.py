@@ -27,7 +27,7 @@ from bootstrap_public_data import ALIASES, COINGECKO_IDS, UNIVERSE  # noqa: E402
 
 KNOWN_META = {u[0]: u for u in UNIVERSE}
 FILES = ["assets_universe.csv", "prices_daily.csv", "corporate_actions.csv", "fx_usdcad_daily.csv", "macro_rates.csv",
-         "sources_metadata.csv", "data_quality_warnings.txt", "README.md", "build_dataset.py"]
+         "sources_metadata.csv", "data_quality_warnings.txt", "README.md", "build_dataset.py", "EXTENSION.json"]
 
 
 def norm(c: str) -> str:
@@ -61,6 +61,26 @@ def read_sources(src: Path) -> dict[str, bytes]:
     return out
 
 
+OFFICIAL_SUBCLASS = {"etf_bond": "bond_etf", "etf_commodity": "gold_etf", "etf_equity": "equity_etf",
+                     "equity": "common_stock", "crypto": "cryptoasset"}
+EXTRA_ALIASES = {"MFC.TO": "manulife", "FTS.TO": "fortis", "CSU.TO": "constellation software", "ESGV": "vanguard esg",
+                 "ZST.TO": "bmo ultra short", "TLT": "20+ year treasury", "XBB.TO": "canadian universe bond", "AGG": "aggregate bond"}
+
+
+def official_sector(cls: str, raw_sector: str) -> str:
+    """Normalize the official ETF/crypto sector labels to AEGIS sector buckets (ETFs are never looked through)."""
+    if cls == "crypto":
+        return "Cryptoassets"
+    if cls == "etf":
+        s = raw_sector.lower()
+        if "bond" in s:
+            return "Fixed Income"
+        if "gold" in s or "commod" in s:
+            return "Commodities"
+        return "Diversified"
+    return raw_sector
+
+
 def map_class(v: str) -> str:
     s = str(v).lower()
     if "crypto" in s or "coin" in s:
@@ -84,7 +104,7 @@ def main() -> int:
 
     # ---- universe
     u = pd.read_csv(io.BytesIO(raw["assets_universe.csv"]))
-    c_id = pick(list(u.columns), "asset_id", "ticker", "symbol", "yahoo_ticker", "code")
+    c_id = pick(list(u.columns), "ticker", "symbol", "yahoo_ticker", "asset_id", "code")  # official file: asset_id=A01, ticker=NVDA
     if not c_id:
         raise SystemExit(f"ERROR: no ticker column in assets_universe.csv: {list(u.columns)}")
     c_name = pick(list(u.columns), "name", "asset_name", "long_name", "company", "description")
@@ -101,17 +121,25 @@ def main() -> int:
         if cls is None:
             raise SystemExit(f"ERROR: asset class unknown for {aid}")
         ccy = str(r[c_ccy]).upper() if c_ccy and pd.notna(r[c_ccy]) else (known[6] if known else ("CAD" if aid.endswith(".TO") else "USD"))
-        sector = str(r[c_sec]) if c_sec and pd.notna(r[c_sec]) else (known[4] if known else ("Cryptoassets" if cls == "crypto" else "Unclassified"))
+        raw_sector = str(r[c_sec]) if c_sec and pd.notna(r[c_sec]) else ""
+        sector = official_sector(cls, raw_sector) if raw_sector else (known[4] if known else ("Cryptoassets" if cls == "crypto" else "Unclassified"))
         if sector == "Unclassified":
             report.append(f"{aid}: sector not provided - labelled Unclassified (never guessed)")
-        sub = known[3] if known else {"crypto": "cryptoasset", "etf": "equity_etf", "equity": "common_stock"}[cls]
-        if cls == "etf" and not known:
+        raw_cls = str(r[c_cls]).strip().lower() if c_cls else ""
+        sub = OFFICIAL_SUBCLASS.get(raw_cls) or (known[3] if known else {"crypto": "cryptoasset", "etf": "equity_etf", "equity": "common_stock"}[cls])
+        if sub == "equity_etf" and "esg" in raw_sector.lower():
+            sub = "esg_equity_etf"
+        if sub == "gold_etf" and "gold" not in raw_sector.lower():
+            sub = "commodity_etf"
+        if cls == "etf" and not known and raw_cls not in OFFICIAL_SUBCLASS:
             report.append(f"{aid}: ETF sub-class unknown, assumed equity_etf - verify (bond/gold ETFs must be re-labelled)")
         rows.append({"asset_id": aid, "name": r[c_name] if c_name else (known[1] if known else aid), "asset_class": cls, "sub_class": sub,
-                     "sector": sector, "region": (r[c_reg] if c_reg and pd.notna(r[c_reg]) else (known[5] if known else "")),
+                     "sector": sector, "region": (r[c_reg] if c_reg and pd.notna(r[c_reg]) else (known[5] if known else
+                               ("Global" if cls == "crypto" or sub == "gold_etf" else ("Canada" if aid.endswith(".TO") else "United States")))),
+                     "sector_label": raw_sector or sector,
                      "currency": ccy, "exchange": r[c_exch] if c_exch else (known[7] if known else ""),
                      "is_single_issuer": 0 if cls == "etf" else 1, "is_leveraged": 0, "is_inverse": 0, "cik": "",
-                     "coingecko_id": COINGECKO_IDS.get(aid, ""), "aliases": ALIASES.get(aid, ""),
+                     "coingecko_id": COINGECKO_IDS.get(aid, ""), "aliases": ALIASES.get(aid, EXTRA_ALIASES.get(aid, "")),
                      "classification_source": "official_starter" if c_sec else "aegis_manual_classification"})
     uni = pd.DataFrame(rows)
     try:
@@ -174,9 +202,25 @@ def main() -> int:
         else:
             mm = m.melt(id_vars=[c_md], var_name="series_id", value_name="value").rename(columns={c_md: "date"})
         mm["date"] = pd.to_datetime(mm["date"]).dt.date.astype(str)
-        mm["unit"], mm["publication_lag_days"], mm["pit_safe"], mm["source_id"] = "as_provided", 0, 0, "official_macro"
+        # Official series -> AEGIS ids. Daily market rates are published on (or the day after) the observation date and
+        # are not revised: point-in-time safe with a 1-day lag. Monthly CPI/unemployment are dated to the reference
+        # month, released weeks later and revised: NOT point-in-time safe (excluded from strict replay).
+        spec = {"V39079": ("CA_POLICY_RATE", 0, 1, "boc_valet"), "BD.CDN.2YR.DQ.YLD": ("CA_GOC_2Y", 1, 1, "boc_valet"),
+                "BD.CDN.10YR.DQ.YLD": ("CA_GOC_10Y", 1, 1, "boc_valet"), "STATIC_TOTALCPICHANGE": ("CA_CPI_YOY", 45, 0, "boc_valet"),
+                "DFF": ("US_FED_FUNDS", 1, 1, "fred"), "DGS2": ("US_TREASURY_2Y", 1, 1, "fred"),
+                "DGS10": ("US_TREASURY_10Y", 1, 1, "fred"), "CPIAUCSL": ("US_CPI_INDEX", 45, 0, "fred"),
+                "UNRATE": ("US_UNEMPLOYMENT", 35, 0, "fred")}
+        raw_ids = mm["series_id"].astype(str)
+        mm["unit"] = m[pick(mc, "unit")] if pick(mc, "unit") else "as_provided"
+        mm["series_id"] = [spec.get(x, (x,))[0] for x in raw_ids]
+        mm["publication_lag_days"] = [spec.get(x, (x, 0))[1] for x in raw_ids]
+        mm["pit_safe"] = [spec.get(x, (x, 0, 0))[2] for x in raw_ids]
+        mm["source_id"] = [spec.get(x, (x, 0, 0, "official_macro"))[3] for x in raw_ids]
+        mm["original_series_id"] = raw_ids
         mm.dropna(subset=["value"]).to_csv(out / "macro_rates.csv", index=False)
-        report.append("Macro series imported with pit_safe=0 (release dates unverified): excluded from strict replay and Sharpe risk-free rate")
+        unknown_m = sorted(set(raw_ids) - set(spec))
+        report.append("Macro: daily rates marked point-in-time safe (1-day lag); monthly CPI/unemployment pit_safe=0"
+                      + (f"; unmapped series kept as-is: {unknown_m}" if unknown_m else ""))
 
     # ---- corporate actions
     if "corporate_actions.csv" in raw:
@@ -195,11 +239,14 @@ def main() -> int:
         if "source_id" not in s.columns:
             s.insert(0, "source_id", [f"official_{i}" for i in range(len(s))])
         s["dataset_origin"] = "official_datathon_zip"
+        if "processing" in s.columns:  # rows added by scripts/extend_kit.py are the team's, not the organizers'
+            s.loc[s["processing"].astype(str).str.startswith("Extension by the team"), "dataset_origin"] = "team_extension"
         s.to_csv(out / "sources_metadata.csv", index=False)
     warnings = raw.get("data_quality_warnings.txt", b"").decode("utf-8", "replace")
     (out / "data_quality_warnings.txt").write_text(warnings + "\n# AEGIS import notes\n" + "\n".join(report) + "\n")
+    ext = json.loads(raw["EXTENSION.json"]) if "EXTENSION.json" in raw else None
     (out / "DATASET_ORIGIN.json").write_text(json.dumps({"origin": "official_datathon_zip", "official_datathon_zip": True, "imported_at": now,
-                                                         "source": str(a.source), "import_notes": report}, indent=2))
+                                                         "source": str(a.source), "import_notes": report, "extension": ext}, indent=2))
     print("\n".join(report) or "no issues")
     print(f"imported {len(uni)} assets, {len(pr)} price rows -> {out}")
     return 0

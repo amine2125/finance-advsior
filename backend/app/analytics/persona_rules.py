@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from ..i18n import sector_fr
 from ..methodology import METHODOLOGY
+
+THEME_FR = {"Information Technology": "la technologie"}
 from ..models import TIER_ORDER, BudgetCheck, InvestorProfile, RiskTier
 
 TIER_FR = {"LOW": "FAIBLE", "MEDIUM": "MOYEN", "HIGH": "ÉLEVÉ", "UNKNOWN": "INCONNU"}
@@ -10,6 +12,16 @@ TIER_FR = {"LOW": "FAIBLE", "MEDIUM": "MOYEN", "HIGH": "ÉLEVÉ", "UNKNOWN": "IN
 
 def _pct(x: float | None) -> str:
     return "n/d" if x is None else f"{x * 100:.1f} %".replace(".", ",")
+
+
+def esg_conflict(p: InvestorProfile, meta: dict) -> str | None:
+    """Why a single stock fails the public ESG screen when the person asked for ESG criteria (methodology « esg_screen »), else None."""
+    cfg = METHODOLOGY["esg_screen"]
+    if not p.esg_preference or meta.get("asset_class") != "equity" or meta.get("sector") not in cfg["excluded_sectors"]:
+        return None
+    return (f"Vous avez demandé de tenir compte de critères ESG : {meta.get('name', 'cette société')} (secteur « {sector_fr(meta['sector'])} », "
+            f"combustibles fossiles) est exclue par le {cfg['label'][0].lower() + cfg['label'][1:]}. Filtre par secteur, pas une note ESG "
+            f"ni une controverse avérée : à vous de juger.")
 
 
 def horizon_tier(years: float) -> RiskTier:
@@ -109,6 +121,18 @@ def budget_checks(p: InvestorProfile, weights: dict[str, float], meta: dict[str,
                                   message=(f"Exposition directe {sector_fr(top_s)} {_pct(sectors[top_s])} > plafond {_pct(b.max_single_sector)}; "
                                            "les FNB ne sont pas inclus (composition non vérifiée)" if st == "BREACH"
                                            else "Sous le plafond (exposition directe; FNB exclus faute de composition vérifiée)")))
+    # Thematic index funds (e.g. QQQ, Nasdaq-100) concentrate in one sector even though they hold many companies.
+    thematic = METHODOLOGY.get("thematic_etfs", {})
+    theme_w = {a: w for a, w in weights.items() if a in thematic}
+    if theme_w:
+        theme_sector = thematic[next(iter(theme_w))]
+        expo = sum(theme_w.values()) + sum(w for a, w in weights.items() if a not in thematic and meta[a]["sector"] == theme_sector)
+        st = "BREACH" if expo > b.max_single_sector + 1e-9 else "OK"
+        checks.append(BudgetCheck(rule_id="budget.theme_exposure", label=f"Exposition à un thème ({sector_fr(theme_sector)}, fonds compris)",
+                                  limit=_pct(b.max_single_sector), measured=f"jusqu'à {_pct(expo)}", measured_value=expo, status=st,
+                                  message=(f"Jusqu'à {_pct(expo)} de votre argent dépend de {THEME_FR.get(theme_sector, sector_fr(theme_sector).lower())} "
+                                           f"({', '.join(sorted(theme_w))} est un fonds dominé par {THEME_FR.get(theme_sector, 'ce secteur')})" if st == "BREACH"
+                                           else "Sous le plafond")))
     spec = sum(w for a, w in weights.items() if meta[a]["asset_class"] == "crypto" or a in speculative_extra)
     st = "BREACH" if spec > b.max_speculative + 1e-9 else "OK"
     checks.append(BudgetCheck(rule_id="budget.speculative", label="Poche spéculative (crypto + positions d'attention non étayées)",

@@ -1,75 +1,129 @@
 import clsx from "clsx";
-import { Activity, Bell, BookOpen, Bot, Briefcase, FileText, FlaskConical, Gauge, LayoutDashboard, Menu, Radar, Scale, Settings, ShieldCheck, Sparkles, X } from "lucide-react";
-import { ReactNode, useState } from "react";
-import { NavLink } from "react-router-dom";
-import { useApp } from "../hooks/AppContext";
-import { TIER_FR } from "../lib/format";
+import { Compass, GraduationCap, Home, LayoutList, LogOut, Sparkles, UserRound } from "lucide-react";
+import { ReactNode, useEffect, useRef, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { Link, NavLink, useLocation } from "react-router-dom";
+import { spring } from "./motion";
+import { useApp } from "../hooks/useApp";
+import { AdvisorAvatar, AdvisorProvider, useAdvisor } from "./Advisor";
+import Tour from "./Tour";
+import { Disclaimer } from "./ui";
 
-const NAV = [
-  { to: "/", label: "Tableau de bord", icon: LayoutDashboard },
-  { to: "/portfolio", label: "Mon portefeuille", icon: Briefcase },
-  { to: "/xray", label: "Radiographie", icon: Radar },
-  { to: "/copilot", label: "Copilote IA", icon: Bot },
-  { to: "/debate", label: "Chambre de débat", icon: Scale },
-  { to: "/scenarios", label: "Laboratoire de scénarios", icon: FlaskConical },
-  { to: "/hype", label: "Hype Intelligence", icon: Sparkles },
-  { to: "/guardian", label: "Alertes Guardian", icon: Bell },
-  { to: "/reports", label: "Rapports", icon: FileText },
-  { to: "/sources", label: "Sources & méthodologie", icon: BookOpen },
-  { to: "/settings", label: "Paramètres / Profil", icon: Settings },
+/** Product name is configuration (VITE_APP_NAME), never hard-coded to a bank. */
+export const APP_NAME: string = (import.meta as any).env?.VITE_APP_NAME || "AEGIS";
+
+export const NAV = [
+  { to: "/", label: "Accueil", icon: Home, end: true },
+  { to: "/placements", label: "Placements", icon: LayoutList, end: false },
+  { to: "/decisions", label: "Décisions", icon: Sparkles, end: false },
+  { to: "/apprendre", label: "Apprendre", icon: GraduationCap, end: false },
 ];
+const TOUR_ID: Record<string, string> = { "/placements": "nav-placements", "/decisions": "nav-decisions", "/apprendre": "nav-learn", "/profil": "account" };
+
+export function Logo({ light }: { light?: boolean }) {
+  return (
+    <Link to="/" className="flex items-center gap-2">
+      <div className={clsx("grid h-8 w-8 place-items-center rounded-[10px] shadow-[inset_0_1px_0_rgba(255,255,255,0.15)]", light ? "bg-white" : "bg-ink")}>
+        <svg viewBox="0 0 32 32" className="h-4 w-4"><path d="M7 21l6-7 4.5 3.5L25 9" stroke={light ? "#1d1d1b" : "white"} strokeWidth="3.6" fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>
+      </div>
+      <span className={clsx("font-display text-[19px] font-semibold tracking-[-0.02em]", light ? "text-white" : "text-ink")}>{APP_NAME}</span>
+    </Link>
+  );
+}
+
+/** Avatar menu: who is signed in, the profile, and sign-out (Cognito accounts). */
+function AccountMenu({ name }: { name: string }) {
+  const { me, authConfig, signOut } = useApp();
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [open]);
+  const accounts = authConfig?.mode === "cognito";
+  return (
+    <div className="relative" ref={ref}>
+      <button onClick={() => setOpen(!open)} className="flex items-center gap-2 rounded-full py-1 pl-1 pr-3 text-sm font-medium text-ink hover:bg-ink/[0.04]" data-testid="account-menu" data-tour="account" aria-expanded={open}>
+        <span className="grid h-8 w-8 place-items-center rounded-full bg-white text-xs font-semibold text-ink shadow-card">{(name[0] || "?").toUpperCase()}</span>
+        <span className="hidden max-w-[120px] truncate sm:inline">{name || "Profil"}</span>
+      </button>
+      <AnimatePresence>
+        {open && (
+          <motion.div initial={{ opacity: 0, y: -6, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6, scale: 0.98 }} transition={spring}
+            className="absolute right-0 top-12 z-40 w-64 origin-top-right overflow-hidden rounded-[20px] bg-surface p-1.5 shadow-lift hairline">
+            {accounts && me?.email && <div className="truncate px-3 pb-2 pt-2 text-xs text-ink-muted">Connecté : <span className="text-ink-soft">{me.email}</span></div>}
+            <Link to="/profil" onClick={() => setOpen(false)} className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-ink hover:bg-ink/[0.04]"><UserRound className="h-4 w-4" /> Mon profil</Link>
+            <button onClick={() => { setOpen(false); window.dispatchEvent(new Event("aegis:tour")); }} className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-sm text-ink hover:bg-ink/[0.04]" data-testid="restart-tour">
+              <Compass className="h-4 w-4" /> Revoir la visite guidée
+            </button>
+            {accounts && (
+              <button onClick={() => { setOpen(false); signOut(); }} className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-sm text-ink hover:bg-ink/[0.04]" data-testid="sign-out">
+                <LogOut className="h-4 w-4" /> Se déconnecter
+              </button>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function TopBar() {
+  const { me } = useApp();
+  const { setOpen } = useAdvisor();
+  const loc = useLocation();
+  const name: string = me?.profile?.display_name || "";
+  const active = NAV.find((n) => (n.end ? loc.pathname === n.to : loc.pathname.startsWith(n.to)))?.to;
+  return (
+    <header className="glass sticky top-0 z-30 border-b border-line">
+      <div className="mx-auto flex h-16 max-w-[1100px] items-center gap-8 px-5 sm:px-8">
+        <Logo />
+        <nav className="hidden items-center gap-1 rounded-full bg-ink/[0.035] p-1 md:flex">
+          {NAV.map((n) => (
+            <Link key={n.to} to={n.to} data-tour={TOUR_ID[n.to]} className={clsx("relative rounded-full px-4 py-1.5 text-sm font-medium transition-colors", active === n.to ? "text-ink" : "text-ink-muted hover:text-ink")}>
+              {active === n.to && <motion.span layoutId="nav-pill" className="absolute inset-0 rounded-full bg-white shadow-card" transition={spring} />}
+              <span className="relative">{n.label}</span>
+            </Link>
+          ))}
+        </nav>
+        <div className="ml-auto flex items-center gap-2">
+          <motion.button whileTap={{ scale: 0.97 }} onClick={() => setOpen(true)} className="hidden items-center gap-2 rounded-full py-1 pl-1 pr-3 text-sm font-medium text-ink hover:bg-ink/[0.04] sm:flex" data-testid="topbar-advisor">
+            <AdvisorAvatar size={28} /> Demander à Léa
+          </motion.button>
+          <AccountMenu name={name} />
+        </div>
+      </div>
+    </header>
+  );
+}
 
 export default function Layout({ children }: { children: ReactNode }) {
-  const { personas, portfolios, personaId, setPersonaId, portfolioId, setPortfolioId, system } = useApp();
-  const [open, setOpen] = useState(false);
-  const persona = personas.find((p) => p.persona_id === personaId);
   return (
-    <div className="min-h-screen bg-[radial-gradient(ellipse_at_top_left,rgba(20,184,166,0.08),transparent_45%),radial-gradient(ellipse_at_bottom_right,rgba(139,92,246,0.07),transparent_40%)]">
-      <aside className={clsx("fixed inset-y-0 left-0 z-40 w-64 border-r border-ink-700/70 bg-ink-950/95 backdrop-blur transition-transform lg:translate-x-0", open ? "translate-x-0" : "-translate-x-full")}>
-        <div className="flex h-16 items-center gap-2.5 px-5">
-          <div className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-aegis-400 to-teal-700 shadow-glow"><ShieldCheck className="h-5 w-5 text-ink-950" /></div>
-          <div>
-            <div className="text-base font-bold tracking-tight text-white">{system?.app || "AEGIS"}</div>
-            <div className="text-[10px] uppercase tracking-[0.18em] text-aegis-400/80">Portfolio Intelligence</div>
-          </div>
-          <button className="ml-auto lg:hidden" onClick={() => setOpen(false)} aria-label="Fermer"><X className="h-5 w-5" /></button>
-        </div>
-        <nav className="mt-2 space-y-0.5 px-3">
-          {NAV.map(({ to, label, icon: Icon }) => (
-            <NavLink key={to} to={to} end={to === "/"} onClick={() => setOpen(false)}
-              className={({ isActive }) => clsx("flex items-center gap-3 rounded-xl px-3 py-2 text-sm transition", isActive ? "bg-aegis-500/10 text-aegis-300 ring-1 ring-aegis-500/25" : "text-slate-400 hover:bg-ink-800 hover:text-slate-100")}>
-              <Icon className="h-4 w-4" /> {label}
+    <AdvisorProvider>
+      <div className="min-h-screen pb-24 md:pb-0">
+        <div className="ambient" aria-hidden />
+        <TopBar />
+        <main>{children}</main>
+        <Tour />
+        <footer className="mx-auto flex max-w-6xl flex-wrap items-start justify-between gap-3 px-4 pb-10 pt-10 sm:px-6"><Disclaimer className="max-w-2xl" /><Link to="/a-propos" className="text-xs font-semibold text-ink-muted hover:text-ink">À propos des chiffres</Link></footer>
+        <nav className="glass fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-line pb-[env(safe-area-inset-bottom)] md:hidden">
+          {[...NAV, { to: "/profil", label: "Profil", icon: UserRound, end: false }].map((n) => (
+            <NavLink key={n.to} to={n.to} end={n.end} data-tour={TOUR_ID[n.to]}
+              className={({ isActive }) => clsx("flex flex-col items-center gap-0.5 py-2.5 text-[11px] font-semibold", isActive ? "text-ink" : "text-ink-muted")}>
+              <n.icon className="h-5 w-5" /> {n.label}
             </NavLink>
           ))}
         </nav>
-        <div className="absolute bottom-0 w-full space-y-2 border-t border-ink-700/70 p-4 text-[11px] text-slate-500">
-          <div className="flex items-center gap-2"><Activity className="h-3.5 w-3.5 text-aegis-400" /> {system?.mode || "Rejeu historique"}</div>
-          <div className="flex items-center gap-2"><Gauge className="h-3.5 w-3.5 text-violet-400" /> Bedrock · {system?.bedrock_region || "—"} · {system?.storage_backend || "—"}</div>
-          <div>Simulation éducative · aucune transaction réelle</div>
-        </div>
-      </aside>
-      <div className="lg:pl-64">
-        <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-ink-700/60 bg-ink-950/80 px-4 backdrop-blur lg:px-8">
-          <button className="lg:hidden" onClick={() => setOpen(true)} aria-label="Menu"><Menu className="h-5 w-5" /></button>
-          <div className="flex flex-1 flex-wrap items-center gap-3">
-            <label className="flex items-center gap-2 text-xs text-slate-400">
-              Profil
-              <select value={personaId} onChange={(e) => setPersonaId(e.target.value)} className="rounded-lg border border-ink-600 bg-ink-850 px-2 py-1.5 text-sm text-white focus:border-aegis-500 focus:outline-none" data-testid="persona-select">
-                {personas.map((p) => <option key={p.persona_id} value={p.persona_id}>{p.display_name} – {p.risk_profile_label}</option>)}
-              </select>
-            </label>
-            <label className="flex items-center gap-2 text-xs text-slate-400">
-              Portefeuille
-              <select value={portfolioId} onChange={(e) => setPortfolioId(e.target.value)} className="max-w-[18rem] rounded-lg border border-ink-600 bg-ink-850 px-2 py-1.5 text-sm text-white focus:border-aegis-500 focus:outline-none" data-testid="portfolio-select">
-                {portfolios.map((p) => <option key={p.portfolio_id} value={p.portfolio_id}>{p.name}</option>)}
-              </select>
-            </label>
-            {persona && <span className="hidden rounded-lg bg-ink-800 px-2 py-1 text-[11px] text-slate-300 md:inline">Niveau permis : <b className="text-white">{TIER_FR[persona.allowed_tier] || persona.allowed_tier}</b> · horizon {persona.horizon_years_min}{persona.horizon_years_max ? `–${persona.horizon_years_max}` : "+"} ans</span>}
-          </div>
-          <span className="hidden rounded-full bg-amber-500/10 px-3 py-1 text-[11px] font-medium text-amber-200 ring-1 ring-amber-500/30 sm:inline">SIMULATION · données historiques</span>
-        </header>
-        <main className="mx-auto max-w-[1500px] px-4 py-6 lg:px-8">{children}</main>
       </div>
-    </div>
+    </AdvisorProvider>
   );
+}
+
+export function Page({ children, className }: { children: ReactNode; className?: string }) {
+  return <div className={clsx("mx-auto max-w-6xl space-y-5 px-4 pt-6 sm:px-6", className)}>{children}</div>;
+}
+export function Body({ children }: { children: ReactNode; overlap?: boolean }) {
+  return <div className="space-y-5">{children}</div>;
 }

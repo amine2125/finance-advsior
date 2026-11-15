@@ -1,62 +1,86 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import Layout from "./components/Layout";
-import { AppProvider, useApp } from "./hooks/AppContext";
+import { ErrorBox, Spinner } from "./components/ui";
+import { AppProvider, useApp } from "./hooks/useApp";
 import "./index.css";
-import Copilot from "./pages/Copilot";
-import Dashboard from "./pages/Dashboard";
-import Debate from "./pages/Debate";
-import Guardian from "./pages/Guardian";
-import Hype from "./pages/Hype";
-import PortfolioPage from "./pages/Portfolio";
-import Reports from "./pages/Reports";
-import Scenarios from "./pages/Scenarios";
-import Settings from "./pages/Settings";
-import Sources from "./pages/Sources";
-import XRay from "./pages/XRay";
-import { Loading } from "./components/ui";
+import { MotionRoot } from "./components/motion";
+import About from "./pages/About";
+import AssetPage from "./pages/Asset";
+import { Decisions, MandateResult, MandateRun } from "./pages/Mandate";
+import Home from "./pages/Home";
+import Holdings from "./pages/Holdings";
+import Connect from "./pages/Connect";
+import Onboarding from "./pages/Onboarding";
+import Profile from "./pages/Profile";
+import Welcome from "./pages/Welcome";
+import Login from "./pages/Login";
+import Learn, { LessonPage } from "./pages/Learn";
 
 class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { error: Error | null }> {
   state = { error: null as Error | null };
   static getDerivedStateFromError(error: Error) { return { error }; }
   render() {
-    if (this.state.error) return <div className="rounded-xl border border-rose-500/40 bg-rose-500/10 p-4 text-sm text-rose-200">Erreur d'affichage : {this.state.error.message} <button className="ml-2 underline" onClick={() => this.setState({ error: null })}>Réessayer</button></div>;
+    if (this.state.error) return <ErrorBox error={this.state.error} onRetry={() => this.setState({ error: null })} />;
     return this.props.children;
   }
 }
 
 function Shell() {
-  const { ready } = useApp();
-  if (!ready) return <div className="grid min-h-screen place-items-center"><Loading label="Connexion à AEGIS…" /></div>;
-  return (
-    <Layout>
-      <ErrorBoundary>
+  const { me, error, reload, auth } = useApp();
+  if (auth === "loading") return <div className="grid min-h-screen place-items-center"><Spinner label="Chargement…" /></div>;
+  if (auth === "signedOut") return <Login />;
+  if (error && !me) return <div className="mx-auto max-w-lg p-8"><ErrorBox error={error} onRetry={reload} /></div>;
+  // Old links (assistant page, per-asset invest page) land on the new screens.
+  if (!me) return <div className="grid min-h-screen place-items-center"><Spinner label="Chargement…" /></div>;
+  if (!me.onboarded) {
+    // Not registered yet: only the welcome screen and the onboarding are reachable.
+    return (
       <Routes>
-        <Route path="/" element={<Dashboard />} />
-        <Route path="/portfolio" element={<PortfolioPage />} />
-        <Route path="/xray" element={<XRay />} />
-        <Route path="/copilot" element={<Copilot />} />
-        <Route path="/debate" element={<Debate />} />
-        <Route path="/scenarios" element={<Scenarios />} />
-        <Route path="/hype" element={<Hype />} />
-        <Route path="/guardian" element={<Guardian />} />
-        <Route path="/reports" element={<Reports />} />
-        <Route path="/sources" element={<Sources />} />
-        <Route path="/settings" element={<Settings />} />
-        <Route path="*" element={<Dashboard />} />
+        <Route path="/" element={<Welcome />} />
+        <Route path="/inscription" element={<Onboarding />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-      </ErrorBoundary>
-    </Layout>
+    );
+  }
+  return (
+    <Routes>
+      <Route path="/inscription" element={<Onboarding />} />
+      <Route path="*" element={
+        <Layout>
+          <ErrorBoundary>
+            <Routes>
+              <Route path="/" element={<Home />} />
+              <Route path="/placements" element={<Holdings />} />
+              <Route path="/connecter" element={<Connect />} />
+              <Route path="/decisions" element={<Decisions />} />
+              <Route path="/mandats/en-cours/:jobId" element={<MandateRun />} />
+              <Route path="/mandats/:id" element={<MandateResult />} />
+              <Route path="/portefeuille" element={<Navigate to="/placements" replace />} />
+              <Route path="/placement/:id" element={<AssetPage />} />
+              <Route path="/a-propos" element={<About />} />
+              <Route path="/profil" element={<Profile />} />
+              <Route path="/apprendre" element={<Learn />} />
+              <Route path="/apprendre/:id" element={<LessonPage />} />
+              <Route path="/assistant" element={<Navigate to="/" replace />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </ErrorBoundary>
+        </Layout>
+      } />
+    </Routes>
   );
 }
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <BrowserRouter>
-      <AppProvider>
-        <Shell />
-      </AppProvider>
-    </BrowserRouter>
+    <MotionRoot>
+      <BrowserRouter>
+        <AppProvider>
+          <Shell />
+        </AppProvider>
+      </BrowserRouter>
+    </MotionRoot>
   </React.StrictMode>,
 );

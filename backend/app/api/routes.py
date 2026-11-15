@@ -2,37 +2,30 @@
 from __future__ import annotations
 
 import datetime as dt
+from functools import lru_cache
 
 import pandas as pd
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from .. import __version__
-from ..agents import hypothesis_agent
 from ..analytics.benchmarks import BENCHMARKS
-from ..analytics.coverage import FAILURE_MODES, coverage_report
-from ..analytics.forecast_policy import POLICY_TABLE
+from ..analytics.coverage import coverage_report
 from ..analytics.lenses import run_asset_lenses
-from ..analytics.lenses.fundamental_lens import fixture_check
-from ..analytics.portfolio import portfolio_risk_metrics, value_holdings
-from ..analytics.scenarios import SHOCK_PRESETS, apply_shock, historical_replay, position_size_table
+from ..analytics.portfolio import value_holdings
+from ..analytics.profile_builder import OnboardingAnswers, build_profile
 from ..analytics.tiers import classify_universe
 from ..config import get_settings
 from ..data.registry import get_market_data
-from ..guardian.engine import scan_portfolio
-from ..guardian.replay import GUIDED
 from ..hype_research.pipeline import resolve_asset
-from ..methodology import METHODOLOGY, methodology_hash
+from ..methodology import METHODOLOGY
 from ..models import InvestorProfile, PortfolioCreate
 from ..services import jobs
 from ..services import portfolio_service as ps
 from ..services.analysis_service import make_snapshot, run_xray
-from ..services.impact_service import hypothetical_addition
-from ..services.snapshot_service import compare, list_snapshots
 from ..storage.store import get_store
 from ..web_research.http import provider_status
-from ..web_research.tool import WebResearchTool
-from .deps import owner_id, rate_limit
+from .deps import Account, current_account, owner_id, rate_limit
 
 router = APIRouter(prefix="/api/v1")
 
@@ -48,38 +41,35 @@ def health():
     return {"status": "ok", "version": __version__, "dataset_version": md.dataset_version, "data_as_of": md.end_date.date().isoformat()}
 
 
+@lru_cache(maxsize=1)
+def _aws_credentials_present() -> bool:
+    try:
+        import boto3
+        return boto3.Session().get_credentials() is not None
+    except Exception:  # noqa: BLE001
+        return False
+
+
 @router.get("/system/info")
 def system_info():
     s = get_settings()
-    return {"app": s.app_name, "env": s.env, "region": s.aws_region, "bedrock_region": s.bedrock_region,
+    llm_ready = s.llm_enabled and _aws_credentials_present()
+    return {"llm_ready": llm_ready,
+            "llm_status": "Amazon Bedrock prêt" if llm_ready else ("IA désactivée (AEGIS_LLM_ENABLED=false)" if not s.llm_enabled
+                                                                   else "Identifiants AWS absents : Amazon Bedrock non configuré"),
+            "app": s.app_name, "env": s.env, "region": s.aws_region, "bedrock_region": s.bedrock_region,
             "agent_model_id": s.agent_model_id, "supervisor_model_id": s.supervisor_model_id, "llm_enabled": s.llm_enabled,
             "storage_backend": s.storage_backend, "job_runner": s.job_runner, "web_research_enabled": s.web_research_enabled,
-            "live_mode": s.live_mode_enabled, "notifications": "Amazon SNS" if s.alert_sns_topic_arn else "non configuré",
+            "live_mode": s.live_mode_enabled,
             "orchestration": "Orchestration multi-agents définie en code; inférence Amazon Bedrock (Converse API); "
                              + ("AWS Lambda (exécution asynchrone)" if s.job_runner == "lambda" else "exécution locale (thread)"),
             "mode": "Rejeu historique (données jusqu'au " + get_market_data().end_date.date().isoformat() + ")"}
-
-
-@router.get("/data/status")
-def data_status():
-    md = get_market_data()
-    q = {a: md.quality(a).__dict__ for a in md.universe.index}
-    return {"dataset_version": md.dataset_version, "origin": md.origin, "coverage": [md.start_date.date().isoformat(), md.end_date.date().isoformat()],
-            "assets": len(md.universe), "price_rows": int(len(md.prices_long)), "fx_rows": int(len(md.fx)), "macro_series": sorted(md.macro["series_id"].unique().tolist()) if not md.macro.empty else [],
-            "warnings": md.warnings, "quality": q, "mode": "historical_replay",
-            "live_mode": {"enabled": get_settings().live_mode_enabled, "note": "Aucun flux de cotations en direct sous licence n'est connecté; seuls des instantanés crypto CoinGecko et le taux BdC sont récupérés à la demande."}}
 
 
 @router.get("/sources")
 def sources():
     md = get_market_data()
     return {"datasets": md.source_references(), "providers": provider_status(), "benchmarks": BENCHMARKS}
-
-
-@router.get("/methodology")
-def methodology():
-    return {"methodology": METHODOLOGY, "hash": methodology_hash(), "failure_modes": FAILURE_MODES, "forecast_policy": POLICY_TABLE,
-            "dcf_fixture": fixture_check(), "shock_presets": SHOCK_PRESETS, "guided_replays": GUIDED}
 
 
 # ------------------------------------------------------------------------------------------------ assets
@@ -95,17 +85,6 @@ def assets():
                     "volatility": t["volatility"], "max_drawdown": t["max_drawdown"], "tier_rules": t["rules"], "n_obs": t["n_obs"],
                     "window": [t["window_start"], t["window_end"]]})
     return {"assets": out, "as_of": md.end_date.date().isoformat(), "thresholds": METHODOLOGY["risk_tiers"]}
-
-
-@router.get("/assets/search")
-def asset_search(q: str = Query(min_length=1, max_length=60)):
-    md = get_market_data()
-    res = resolve_asset(md, q)
-    if res["status"] == "not_in_universe":
-        cg = WebResearchTool().crypto_search(q)
-        res["external_crypto_matches"] = cg or []
-        res["external_note"] = "Résultats CoinGecko affichés pour identification uniquement: sans historique dans le jeu de données, aucune métrique de risque n'est calculée."
-    return res
 
 
 @router.get("/assets/{asset_id}/analysis")
@@ -131,39 +110,324 @@ def asset_prices(asset_id: str, start: str | None = None):
                        for d, x in s.iloc[::step].items()]}
 
 
-@router.get("/tiers")
-def tiers(as_of: str | None = None):
-    return {"tiers": classify_universe(get_market_data(), as_of), "methodology": METHODOLOGY["risk_tiers"]}
-
-
-# ------------------------------------------------------------------------------------------------ personas
-@router.get("/personas")
-def personas(owner: str = Depends(owner_id)):
+# ------------------------------------------------------------------------------------------------ onboarding
+def _profile_out(p: InvestorProfile, derivation: list[str] | None = None) -> dict:
     from ..analytics.persona_rules import allowed_tier
-    out = []
-    for p in ps.list_personas(owner):
-        at = allowed_tier(p)
-        out.append(p.model_dump(mode="json") | {"allowed_tier": at["allowed_tier"].value, "binding_inputs": at["binding_inputs"],
-                                                "tier_inputs": at["tier_inputs"], "uncertainties": at["uncertainties"]})
-    return {"personas": out}
+    at = allowed_tier(p)
+    out = p.model_dump(mode="json") | {"allowed_tier": at["allowed_tier"].value, "binding_inputs": at["binding_inputs"],
+                                       "tier_inputs": at["tier_inputs"], "uncertainties": at["uncertainties"],
+                                       "benchmark_label": BENCHMARKS.get(p.benchmark_id, {}).get("label")}
+    if derivation is not None:
+        out["derivation"] = derivation
+    return out
 
 
-@router.get("/personas/{persona_id}")
-def persona(persona_id: str, owner: str = Depends(owner_id)):
-    return ps.get_persona(owner, persona_id).model_dump(mode="json")
+@router.post("/onboarding/preview")
+def onboarding_preview(answers: OnboardingAnswers):
+    """Computes the profile from the answers without saving it, so the user can review every rule first."""
+    profile, derivation = build_profile(answers)
+    return _profile_out(profile, derivation)
 
 
-@router.post("/personas")
-def create_persona(profile: InvestorProfile, owner: str = Depends(owner_id)):
-    profile.is_official = False
-    return ps.save_persona(owner, profile).model_dump(mode="json")
+@router.post("/onboarding")
+def onboarding(answers: OnboardingAnswers, owner: str = Depends(owner_id)):
+    existing = ps.list_personas(owner)
+    profile, derivation = build_profile(answers, persona_id=existing[0].persona_id if existing else None)
+    saved = ps.save_persona(owner, profile)
+    store = get_store()
+    store.put(owner, "META", "onboarding", {"answers": answers.model_dump(mode="json"), "derivation": derivation, "at": dt.datetime.utcnow().isoformat()})
+    return _profile_out(saved, derivation)
 
 
-@router.put("/personas/{persona_id}")
-def update_persona(persona_id: str, profile: InvestorProfile, owner: str = Depends(owner_id)):
-    if profile.persona_id != persona_id:
-        raise HTTPException(400, {"code": "id_mismatch", "message": "persona_id incohérent"})
-    return ps.save_persona(owner, profile).model_dump(mode="json")
+@router.get("/auth/config")
+def auth_config():
+    """Public sign-in settings (no secret: a Cognito app client id and pool id are meant to be public) and the demo accounts."""
+    from ..services import demo_accounts
+    s = get_settings()
+    return {"mode": s.auth_mode, "region": s.cognito_region, "user_pool_id": s.cognito_user_pool_id, "client_id": s.cognito_client_id,
+            "demo_accounts": demo_accounts.public_list() if s.demo_accounts_enabled and s.auth_mode == "cognito" else []}
+
+
+@router.delete("/me")
+def delete_me(owner: str = Depends(owner_id)):
+    """« Tout effacer » : removes every record of this account. A demo account is re-created at its next sign-in."""
+    from ..storage.store import delete_owner
+    return {"deleted": delete_owner(owner)}
+
+
+@router.get("/me")
+def me(owner: str = Depends(owner_id), acct: Account | None = Depends(current_account)):
+    """Everything the home screen needs: the user's profile (if onboarded) and portfolios. Empty until onboarding."""
+    if acct is not None and get_settings().demo_accounts_enabled:
+        from ..services import demo_accounts
+        demo_accounts.seed_if_empty(owner, acct.email)
+    from ..services import wallet
+    profiles = ps.list_personas(owner)
+    meta = get_store().get(owner, "META", "onboarding") or {}
+    md = get_market_data()
+    return {"onboarded": bool(profiles), "profile": _profile_out(profiles[0], meta.get("derivation")) if profiles else None,
+            "profiles": [{"persona_id": p.persona_id, "display_name": p.display_name, "is_official": p.is_official} for p in profiles],
+            "answers": meta.get("answers"),
+            "portfolios": [p.model_dump(mode="json") for p in ps.list_portfolios(owner)],
+            "data_as_of": md.end_date.date().isoformat(), "data_start": md.start_date.date().isoformat(),
+            "dataset_origin": md.origin, "official_end": md.official_end if md.extended else None, "email": acct.email if acct else None,
+            "cash": _wallet_out(wallet.get(owner)) if profiles else None,
+            "guide": get_store().get(owner, "META", "guide") or {"tour_done": False, "lessons": [], "dismissed": False}}
+
+
+# ------------------------------------------------------------------------------------------------ holdings / history / activity
+def _user_holdings(owner: str, portfolio_id: str | None) -> list[dict]:
+    pfs = [ps.get_portfolio(owner, portfolio_id)] if portfolio_id else ps.list_portfolios(owner)
+    return [h.model_dump() for pf in pfs for h in pf.holdings]
+
+
+@router.get("/holdings")
+def holdings(portfolio_id: str | None = None, owner: str = Depends(owner_id)):
+    """What the user holds, like a brokerage list: price, day change (native currency), value in CAD, weight, 1-year change."""
+    md = get_market_data()
+    hs = _user_holdings(owner, portfolio_id)
+    if not hs:
+        return {"total_value_cad": 0.0, "day_change_cad": 0.0, "holdings": [], "as_of": md.end_date.date().isoformat()}
+    pos = value_holdings(md, hs, md.end_date)
+    cost: dict[str, float] = {}
+    accounts: dict[str, set] = {}
+    for x in hs:
+        if x.get("acquisition_price") and x.get("acquisition_date"):
+            fx_a, _ = md.fx_factor(md.asset(x["asset_id"])["currency"], x["acquisition_date"])
+            cost[x["asset_id"]] = cost.get(x["asset_id"], 0.0) + float(x["quantity"]) * float(x["acquisition_price"]) * fx_a
+        if (x.get("note") or "").startswith("Compte "):
+            accounts.setdefault(x["asset_id"], set()).add(x["note"][len("Compte "):].split(" ••••")[0])
+    rows, day_cad = [], 0.0
+    for aid, r in pos.iterrows():
+        close = md.native_series(aid, "close").dropna()
+        adj = md.native_series(aid, "adj_close").dropna()
+        prev = float(close.iloc[-2]) if len(close) > 1 else None
+        last = float(close.iloc[-1])
+        dchg = last - prev if prev else None
+        yr = adj[adj.index <= adj.index[-1] - pd.Timedelta(days=365)]
+        chg_1y = float(adj.iloc[-1] / yr.iloc[-1] - 1) if len(yr) else None
+        fx = r["fx_usdcad"] if r["fx_usdcad"] == r["fx_usdcad"] and r["fx_usdcad"] else 1.0  # NaN-safe: CAD rows have no FX
+        if dchg is not None:
+            day_cad += dchg * r["quantity"] * fx
+        meta = md.asset(aid)
+        rows.append({"asset_id": aid, "name": r["name"], "asset_class": r["asset_class"], "sub_class": r["sub_class"], "sector": r["sector"],
+                     "currency": r["currency"], "quantity": r["quantity"], "price": last, "price_date": r["price_date"],
+                     "day_change": dchg, "day_change_pct": (dchg / prev) if prev else None, "value_cad": r["value_cad"], "weight": r["weight"],
+                     "change_1y_pct": chg_1y, "is_single_issuer": bool(int(meta.get("is_single_issuer", 1))),
+                     "cost_cad": cost.get(aid), "gain_cad": (r["value_cad"] - cost[aid]) if aid in cost else None,
+                     "gain_pct": (r["value_cad"] / cost[aid] - 1) if cost.get(aid) else None, "accounts": sorted(accounts.get(aid, []))})
+    total = float(pos["value_cad"].sum())
+    tot_cost = sum(cost.values()) if len(cost) == len(pos) else None
+    return {"total_value_cad": total, "cost_cad": tot_cost, "gain_cad": (total - tot_cost) if tot_cost else None,
+            "gain_pct": (total / tot_cost - 1) if tot_cost else None, "day_change_cad": day_cad, "day_change_pct": day_cad / (total - day_cad) if total - day_cad else None,
+            "holdings": sorted(rows, key=lambda x: -x["value_cad"]), "as_of": md.end_date.date().isoformat()}
+
+
+@router.get("/history")
+def history(portfolio_id: str | None = None, days: int = Query(default=365, ge=30, le=2000), owner: str = Depends(owner_id)):
+    """Value of the CURRENT holdings over time (quantities held constant), in CAD: « si vous les aviez détenus »."""
+    md = get_market_data()
+    hs = _user_holdings(owner, portfolio_id)
+    if not hs:
+        return {"series": []}
+    qty: dict[str, float] = {}
+    for h in hs:
+        qty[h["asset_id"]] = qty.get(h["asset_id"], 0.0) + float(h["quantity"])
+    panel, _ = md.cad_panel(list(qty), field="adj_close")
+    panel = panel[panel.index >= md.end_date - pd.Timedelta(days=days)].ffill().dropna(how="any")
+    val = (panel * pd.Series(qty)).sum(axis=1)
+    # scale so that the last point equals today's value at the last close (adj_close vs close differ by past dividends)
+    today = float(value_holdings(md, hs, md.end_date)["value_cad"].sum())
+    if len(val):
+        val = val * (today / float(val.iloc[-1]))
+    step = max(1, len(val) // 260)
+    pts = [{"date": d.date().isoformat(), "value": round(float(v), 2)} for d, v in val.iloc[::step].items()]
+    if len(val) and pts[-1]["date"] != val.index[-1].date().isoformat():
+        pts.append({"date": val.index[-1].date().isoformat(), "value": round(float(val.iloc[-1]), 2)})
+    return {"series": pts, "change_cad": (pts[-1]["value"] - pts[0]["value"]) if pts else None,
+            "change_pct": (pts[-1]["value"] / pts[0]["value"] - 1) if pts and pts[0]["value"] else None,
+            "label": "Valeur de vos placements actuels s'ils avaient été détenus sur la période (quantités constantes, dividendes réinvestis, en $ CA)."}
+
+
+@router.get("/diagnosis")
+def diagnosis(portfolio_id: str | None = None, owner: str = Depends(owner_id)):
+    """Does the portfolio match the investor's profile? Plain-language problems, most serious first."""
+    from ..services.diagnosis import diagnose
+    md = get_market_data()
+    pfs = [ps.get_portfolio(owner, portfolio_id)] if portfolio_id else ps.list_portfolios(owner)
+    pf = next((p for p in pfs if p.holdings), None)
+    if pf is None:
+        return {"fits": None, "problems": [], "headline": None}
+    persona = ps.resolve_persona(owner, None, pf)
+    return diagnose(run_xray(md, pf, persona, include_series=False), persona) | {"portfolio_id": pf.portfolio_id}
+
+
+@router.get("/activity")
+def activity(owner: str = Depends(owner_id)):
+    """Feed of what happened: agent proposals and decisions, account creation."""
+    store = get_store()
+    items = []
+    for m in store.list(owner, "MANDATE", 50):
+        buys = sum(o["amount_cad"] for o in m.get("orders", []) if o["side"] == "buy")
+        if m["status"] == "approved":
+            items.append({"at": m.get("approved_at") or m["created_at"], "kind": "approved", "title": f"Proposition approuvée : {m['label']}",
+                          "detail": f"{len(m['orders'])} ordre(s) · achats {buys:,.0f} $".replace(",", " "), "mandate_id": m["mandate_id"]})
+        items.append({"at": m["created_at"], "kind": "proposed" if m["status"] == "proposed" else "rejected" if m["status"] == "rejected" else "analysed",
+                      "title": ("En attente de votre décision : " if m["status"] == "proposed" else "Les agents ont analysé : ") + f"« {m['request']} »",
+                      "detail": m["headline"], "mandate_id": m["mandate_id"]})
+    for pf in ps.list_portfolios(owner):
+        items.append({"at": pf.created_at, "kind": "account", "title": f"Compte ouvert : {pf.name}", "detail": "Portefeuille simulé"})
+    meta = store.get(owner, "META", "onboarding")
+    if meta:
+        items.append({"at": meta.get("at"), "kind": "profile", "title": "Profil d'investisseur établi", "detail": "Questionnaire « Connaître son client »"})
+    items = [i for i in items if i.get("at")]
+    return {"items": sorted(items, key=lambda x: x["at"], reverse=True)[:30]}
+
+
+# ------------------------------------------------------------------------------------------------ connections (simulated)
+@router.get("/connections/institutions")
+def institutions():
+    from ..services.connection_service import INSTITUTIONS
+    return {"institutions": INSTITUTIONS, "mode": "simulation"}
+
+
+@router.get("/connections/{institution_id}/preview")
+def connection_preview(institution_id: str, owner: str = Depends(owner_id)):
+    from ..services.connection_service import preview
+    return preview(get_market_data(), owner, institution_id)
+
+
+class ConnectReq(BaseModel):
+    institution_id: str = Field(min_length=1, max_length=40)
+    accounts: list[str] = Field(min_length=1, max_length=6)
+
+
+@router.post("/connections")
+def connect_accounts(req: ConnectReq, owner: str = Depends(owner_id)):
+    """Imports the (simulated) existing accounts as the user's portfolio. No credential is ever requested."""
+    from ..services.connection_service import connect
+    persona = ps.resolve_persona(owner)
+    pf = connect(get_market_data(), owner, persona.persona_id, req.institution_id, req.accounts)
+    get_store().put(owner, "PORTFOLIO", pf.portfolio_id, pf.model_dump(mode="json"))
+    return pf.model_dump(mode="json")
+
+
+# ------------------------------------------------------------------------------------------------ mandates (agentic workflow)
+class MandateReq(BaseModel):
+    request: str = Field(default="", max_length=500)
+    portfolio_id: str | None = None
+    structured: dict | None = None  # optional explicit {kind, amount_cad, asset_id} from the UI
+
+
+@router.post("/mandates")
+def create_mandate(req: MandateReq, owner: str = Depends(owner_id)):
+    """Starts the agentic workflow on the user's own request, profile and portfolio. Poll /jobs/{id} for live agent steps."""
+    if not req.request.strip() and not req.structured:
+        raise HTTPException(400, {"code": "empty", "message": "Dites-moi ce que vous voulez faire."})
+    rate_limit(owner, "mandate", 10)
+    return _job_out(jobs.submit(owner, "mandate", req.model_dump()))
+
+
+@router.get("/mandates")
+def list_mandates(owner: str = Depends(owner_id)):
+    items = get_store().list(owner, "MANDATE", 30)
+    return {"mandates": [{k: m.get(k) for k in ("mandate_id", "status", "created_at", "request", "headline", "label")} for m in
+                         sorted(items, key=lambda x: x["created_at"], reverse=True)]}
+
+
+@router.get("/mandates/{mandate_id}")
+def get_mandate(mandate_id: str, owner: str = Depends(owner_id)):
+    m = get_store().get(owner, "MANDATE", mandate_id)
+    if not m:
+        raise HTTPException(404, {"code": "not_found", "message": "mandat introuvable"})
+    job = get_store().get(owner, "JOB", m.get("job_id") or "-") if m.get("job_id") else None
+    return m | {"trace": (job or {}).get("steps", [])}
+
+
+@router.post("/mandates/{mandate_id}/approve")
+def approve_mandate(mandate_id: str, owner: str = Depends(owner_id)):
+    from ..agents.mandate import approve
+    from ..services.wallet import InsufficientCash
+    try:
+        return approve(owner, mandate_id)
+    except InsufficientCash as exc:
+        raise HTTPException(status_code=409, detail={"code": "insufficient_cash", "message": str(exc)}) from exc
+
+
+@router.post("/mandates/{mandate_id}/reject")
+def reject_mandate(mandate_id: str, owner: str = Depends(owner_id)):
+    from ..agents.mandate import reject
+    return reject(owner, mandate_id)
+
+
+# ------------------------------------------------------------------------------------------------ market signals (ULYSSE engine)
+@router.get("/market/signals")
+def market_signals(owner: str = Depends(owner_id)):
+    """Market climate and unusual attention on the user's own holdings (omitted when the ULYSSE engine is not available)."""
+    from ..services import market_signals as sig
+    md = get_market_data()
+    held = sorted({h.asset_id for p in ps.list_portfolios(owner) for h in p.holdings})
+    return {"climate": sig.climate(), "attention": sig.attention(held, md)}
+
+
+@router.get("/assets/{asset_id}/signals")
+def asset_signals(asset_id: str):
+    from ..services import market_signals as sig
+    md = get_market_data()
+    if not md.has_asset(asset_id):
+        raise HTTPException(status_code=404, detail={"code": "unknown_asset", "message": "Actif hors de l'univers couvert."})
+    return {"facts": sig.asset_facts(asset_id, md.asset(asset_id)["name"])}
+
+
+# ------------------------------------------------------------------------------------------------ cash and guidance
+class DepositReq(BaseModel):
+    amount_cad: float = Field(gt=0, le=100_000)
+
+
+@router.post("/wallet/deposit")
+def wallet_deposit(req: DepositReq, owner: str = Depends(owner_id)):
+    """Adds simulated money to invest (no real money)."""
+    from ..services import wallet
+    if not ps.list_personas(owner):
+        raise HTTPException(status_code=409, detail={"code": "not_onboarded", "message": "Répondez d'abord au questionnaire."})
+    return _wallet_out(wallet.deposit(owner, req.amount_cad))
+
+
+class GuideReq(BaseModel):
+    tour_done: bool | None = None
+    lesson_done: str | None = Field(default=None, max_length=40)
+    dismissed: bool | None = None
+
+
+@router.put("/guide")
+def guide(req: GuideReq, owner: str = Depends(owner_id)):
+    """Newcomer guidance progress (guided tour, lessons read), kept with the account so it follows the person everywhere."""
+    st = get_store()
+    g = st.get(owner, "META", "guide") or {"tour_done": False, "lessons": [], "dismissed": False}
+    if req.tour_done is not None:
+        g["tour_done"] = req.tour_done
+    if req.dismissed is not None:
+        g["dismissed"] = req.dismissed
+    if req.lesson_done and req.lesson_done not in g["lessons"]:
+        g["lessons"].append(req.lesson_done)
+    st.put(owner, "META", "guide", g)
+    return g
+
+
+def _wallet_out(w: dict | None) -> dict | None:
+    if not w:
+        return None
+    return {"cash_cad": w["cash_cad"], "start_cad": w.get("start_cad"), "moves": w.get("moves", [])[:8]}
+
+
+# ------------------------------------------------------------------------------------------------ about
+@router.get("/about")
+def about():
+    """References behind the projections and the profile, for the « À propos » page (kept out of the client screens)."""
+    return {"references": [
+        {"label": "Normes d'hypothèses de projection 2026 (FP Canada et Institut de planification financière)", "url": "https://institutpf.org/en/projection-assumption-guidelines"},
+        {"label": "Inspiration du questionnaire (AEGIS n'est pas un service réglementé) : Règle 3200 de l'OCRI, « Connaître son client »", "url": "https://www.ciro.ca/"},
+    ]}
 
 
 # ------------------------------------------------------------------------------------------------ portfolios
@@ -227,7 +491,7 @@ class AnalysisReq(BaseModel):
 def analyze(req: AnalysisReq, owner: str = Depends(owner_id)):
     md = get_market_data()
     pf = ps.get_portfolio(owner, req.portfolio_id)
-    persona = ps.get_persona(owner, req.persona_id or pf.persona_id or "robert")
+    persona = ps.resolve_persona(owner, req.persona_id, pf)
     if req.benchmark_id and req.benchmark_id not in BENCHMARKS:
         raise HTTPException(400, {"code": "bad_benchmark", "message": "indice de référence inconnu"})
     xr = run_xray(md, pf, persona, as_of=req.as_of, lookback=req.lookback, benchmark_id=req.benchmark_id)
@@ -238,24 +502,6 @@ def analyze(req: AnalysisReq, owner: str = Depends(owner_id)):
         store.put(owner, "SNAPSHOT", snap.snapshot_id, snap.model_dump(mode="json"))
         xr["snapshot_id"] = snap.snapshot_id
     return xr
-
-
-@router.post("/analysis/diversification")
-def diversification(req: AnalysisReq, owner: str = Depends(owner_id)):
-    xr = analyze(req.model_copy(update={"save_snapshot": False}), owner)
-    keys = ("pf.hhi", "pf.effective_n", "pf.avg_corr", "pf.div_ratio", "pf.stress.vol", "pf.stress.normal_vol", "pf.stress.avg_corr")
-    return {"analysis_id": xr["analysis_id"], "metrics": {k: xr["ledger"][k] for k in keys if k in xr["ledger"]},
-            "stressed": xr["risk"].get("stressed"), "findings": xr["findings"], "correlated_pairs": xr["correlated_pairs"],
-            "offsetting_note": ("Deux actifs parfaitement anticorrélés à poids égal donnent un rendement proche de zéro (moins les coûts): "
-                                "le risque disparaît et le rendement aussi. La diversification utile combine des actifs à rendement espéré "
-                                "positif et faiblement corrélés; les corrélations montent souvent en période de stress.")}
-
-
-@router.post("/analysis/benchmark")
-def benchmark(req: AnalysisReq, owner: str = Depends(owner_id)):
-    xr = analyze(req.model_copy(update={"save_snapshot": False}), owner)
-    return {"analysis_id": xr["analysis_id"], "benchmark": xr["risk"].get("benchmark"), "series": xr["risk"].get("series"),
-            "available_benchmarks": {k: v["label"] for k, v in BENCHMARKS.items()}}
 
 
 @router.get("/analysis/{analysis_id}")
@@ -289,258 +535,12 @@ def chat(req: ChatReq, owner: str = Depends(owner_id)):
     return _job_out(jobs.submit(owner, "chat", req.model_dump()))
 
 
-@router.get("/agents/conversations/{conversation_id}")
-def conversation(conversation_id: str, owner: str = Depends(owner_id)):
-    d = get_store().get(owner, "CONV", conversation_id)
-    if not d:
-        raise HTTPException(404, {"code": "not_found", "message": "conversation introuvable"})
-    return d
-
-
-class DebateReq(BaseModel):
-    portfolio_id: str
-    persona_id: str | None = None
-    question: str | None = Field(default=None, max_length=500)
-    asset_id: str | None = None
-    amount_cad: float | None = Field(default=None, gt=0, le=10_000_000)
-    rounds: int = Field(default=2, ge=1, le=2)
-    use_fixture: bool = False
-    inject_unsupported_claim: bool = False
-
-
-@router.post("/agents/debate")
-def debate(req: DebateReq, owner: str = Depends(owner_id)):
-    rate_limit(owner, "debate", 6)
-    ps.get_portfolio(owner, req.portfolio_id)
-    return _job_out(jobs.submit(owner, "debate", req.model_dump()))
-
-
-@router.get("/agents/debates")
-def debates(owner: str = Depends(owner_id)):
-    out = []
-    for d in get_store().list(owner, "DEBATE", 30):
-        out.append({"debate_id": d["debate_id"], "question": d["question"], "persona": d["persona"]["display_name"], "created_at": d["created_at"],
-                    "status": d["decision"]["final_assessment"].get("status"), "headline": d["decision"]["final_assessment"].get("headline"),
-                    "asset_id": d.get("asset_id")})
-    return {"debates": out}
-
-
-@router.get("/agents/debate/{debate_id}")
-def get_debate(debate_id: str, owner: str = Depends(owner_id)):
-    d = get_store().get(owner, "DEBATE", debate_id)
-    if not d:
-        raise HTTPException(404, {"code": "not_found", "message": "débat introuvable"})
-    return d
-
-
 @router.get("/jobs/{job_id}")
 def job(job_id: str, owner: str = Depends(owner_id)):
     j = jobs.get_job(owner, job_id)
     if not j:
         raise HTTPException(404, {"code": "not_found", "message": "tâche introuvable"})
     return j.model_dump(mode="json")
-
-
-# ------------------------------------------------------------------------------------------------ scenarios
-class ScenarioReq(BaseModel):
-    portfolio_id: str
-    kind: str = Field(default="shock", pattern="^(shock|historical_replay)$")
-    preset: str | None = None
-    shocks: dict[str, float] | None = None
-    weights: dict[str, float] | None = None
-    start: str | None = None
-    end: str | None = None
-    rebalancing: str = Field(default="none", pattern="^(none|monthly)$")
-
-
-def _validate_shocks(sh: dict[str, float]) -> dict[str, float]:
-    for k, v in sh.items():
-        if not -1.0 <= float(v) <= 3.0:
-            raise HTTPException(400, {"code": "bad_shock", "message": f"choc {k} hors bornes [−100 %, +300 %]"})
-    return sh
-
-
-@router.post("/scenarios/run")
-def scenario_run(req: ScenarioReq, owner: str = Depends(owner_id)):
-    md = get_market_data()
-    pf = ps.get_portfolio(owner, req.portfolio_id)
-    pos = value_holdings(md, [h.model_dump() for h in pf.holdings], md.end_date)
-    if req.kind == "shock":
-        shocks = _validate_shocks(req.shocks) if req.shocks else SHOCK_PRESETS.get(req.preset or "tech_crash_30", SHOCK_PRESETS["tech_crash_30"])["shocks"]
-        return apply_shock(md, pos, shocks) | {"shocks": shocks, "preset": req.preset}
-    weights = req.weights or {a: float(pos.loc[a, "weight"]) for a in pos.index}
-    for a in weights:
-        md.asset(a)
-    return historical_replay(md, weights, req.start or "2022-01-03", req.end or md.end_date.date().isoformat(), float(pos["value_cad"].sum()),
-                             req.rebalancing)
-
-
-class CompareReq(BaseModel):
-    portfolio_id: str
-    persona_id: str | None = None
-    allocations: dict[str, dict[str, float]] | None = None
-    preset: str = "tech_crash_30"
-
-
-@router.post("/scenarios/compare")
-def scenario_compare(req: CompareReq, owner: str = Depends(owner_id)):
-    from ..agents.quant_agent import compare_alternatives
-    from ..analytics.ledger import MetricLedger
-    from ..services.analysis_service import asset_meta, assess_persona
-    md = get_market_data()
-    pf = ps.get_portfolio(owner, req.portfolio_id)
-    persona = ps.get_persona(owner, req.persona_id or pf.persona_id or "robert")
-    xr = run_xray(md, pf, persona, include_series=False)
-    led = MetricLedger()
-    alts = compare_alternatives(md, xr, led)
-    for name, w in (req.allocations or {}).items():
-        tot = sum(v for v in w.values() if v > 0)
-        if tot <= 0:
-            raise HTTPException(400, {"code": "bad_allocation", "message": f"allocation {name} vide"})
-        w = {k.upper(): v / tot for k, v in w.items() if v > 0}
-        r = portfolio_risk_metrics(md, w, md.end_date, None, xr["benchmark_id"])
-        alts[f"custom:{name}"] = {"label": f"Personnalisé – {name}", "weights": w, "vol": r["volatility"], "mdd": (r["drawdown"] or {}).get("max_drawdown"),
-                                  "hhi": sum(x * x for x in w.values()), "total_return": r["total_return"], "avg_corr": r["avg_pairwise_corr"]}
-    for k, a in alts.items():
-        if "weights" not in a or "error" in a:
-            continue
-        meta = asset_meta(md, list(a["weights"]))
-        tiers = {x: "HIGH" if meta[x]["is_single_issuer"] else "MEDIUM" for x in a["weights"]}
-        risk = {"volatility": a.get("vol"), "drawdown": {"max_drawdown": a.get("mdd")}, "n_obs": 400}
-        pa = assess_persona(persona, a["weights"], meta, tiers, risk)
-        a["persona"] = {"compatible": pa.compatible, "breaches": [c.rule_id for c in pa.budget_checks if c.status not in ("OK", "UNKNOWN")],
-                        "portfolio_tier": pa.portfolio_tier.value, "allowed_tier": pa.allowed_tier.value}
-        pos = pd.DataFrame([{"asset_id": x, "value_cad": w * xr["total_value_cad"], "currency": md.asset(x)["currency"]} for x, w in a["weights"].items()]).set_index("asset_id")
-        a["shock"] = apply_shock(md, pos, SHOCK_PRESETS.get(req.preset, SHOCK_PRESETS["tech_crash_30"])["shocks"])["return"]
-    return {"portfolio_id": pf.portfolio_id, "persona_id": persona.persona_id, "preset": req.preset, "alternatives": alts,
-            "label": "Allocations HYPOTHÉTIQUES construites par règles explicites; pas des recommandations", "data_as_of": xr["data_as_of"]}
-
-
-class SizeReq(BaseModel):
-    portfolio_value: float = Field(gt=0)
-    max_loss_pct: float = Field(gt=0, le=0.2)
-    adverse_moves: list[float] = Field(min_length=1, max_length=6)
-
-
-@router.post("/scenarios/position-size")
-def position_size(req: SizeReq):
-    return {"rows": position_size_table(req.portfolio_value, req.max_loss_pct, req.adverse_moves), "label": "Calcul éducatif"}
-
-
-# ------------------------------------------------------------------------------------------------ alerts & guardian
-@router.get("/alerts")
-def alerts(portfolio_id: str | None = None, include_replay: bool = True, owner: str = Depends(owner_id)):
-    items = get_store().list(owner, "ALERT", 300)
-    if portfolio_id:
-        items = [a for a in items if a["portfolio_id"] == portfolio_id]
-    if not include_replay:
-        items = [a for a in items if not a["simulated_replay"]]
-    return {"alerts": items}
-
-
-class ScanReq(BaseModel):
-    portfolio_id: str
-    persona_id: str | None = None
-
-
-@router.post("/alerts/scan")
-def scan(req: ScanReq, owner: str = Depends(owner_id)):
-    return scan_portfolio(owner, req.portfolio_id, req.persona_id)
-
-
-def _set_alert_status(owner, alert_id, status):
-    store = get_store()
-    a = store.get(owner, "ALERT", alert_id)
-    if not a:
-        raise HTTPException(404, {"code": "not_found", "message": "alerte introuvable"})
-    a["status"] = status
-    store.put(owner, "ALERT", alert_id, a)
-    return a
-
-
-@router.post("/alerts/{alert_id}/dismiss")
-def dismiss(alert_id: str, owner: str = Depends(owner_id)):
-    return _set_alert_status(owner, alert_id, "dismissed")
-
-
-@router.post("/alerts/{alert_id}/review")
-def review(alert_id: str, owner: str = Depends(owner_id)):
-    return _set_alert_status(owner, alert_id, "reviewed")
-
-
-class ReplayReq(BaseModel):
-    guided: str | None = None
-    portfolio_id: str | None = None
-    persona_id: str | None = None
-    start: str | None = None
-    end: str | None = None
-    step_days: int = Field(default=7, ge=1, le=31)
-
-
-@router.post("/replay")
-def replay(req: ReplayReq, owner: str = Depends(owner_id)):
-    md = get_market_data()
-    for d in (req.start, req.end):
-        if d and not (md.start_date <= pd.Timestamp(d) <= md.end_date):
-            raise HTTPException(400, {"code": "out_of_range", "message": "date hors de la couverture du jeu de données"})
-    return _job_out(jobs.submit(owner, "replay", req.model_dump()))
-
-
-@router.get("/replay/guided")
-def guided():
-    return {"guided": GUIDED}
-
-
-@router.get("/replay/{replay_id}")
-def get_replay(replay_id: str, owner: str = Depends(owner_id)):
-    d = get_store().get(owner, "REPLAY", replay_id)
-    if not d:
-        raise HTTPException(404, {"code": "not_found", "message": "rejeu introuvable"})
-    return d
-
-
-@router.get("/snapshots")
-def snapshots(portfolio_id: str | None = None, owner: str = Depends(owner_id)):
-    return {"snapshots": [{k: s[k] for k in ("snapshot_id", "portfolio_id", "persona_id", "as_of", "created_at", "label", "total_value_cad", "key_metrics")}
-                          for s in list_snapshots(owner, portfolio_id)]}
-
-
-class CompareSnapReq(BaseModel):
-    before: str
-    after: str
-
-
-@router.post("/snapshots/compare")
-def compare_snapshots(req: CompareSnapReq, owner: str = Depends(owner_id)):
-    a, b = get_store().get(owner, "SNAPSHOT", req.before), get_store().get(owner, "SNAPSHOT", req.after)
-    if not a or not b:
-        raise HTTPException(404, {"code": "not_found", "message": "instantané introuvable"})
-    return compare(a, b)
-
-
-# ------------------------------------------------------------------------------------------------ reports
-class ReportReq(BaseModel):
-    portfolio_id: str
-    persona_id: str | None = None
-    end: str | None = None
-
-
-@router.post("/reports/generate")
-def report(req: ReportReq, owner: str = Depends(owner_id)):
-    return _job_out(jobs.submit(owner, "report", req.model_dump()))
-
-
-@router.get("/reports")
-def reports(owner: str = Depends(owner_id)):
-    return {"reports": [{k: r[k] for k in ("report_id", "title", "period", "created_at", "portfolio_id", "persona_id")} for r in get_store().list(owner, "REPORT", 30)]}
-
-
-@router.get("/reports/{report_id}")
-def get_report(report_id: str, owner: str = Depends(owner_id)):
-    d = get_store().get(owner, "REPORT", report_id)
-    if not d:
-        raise HTTPException(404, {"code": "not_found", "message": "rapport introuvable"})
-    return d
 
 
 # ------------------------------------------------------------------------------------------------ hype intelligence & research
@@ -564,11 +564,6 @@ def hype_research(req: HypeReq, owner: str = Depends(owner_id)):
     return _job_out(jobs.submit(owner, "hype", body))
 
 
-@router.post("/research/investigate")
-def investigate(req: HypeReq, owner: str = Depends(owner_id)):
-    return hype_research(req, owner)
-
-
 @router.get("/hype/research")
 def hype_list(owner: str = Depends(owner_id)):
     return {"research": [{"research_id": r["research_id"], "asset_id": r["asset_id"], "name": r["name"], "created_at": r["created_at"],
@@ -582,95 +577,3 @@ def hype_get(research_id: str, owner: str = Depends(owner_id)):
     if not d:
         raise HTTPException(404, {"code": "not_found", "message": "recherche introuvable"})
     return d
-
-
-@router.get("/research/{research_id}/evidence")
-def research_evidence(research_id: str, owner: str = Depends(owner_id)):
-    d = hype_get(research_id, owner)
-    return {"research_id": research_id, "evidence": d["evidence"], "claims": d["claims"], "clusters": d["clusters"], "tool_calls": d["tool_calls"]}
-
-
-@router.get("/hype/assets/{asset_id}/timeline")
-def hype_timeline(asset_id: str, owner: str = Depends(owner_id)):
-    md = get_market_data()
-    aid = asset_id.upper()
-    md.asset(aid)
-    research = [r for r in get_store().list(owner, "HYPE", 50) if r["asset_id"] == aid]
-    events = research[0]["events"] if research else []
-    s = md.native_series(aid, "close")
-    s = s[s.index >= md.end_date - pd.Timedelta(days=180)]
-    return {"asset_id": aid, "events": events, "research_id": research[0]["research_id"] if research else None,
-            "prices": [{"date": d.date().isoformat(), "close": float(x)} for d, x in s.items()],
-            "note": "Événements issus de la dernière recherche exécutée; prix du jeu de données historique (pas un flux en direct)."}
-
-
-class ImpactReq(BaseModel):
-    portfolio_id: str
-    asset_id: str
-    amount_cad: float = Field(gt=0, le=10_000_000)
-    persona_id: str | None = None
-
-
-@router.post("/hype/portfolio-impact")
-def portfolio_impact(req: ImpactReq, owner: str = Depends(owner_id)):
-    md = get_market_data()
-    pf = ps.get_portfolio(owner, req.portfolio_id)
-    persona = ps.get_persona(owner, req.persona_id or pf.persona_id or "robert")
-    aid = req.asset_id.upper()
-    res, led = hypothetical_addition(md, pf, persona, aid, req.amount_cad, md.asset(aid)["asset_class"] == "crypto")
-    return res
-
-
-@router.get("/hype/sources/status")
-def hype_sources():
-    return {"providers": provider_status(), "checked_at": dt.datetime.now(dt.timezone.utc).isoformat()}
-
-
-@router.get("/hype/trending")
-def hype_trending():
-    tool = WebResearchTool()
-    t = tool.crypto_trending()
-    md = get_market_data()
-    ids = {r["coingecko_id"]: aid for aid, r in md.universe.iterrows() if r.get("coingecko_id")}
-    if not t:
-        return {"status": "UNAVAILABLE", "error": (tool.calls[-1] if tool.calls else {}).get("error")}
-    for c in t["coins"]:
-        c["in_universe"] = ids.get(c["id"])
-    return {"status": "OK", "trending": t, "note": "Attention (recherches CoinGecko), pas une mesure de qualité ni une recommandation"}
-
-
-# ------------------------------------------------------------------------------------------------ hypotheses
-class HypRegReq(BaseModel):
-    key: str = Field(pattern="^H[1-4]$")
-    cutoff: str = "2024-06-28"
-    assets: list[str] | None = None
-    overrides: dict | None = None
-
-
-@router.post("/hypotheses/register")
-def hyp_register(req: HypRegReq, owner: str = Depends(owner_id)):
-    md = get_market_data()
-    if not (md.start_date + pd.Timedelta(days=365) <= pd.Timestamp(req.cutoff) <= md.end_date - pd.Timedelta(days=180)):
-        raise HTTPException(400, {"code": "bad_cutoff", "message": "la coupure doit laisser au moins 1 an de développement et 6 mois de test"})
-    return hypothesis_agent.register(owner, md, req.key, req.cutoff, req.assets, req.overrides)
-
-
-@router.post("/hypotheses/{hypothesis_id}/evaluate")
-def hyp_evaluate(hypothesis_id: str, owner: str = Depends(owner_id)):
-    return hypothesis_agent.evaluate(owner, get_market_data(), hypothesis_id)
-
-
-@router.get("/hypotheses/{hypothesis_id}/results")
-def hyp_results(hypothesis_id: str, owner: str = Depends(owner_id)):
-    d = get_store().get(owner, "HYP", hypothesis_id)
-    if not d:
-        raise HTTPException(404, {"code": "not_found", "message": "hypothèse introuvable"})
-    return d
-
-
-@router.get("/hypotheses")
-def hyp_list(owner: str = Depends(owner_id)):
-    md = get_market_data()
-    std = hypothesis_agent.standard_results(md)
-    mine = [h for h in get_store().list(owner, "HYP", 50) if "hypothesis_id" in h]
-    return {"standard": std, "registered": mine}

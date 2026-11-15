@@ -1,42 +1,46 @@
-# Market data is never committed (licensing: starter ZIP and provider terms)
-data/
-!data/README.md
-Datathon2026.zip
+# Data: raw downloads and built artefacts are re-creatable (data/manual stays committed)
+data/active/
+data/active_backup_*/
+data/cache/
+data/build/
+data/kit/
 *.zip
 
 # Python
 __pycache__/
 *.pyc
 .venv/
-backend/.venv/
-backend/.localdata/
-backend/dist/
 .pytest_cache/
 *.egg-info/
+backend/.localdata/
+backend/dist/
 
 # Node
 node_modules/
 frontend/dist/
-infrastructure/cdk.out/
-infrastructure/*.js
-!infrastructure/jest.config.js
-infrastructure/**/*.d.ts
-infrastructure/bin/*.js
-infrastructure/lib/*.js
+.vite/
+*.tsbuildinfo
 
-# Env and secrets
+# AWS CDK
+infrastructure/cdk.out/
+infrastructure/cdk-outputs.json
+infrastructure/**/*.js
+infrastructure/**/*.d.ts
+
+# Test artefacts
+frontend/test-results/
+frontend/playwright-report/
+
+# Local runtime state
+.ulysse/
+
+# Secrets (never commit)
 .env
 .env.*
 !.env.example
 *.pem
 
-# OS / editors
+# OS / IDE
 .DS_Store
 .idea/
 .vscode/
-
-# Test artefacts and deploy outputs
-frontend/test-results/
-frontend/playwright-report/
-infrastructure/cdk-outputs.json
-infrastructure/cdk-ts-out/
