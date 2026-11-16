@@ -13,18 +13,20 @@ import json
 import os
 import re
 import unicodedata
+import urllib.error
 import urllib.parse
+import urllib.request
 from datetime import date, timedelta
+from pathlib import Path
 
 import numpy as np
 
 from ulysse.config import CACHE_DIR
 from ulysse.data.datapack import AsOf
-from ulysse.data.sources.http import NotFound, fetch
 from ulysse.evidence import Evidence, evidence, insufficient
 
 SEC_UA = os.environ.get("ULYSSE_SEC_USER_AGENT", "ULYSSE datathon prototype ulysse-demo@example.org")
-OUT = CACHE_DIR / "nouvelles"
+OUT = Path(os.environ.get("ULYSSE_CACHE_RECHERCHE") or CACHE_DIR / "nouvelles")   # /tmp on Lambda (code folder is read-only)
 FENETRE_DEPOTS_JOURS = 120
 FENETRE_ARTICLES_JOURS = 14
 GDELT_COUVERTURE_JOURS = 90
@@ -38,9 +40,28 @@ def actif() -> bool:
     return os.environ.get("ULYSSE_RECHERCHE_WEB", "1") != "0"
 
 
+class Indisponible(RuntimeError):
+    pass
+
+
 def _json(url: str, nom: str, headers: dict | None = None) -> dict:
-    p = fetch(url, OUT / nom, headers=headers, retries=2, timeout=15)
-    return json.loads(p.read_text(encoding="utf-8"))
+    """GET with a file cache (one file per day and query). Short timeout: the app never waits long for a live source."""
+    dest = OUT / nom
+    if dest.exists():
+        return json.loads(dest.read_text(encoding="utf-8"))
+    req = urllib.request.Request(url, headers={"User-Agent": SEC_UA, "Accept": "application/json", **(headers or {})})
+    try:
+        with urllib.request.urlopen(req, timeout=15) as r:
+            raw = r.read()
+        data = json.loads(raw.decode("utf-8"))
+    except (urllib.error.URLError, TimeoutError, ValueError, OSError) as e:
+        raise Indisponible(str(e)[:120]) from e
+    try:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(raw)
+    except OSError:
+        pass                                       # no cache available: still answer
+    return data
 
 
 def _cik(ticker: str) -> str | None:
@@ -68,7 +89,7 @@ def ev_depots(v: AsOf, t: str) -> Evidence:
         if not cik:
             return insufficient(**base, unite="nombre", note="Émetteur introuvable dans la table officielle de la SEC.")
         sub = _json(f"https://data.sec.gov/submissions/CIK{cik}.json", f"sec_submissions_{cik}_{date.today().isoformat()}.json", {"User-Agent": SEC_UA})
-    except (NotFound, RuntimeError, ValueError) as e:
+    except Indisponible as e:
         return insufficient(**base, unite="nombre", note=f"SEC EDGAR indisponible ({str(e)[:80]}).")
     r = sub.get("filings", {}).get("recent", {})
     fin = str(v.day)
@@ -118,7 +139,7 @@ def ev_articles(v: AsOf, t: str) -> Evidence:
     url = "https://api.gdeltproject.org/api/v2/doc/doc?" + urllib.parse.urlencode(q)
     try:
         d = _json(url, f"gdelt_{t}_{fin.isoformat()}.json")
-    except (NotFound, RuntimeError, ValueError) as e:
+    except Indisponible as e:
         return insufficient(**base, unite="nombre", note=f"GDELT indisponible ({str(e)[:80]}).")
     groupes: dict[str, dict] = {}
     for art in d.get("articles", []) or []:

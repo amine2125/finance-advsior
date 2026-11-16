@@ -40,6 +40,10 @@ REPONSES = {
 }
 
 PERSONA_IDS = list(REPONSES)
+# Demo accounts for the jury (cognito mode): email -> (reference profile, display name, one-line description)
+COMPTES_DEMO = {"amira@demo.example.com": ("amira", "Amira", "26 ans · tolérance élevée · croissance, technologie, un peu de crypto"),
+                "mateo@demo.example.com": ("mateo", "Mateo", "41 ans · modéré · deux enfants, préférences ESG"),
+                "robert@demo.example.com": ("robert", "Robert", "59 ans · faible à modéré · attiré par les titres populaires")}
 LISTES_SURVEILLANCE = {"amira": ["NVDA", "ETH-USD", "SHOP.TO"], "mateo": ["XOM", "ENB.TO", "ESGV"], "robert": ["TSLA", "NVDA", "RY.TO"]}
 
 

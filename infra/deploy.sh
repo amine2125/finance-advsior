@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Phase 7 deployment (run only with credentials provided by the team; nothing is hardcoded).
+# Deployment with the AWS CLI credentials of the person deploying (aws configure / aws sso login); no .env, nothing hardcoded.
 # Usage: AWS_PROFILE=<profile> BUDGET_EMAIL=<address> ./infra/deploy.sh [stack-name]
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -18,6 +18,8 @@ DATA=$(out DataBucketName); UI=$(out UiBucketName); DIST=$(out DistributionId); 
 aws s3 sync "$ROOT/data/build/datapack/" "s3://$DATA/datapack/" --region "$REGION" --delete
 aws s3 sync "$ROOT/frontend/dist/" "s3://$UI/" --region "$REGION" --delete
 aws cloudfront create-invalidation --distribution-id "$DIST" --paths "/*" >/dev/null
+PY="$ROOT/backend/.venv/bin/python"; [ -x "$PY" ] || PY="$ROOT/backend/.venv/Scripts/python.exe"   # Windows (Git Bash)
+"$PY" "$ROOT/scripts/creer_comptes_demo.py" --stack "$STACK" --region "$REGION"     # jury accounts (Cognito)
 aws lambda invoke --function-name "$FN" --region "$REGION" --cli-binary-format raw-in-base64-out \
-  --payload '{"requestContext":{"http":{"method":"POST"}},"rawPath":"/api/demo/reinitialiser","body":"{}"}' /dev/stdout >/dev/null
+  --payload '{"action":"vigie"}' /dev/null >/dev/null                                 # first Vigie run
 echo "ULYSSE déployé : $URL"

@@ -1,11 +1,14 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api } from "./api";
+import { configurerAuth, connecte as estConnecte, modeAuth, type AuthConfig } from "./auth";
 import { traduire, type Langue } from "./i18n/i18n";
 import type { Cle } from "./i18n/fr";
 import type { Actif, Preuve } from "./types";
 
-export interface Config { as_of_defaut: string; donnees_debut: string; donnees_jusqu_au: string; llm: string; univers: Actif[]; episodes: Record<string, { debut: string; fin: string; libelle: string }> }
+export interface Config { as_of_defaut: string; donnees_debut: string; donnees_jusqu_au: string; llm: string; univers: Actif[]; episodes: Record<string, { debut: string; fin: string; libelle: string }>; auth?: AuthConfig }
+export interface Guide { visite_faite?: boolean; lecons?: string[] }
+export interface CompteInfo { mode: "aucune" | "cognito"; email: string | null; profils: string[] | null; guide: Guide }
 export interface Terme { cle: string; terme: string; definition: string; technique: string }
 
 interface Ctx {
@@ -13,6 +16,7 @@ interface Ctx {
   setProfil: (p: string) => void; setAsOf: (d: string | null) => void; setLangue: (l: Langue) => void;
   t: (k: Cle, v?: Record<string, string>) => string; preuve: Preuve | null; ouvrirPreuve: (p: Preuve | null) => void;
   glossaire: Record<string, Terme>; rafraichir: number; toucher: () => void;
+  connecte: boolean; compte: CompteInfo | null; rechargerCompte: () => Promise<void>;
 }
 const AppCtx = createContext<Ctx | null>(null);
 
@@ -23,8 +27,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [preuve, ouvrirPreuve] = useState<Preuve | null>(null);
   const [glossaire, setGlossaire] = useState<Record<string, Terme>>({});
   const [rafraichir, setRafraichir] = useState(0);
-  useEffect(() => { api<Config>("/config").then(setConfig).catch(() => setConfig(null)); }, []);
-  const profil = sp.get("p") || "robert";
+  const [connecte, setConnecte] = useState(estConnecte());
+  const [compte, setCompte] = useState<CompteInfo | null>(null);
+  useEffect(() => { api<Config>("/config").then((c) => { configurerAuth(c.auth); setConnecte(estConnecte()); setConfig(c); }).catch(() => setConfig(null)); }, []);
+  const rechargerCompte = useCallback(async () => {
+    if (modeAuth() === "cognito" && !estConnecte()) { setCompte(null); return; }
+    try { setCompte(await api<CompteInfo>("/compte")); } catch { setCompte(null); }
+  }, []);
+  useEffect(() => { if (config) rechargerCompte(); }, [config, connecte, rechargerCompte]);
+  useEffect(() => {
+    const quitter = () => { setConnecte(false); setCompte(null); };
+    window.addEventListener("ulysse:deconnecte", quitter);
+    return () => window.removeEventListener("ulysse:deconnecte", quitter);
+  }, []);
+  const profil = sp.get("p") || compte?.profils?.[0] || (compte?.mode === "cognito" ? "" : "robert");
   const asOf = sp.get("d") || config?.as_of_defaut || "2026-11-14";
   const enPassé = !!config && asOf < config.as_of_defaut;
   useEffect(() => {
@@ -38,7 +54,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     config, profil, asOf, enPassé, langue,
     setProfil: (p) => setParam("p", p), setAsOf: (d) => setParam("d", d), setLangue: (l) => { setLangueState(l); localStorageSet("ulysse.langue", l); },
     t: (k, v) => traduire(langue, k, v), preuve, ouvrirPreuve, glossaire, rafraichir, toucher: () => setRafraichir((x) => x + 1),
-  }), [config, profil, asOf, enPassé, langue, preuve, glossaire, rafraichir, setParam]);
+    connecte, compte, rechargerCompte: async () => { setConnecte(estConnecte()); await rechargerCompte(); },
+  }), [config, profil, asOf, enPassé, langue, preuve, glossaire, rafraichir, setParam, connecte, compte, rechargerCompte]);
   return <AppCtx.Provider value={value}>{children}</AppCtx.Provider>;
 }
 

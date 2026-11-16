@@ -14,7 +14,7 @@ from ulysse.config import ROOT
 
 app = FastAPI(title="ULYSSE (local)", docs_url=None, redoc_url=None)
 app.add_middleware(GZipMiddleware, minimum_size=1000)   # CloudFront compresses in production (Compress: true)
-app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"], allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"], allow_methods=["GET", "POST"], allow_headers=["content-type", "x-ulysse-jeton", "x-amz-content-sha256"])
 DIST = ROOT / "frontend" / "dist"
 
 
@@ -24,7 +24,7 @@ async def api(path: str, request: Request):
     if request.method == "POST":
         raw = await request.body()
         body = (await request.json()) if raw else {}
-    status, payload = handle(request.method, "/api/" + path, dict(request.query_params), body)
+    status, payload = handle(request.method, "/api/" + path, dict(request.query_params), body, dict(request.headers))
     return JSONResponse(payload, status_code=status)
 
 

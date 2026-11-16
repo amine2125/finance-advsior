@@ -2,7 +2,9 @@ import clsx from "clsx";
 import { AnimatePresence, motion } from "framer-motion";
 import { Bell, BookOpen, ChevronDown, FileSignature, Home, MoreHorizontal, PieChart, Sailboat, Search, Wallet } from "lucide-react";
 import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
-import { Link, NavLink, Route, Routes, useLocation } from "react-router-dom";
+import { Link, Navigate, NavLink, Route, Routes, useLocation } from "react-router-dom";
+import { api } from "./api";
+import { seDeconnecter } from "./auth";
 import { AssistantProvider, AvatarAssistant, useAssistant } from "./components/Assistant";
 import { Chargement } from "./components/base";
 import { PageIn, Segmented, spring } from "./components/motion";
@@ -24,13 +26,27 @@ const Journal = lazy(() => import("./pages/Journal").then((m) => ({ default: m.J
 const DossierPage = lazy(() => import("./pages/Dossier").then((m) => ({ default: m.DossierPage })));
 const Fiabilite = lazy(() => import("./pages/Fiabilite").then((m) => ({ default: m.Fiabilite })));
 const Demo = lazy(() => import("./pages/Demo").then((m) => ({ default: m.Demo })));
+const Connexion = lazy(() => import("./pages/Connexion").then((m) => ({ default: m.Connexion })));
 const Placements = lazy(() => import("./pages/Placements").then((m) => ({ default: m.Placements })));
 
 /** Product name is configuration (VITE_APP_NAME). */
 export const APP_NAME: string = (import.meta as any).env?.VITE_APP_NAME || "ULYSSE";
 
 export function App() {
-  return <AppProvider><AssistantProvider><Coquille /></AssistantProvider></AppProvider>;
+  return <AppProvider><AssistantProvider><Porte /></AssistantProvider></AppProvider>;
+}
+
+/** With accounts (Cognito): sign in first, then create a profile if the account has none. Without: the app as before. */
+function Porte() {
+  const { config, connecte, compte } = useApp();
+  const loc = useLocation();
+  if (!config) return <div className="mx-auto max-w-[1140px] px-4 py-10"><Chargement lignes={4} /></div>;
+  if (config.auth?.mode === "cognito") {
+    if (!connecte) return <Suspense fallback={<Chargement lignes={4} />}><Connexion /></Suspense>;
+    if (!compte) return <div className="mx-auto max-w-[1140px] px-4 py-10"><Chargement lignes={4} /></div>;
+    if (!compte.profils?.length && loc.pathname !== "/nouveau-profil") return <Navigate to="/nouveau-profil" replace />;
+  }
+  return <Coquille />;
 }
 
 const PRINCIPAL = [
@@ -228,7 +244,13 @@ function Cloche({ suffixe }: { suffixe: string }) {
 }
 
 function MenuProfil() {
-  const { t, config, profil, setProfil, asOf, setAsOf, enPassé, langue, setLangue } = useApp();
+  const { t, config, profil, setProfil, asOf, setAsOf, enPassé, langue, setLangue, compte, rechargerCompte } = useApp();
+  const effacer = async () => {
+    if (!window.confirm("Effacer tous tes profils, placements et ton journal ? C'est définitif.")) return;
+    await api("/compte/effacer", { body: {} });
+    window.location.assign("/");
+    await rechargerCompte();
+  };
   const loc = useLocation();
   const { data: profils } = useData<{ id: string; nom: string; tolerance: string }[]>("/profils");
   const [ouvert, setOuvert] = useState(false);
@@ -258,6 +280,13 @@ function MenuProfil() {
             onChange={(e) => setAsOf(e.target.value && e.target.value !== config?.as_of_defaut ? e.target.value : null)} />
           {enPassé && <button onClick={() => setAsOf(null)} className="mt-2 text-sm font-medium text-primary-600 hover:underline">{t("app.retour_present")}</button>}
         </div>
+        {compte?.mode === "cognito" && <div className="mt-4 border-t border-line pt-4 text-sm">
+          <p className="truncate text-ink-muted">{compte.email}</p>
+          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+            <button onClick={() => seDeconnecter()} className="font-medium text-primary-600 hover:underline">Se déconnecter</button>
+            <button onClick={effacer} className="font-medium text-loss-700 hover:underline">Effacer mes données</button>
+          </div>
+        </div>}
         <div className="mt-4 flex items-center justify-between border-t border-line pt-4">
           <span className="text-xs font-semibold uppercase tracking-[0.08em] text-ink-muted">{t("app.langue")}</span>
           <Segmented size="sm" label={t("app.langue")} value={langue} onChange={(l) => setLangue(l)} options={[["fr", "Français"], ["en", "English"]]} />

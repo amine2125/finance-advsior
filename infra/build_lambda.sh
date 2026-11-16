@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="$ROOT/infra/build/lambda"
 PIP="$ROOT/backend/.venv/bin/pip"
+[ -x "$PIP" ] || PIP="$ROOT/backend/.venv/Scripts/pip.exe"   # Windows (Git Bash)
 rm -rf "$OUT" && mkdir -p "$OUT"
 "$PIP" install --quiet --no-compile --target "$OUT" \
   --platform manylinux2014_aarch64 --platform manylinux_2_28_aarch64 --implementation cp --python-version 3.12 --only-binary=:all: \

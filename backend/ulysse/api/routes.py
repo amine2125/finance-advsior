@@ -10,7 +10,7 @@ from typing import Any, Callable
 
 import numpy as np
 
-from ulysse import demo, orchestrator, policy, positions, vigie
+from ulysse import compte, demo, orchestrator, policy, positions, vigie
 from ulysse.adaptation import adaptation
 from ulysse.analytics import core, hype, portfolio as pfm, regime, tools
 from ulysse.config import DEFAULT_ASOF
@@ -42,17 +42,36 @@ def route(method: str, pattern: str):
     return deco
 
 
-def handle(method: str, path: str, query: dict | None = None, body: Any = None) -> tuple[int, Any]:
+PUBLIQUES = ("/api/sante", "/api/config", "/api/glossaire", "/api/fiabilite", "/api/outils", "/api/connexions/institutions")
+
+
+def _publique(path: str) -> bool:
+    """Market data and documentation are public; anything about a profile needs an account (cognito mode)."""
+    return path in PUBLIQUES or (path.startswith("/api/marche") and "profil" not in path) or path == "/api/tendances"
+
+
+def handle(method: str, path: str, query: dict | None = None, body: Any = None, headers: dict | None = None) -> tuple[int, Any]:
     query = query or {}
     for m, rx, fn in ROUTES:
         mm = rx.match(path)
         if m == method and mm:
             try:
+                c = compte.identifier(headers)
+            except compte.NonConnecte as e:
+                if not _publique(path) or query.get("profil"):
+                    return 401, {"erreur": str(e), "code": "non_connecte"}
+                c = None
+            tok = compte.entrer(c)
+            try:
                 return 200, fn(query=query, body=body or {}, **mm.groupdict())
             except HttpError as e:
                 return e.status, {"erreur": e.message}
+            except compte.NonConnecte as e:
+                return 401, {"erreur": str(e), "code": "non_connecte"}
             except (KeyError, ValueError) as e:
                 return 400, {"erreur": str(e)}
+            finally:
+                compte.sortir(tok)
     return 404, {"erreur": f"route inconnue : {method} {path}"}
 
 
@@ -66,6 +85,8 @@ def _asof(q) -> str:
 
 
 def _profil(pid: str) -> tuple[Profil, Contrat]:
+    if not compte.peut_voir(pid):
+        raise HttpError(404, f"profil inconnu : {pid}")      # same answer as a missing profile: never reveal another account's data
     st = get_store()
     p, c = st.get("profils", pid), st.get("contrats", pid)
     if not p or not c:
@@ -92,7 +113,7 @@ def _ticker(t: str) -> str:
 
 
 def _pack(pid: str | None, as_of: str) -> dict:
-    if not pid:
+    if not pid or not compte.peut_voir(pid):
         return {}
     p = get_store().get("signal_packs", f"{pid}@{as_of}")
     if p is None:      # not pre-computed for this date (e.g. time machine): compute on demand, then cache
@@ -113,15 +134,41 @@ def sante(query, body):
 def config(query, body):
     dp = get_datapack()
     return {"as_of_defaut": DEFAULT_ASOF, "donnees_debut": str(dp.calendar[0]), "donnees_jusqu_au": str(dp.last_day),
-            "llm": get_llm().name, "univers": dp.assets, "mention": "Simulation, pas un conseil financier.",
+            "llm": get_llm().name, "univers": dp.assets, "mention": "Simulation, pas un conseil financier.", "auth": compte.config_publique(),
             "episodes": {k: {"debut": s, "fin": e, "libelle": l} for k, (s, e, l) in pfm.EPISODES.items()}}
 
 
 @route("POST", "/api/demo/reinitialiser")
 def demo_reset(query, body):
+    if compte.mode() == "cognito":
+        raise HttpError(403, "Réinitialisation globale désactivée avec les comptes : utilise « Effacer mes données ».")
     r = demo.reset(get_store())
     r["vigie"] = vigie.executer(DEFAULT_ASOF)
     return r
+
+
+@route("GET", "/api/compte")
+def mon_compte(query, body):
+    c = compte.courant()
+    return {"mode": compte.mode(), "email": c.email if c else None, "profils": compte.profils_visibles(), "guide": compte.guide()}
+
+
+@route("POST", "/api/compte/effacer")
+def effacer_compte(query, body):
+    """« Effacer mes données » : every profile of this account and its records. A demo account gets its profile back at the next sign-in."""
+    return {"profils_effaces": compte.effacer()}
+
+
+@route("POST", "/api/guide")
+def maj_guide(query, body):
+    """Newcomer guidance (guided tour, lessons read), kept with the account so it follows the person."""
+    g = {"visite_faite": False, "lecons": [], **compte.guide()}
+    if body.get("visite_faite") is not None:
+        g["visite_faite"] = bool(body["visite_faite"])
+    lecon = str(body.get("lecon_lue") or "")[:40]
+    if lecon and lecon not in g["lecons"]:
+        g["lecons"] = g["lecons"] + [lecon]
+    return compte.maj_guide(g)
 
 
 @route("GET", "/api/glossaire")
@@ -133,7 +180,8 @@ def glossary(query, body):
 def profils(query, body):
     st = get_store()
     out = []
-    for pid in st.list("profils"):
+    vis = compte.profils_visibles()
+    for pid in (vis if vis is not None else st.list("profils")):
         p = st.get("profils", pid)
         out.append({k: p.get(k) for k in ("id", "nom", "age", "tolerance", "experience", "description", "fictif")})
     return out
@@ -149,6 +197,7 @@ def creer_profil(query, body):
     st.put("contrats", pid, con.model_dump())
     st.put("contrats_versions", f"{pid}-v{con.version}", con.model_dump())
     st.append("journal", pid, {"type": "contrat", "a": now_iso(), "version": 1, "message": "Contrat créé en direct."})
+    compte.ajouter_profil(pid)
     v = get_datapack().asof(_asof(query))
     return {"profil": prof.model_dump(), "contrat": con.model_dump(), "contradictions": _k(v, prof, con),
             "adaptation": adaptation(prof)}
@@ -554,7 +603,7 @@ def creer_dossier(query, body):
 @route("GET", "/api/dossiers/{did}")
 def dossier(query, body, did):
     d = get_store().get("dossiers", did)
-    if not d:
+    if not d or not compte.peut_voir(d.get("profil_id", "")):
         raise HttpError(404, "dossier inconnu")
     return d
 
@@ -615,7 +664,13 @@ def maj_surveillance(query, body, pid):
 
 @route("POST", "/api/vigie/executer")
 def vigie_run(query, body):
-    return vigie.executer(body.get("as_of") or _asof(query), body.get("profils"))
+    vis = compte.profils_visibles()
+    profils = body.get("profils")
+    if vis is not None:
+        profils = [p for p in (profils or vis) if p in vis]
+        if not profils:
+            return {"profils": [], "message": "Aucun profil à surveiller pour ce compte."}
+    return vigie.executer(body.get("as_of") or _asof(query), profils)
 
 
 @route("GET", "/api/vigie/historique")

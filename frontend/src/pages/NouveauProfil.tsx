@@ -18,7 +18,7 @@ const PRODUITS: [string, string][] = [["epargne", "Compte épargne"], ["cpg", "C
 
 /** Step-by-step onboarding; « Connaître son client » sets the tolerance (lowest of three measures), the result is a ULYSSE contract. */
 export function NouveauProfil() {
-  const { setProfil, toucher } = useApp();
+  const { setProfil, toucher, rechargerCompte } = useApp();
   const [etape, setEtape] = useState(0);
   const [v, setV] = useState({ nom: "Profil prudent", age: "34", tolerance: "faible", baisse: "15", reaction: "attendre", ressenti: "mal_a_l_aise",
     revenu: "4500", depenses: "3200", epargne: "12000", carte: "0", dettes: "0", emploi: "permanent", charge: "0", liquidites: "modere",
@@ -43,7 +43,7 @@ export function NouveauProfil() {
           epargne_cad: n(v.epargne), dette_carte_cad: n(v.carte), autres_dettes_cad: n(v.dettes), emploi: v.emploi, personnes_a_charge: n(v.charge),
           besoin_liquidites: v.liquidites, connaissances_declarees: v.savoir, quiz_diversification: v.qd || null, quiz_obligations: v.qo || null,
           quiz_inflation: v.qi || null, produits_detenus: v.produits } } });
-      setRes(r); toucher();
+      setRes(r); toucher(); await rechargerCompte();
     } catch (x) { setErr((x as Error).message); } finally { setOccupe(false); }
   };
   if (res) return (

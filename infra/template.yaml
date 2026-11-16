@@ -3,7 +3,8 @@ Transform: AWS::Serverless-2016-10-31
 Description: >
   ULYSSE (Datathon AlphaForge AI 2026) - simulated investing app with an embedded, self-explaining agent.
   One Python Lambda (function URL) behind CloudFront, DynamoDB, two private S3 buckets, an hourly
-  EventBridge Scheduler trigger for the Vigie, Amazon Bedrock for planning and writing, and a cost budget.
+  EventBridge Scheduler trigger for the Vigie, Amazon Bedrock for planning, writing and the pros/cons agents,
+  Amazon Cognito accounts, and a cost budget.
   Simulation only: no real transaction.
 
 Parameters:
@@ -21,6 +22,14 @@ Parameters:
     Type: Number
     Default: 5
     Description: Above this estimated daily LLM spend, dossiers are written by the template (no LLM) and the app says so.
+  DemoPassword:
+    Type: String
+    Default: UlysseDemo2026!
+    Description: Password of the three jury demo accounts (fictitious profiles; shown on the sign-in page on purpose).
+  SecUserAgent:
+    Type: String
+    Default: ULYSSE datathon prototype ulysse-demo@example.org
+    Description: User-Agent sent to SEC EDGAR (its fair-access policy asks for a contact).
 
 Globals:
   Function:
@@ -60,6 +69,58 @@ Resources:
       SSESpecification: {SSEEnabled: true}
       PointInTimeRecoverySpecification: {PointInTimeRecoveryEnabled: false}
 
+  # ------------------------------------------------------------------ accounts (Amazon Cognito)
+  # The browser signs in with Cognito directly (public client, no secret); the API validates each access token with
+  # Cognito (GetUser, no IAM permission needed). Datathon demo: accounts are confirmed at once (no e-mail code to wait for).
+  AutoConfirmFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ${AWS::StackName}-confirmation
+      Handler: index.handler
+      MemorySize: 128
+      Timeout: 5
+      Description: Cognito pre-sign-up trigger - confirms demo accounts immediately
+      InlineCode: |
+        def handler(event, context):
+            event["response"]["autoConfirmUser"] = True
+            if (event.get("request", {}).get("userAttributes") or {}).get("email"):
+                event["response"]["autoVerifyEmail"] = True
+            return event
+
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub ${AWS::StackName}-comptes
+      UsernameAttributes: [email]
+      UsernameConfiguration: {CaseSensitive: false}
+      Schema: [{Name: email, AttributeDataType: String, Required: true, Mutable: true}]
+      Policies:
+        PasswordPolicy: {MinimumLength: 8, RequireLowercase: true, RequireUppercase: true, RequireNumbers: true, RequireSymbols: false}
+      AccountRecoverySetting: {RecoveryMechanisms: [{Name: verified_email, Priority: 1}]}
+      LambdaConfig: {PreSignUp: !GetAtt AutoConfirmFunction.Arn}
+
+  AutoConfirmPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref AutoConfirmFunction
+      Action: lambda:InvokeFunction
+      Principal: cognito-idp.amazonaws.com
+      SourceArn: !GetAtt UserPool.Arn
+
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: !Sub ${AWS::StackName}-web
+      UserPoolId: !Ref UserPool
+      GenerateSecret: false
+      ExplicitAuthFlows: [ALLOW_USER_PASSWORD_AUTH, ALLOW_USER_SRP_AUTH, ALLOW_REFRESH_TOKEN_AUTH]
+      PreventUserExistenceErrors: ENABLED
+      EnableTokenRevocation: true
+      AccessTokenValidity: 1
+      IdTokenValidity: 1
+      RefreshTokenValidity: 30
+      TokenValidityUnits: {AccessToken: hours, IdToken: hours, RefreshToken: days}
+
   # ------------------------------------------------------------------ compute (single function)
   FunctionLogs:
     Type: AWS::Logs::LogGroup
@@ -88,6 +149,13 @@ Resources:
           ULYSSE_DATA_DIR: /var/task/data
           ULYSSE_STATE_DIR: /tmp/state
           ULYSSE_LLM_LIMITE_JOUR_USD: !Ref LlmDailyLimitUsd
+          ULYSSE_AUTH: cognito
+          ULYSSE_COGNITO_REGION: !Ref AWS::Region
+          ULYSSE_COGNITO_CLIENT_ID: !Ref UserPoolClient
+          ULYSSE_COMPTES_DEMO: "1"
+          ULYSSE_DEMO_MOT_DE_PASSE: !Ref DemoPassword
+          ULYSSE_CACHE_RECHERCHE: /tmp/nouvelles
+          ULYSSE_SEC_USER_AGENT: !Ref SecUserAgent
       FunctionUrlConfig:
         AuthType: AWS_IAM          # only CloudFront (OAC) may invoke it
       Policies:
@@ -226,3 +294,8 @@ Outputs:
     Value: !Ref Table
   FunctionName:
     Value: !Ref UlysseFunction
+  UserPoolId:
+    Description: Cognito user pool (scripts/creer_comptes_demo.py creates the jury accounts in it)
+    Value: !Ref UserPool
+  UserPoolClientId:
+    Value: !Ref UserPoolClient

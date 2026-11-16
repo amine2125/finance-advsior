@@ -46,6 +46,6 @@ def handler(event, context):
     if body and event.get("isBase64Encoded"):
         body = base64.b64decode(body).decode()
     payload = json.loads(body) if body else None
-    status, out = handle(method, path, event.get("queryStringParameters") or {}, payload)
+    status, out = handle(method, path, event.get("queryStringParameters") or {}, payload, event.get("headers") or {})
     return {"statusCode": status, "headers": {"content-type": "application/json; charset=utf-8", "cache-control": "no-store"},
             "body": json.dumps(out, ensure_ascii=False, default=str)}
