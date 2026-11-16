@@ -24,8 +24,12 @@ async def api(path: str, request: Request):
     if request.method == "POST":
         raw = await request.body()
         body = (await request.json()) if raw else {}
-    status, payload = handle(request.method, "/api/" + path, dict(request.query_params), body, dict(request.headers))
-    return JSONResponse(payload, status_code=status)
+    hdrs = dict(request.headers)
+    if request.client and request.client.host and "x-real-ip" not in hdrs:
+        hdrs["x-real-ip"] = request.client.host
+    status, payload = handle(request.method, "/api/" + path, dict(request.query_params), body, hdrs)
+    resp_headers = {"retry-after": str(payload["reessayer_apres_s"])} if status == 429 and isinstance(payload, dict) and "reessayer_apres_s" in payload else None
+    return JSONResponse(payload, status_code=status, headers=resp_headers)
 
 
 @app.get("/{path:path}")

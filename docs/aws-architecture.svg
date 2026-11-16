@@ -1,0 +1,347 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1160 660" width="100%" height="100%" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif">
+  <defs>
+    <!-- Subtle Drop Shadows -->
+    <filter id="card-shadow" x="-6%" y="-6%" width="112%" height="116%">
+      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#0f172a" flood-opacity="0.08"/>
+    </filter>
+    <filter id="icon-shadow" x="-10%" y="-10%" width="120%" height="125%">
+      <feDropShadow dx="0" dy="2" stdDeviation="2.5" flood-color="#0f172a" flood-opacity="0.18"/>
+    </filter>
+
+    <!-- Official AWS Service Gradients -->
+    <!-- Networking & Content Delivery (CloudFront) - Purple -->
+    <linearGradient id="aws-purple" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#945DF2"/>
+      <stop offset="100%" stop-color="#693CC5"/>
+    </linearGradient>
+    <!-- Compute (Lambda) - Orange -->
+    <linearGradient id="aws-orange" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FF9900"/>
+      <stop offset="100%" stop-color="#D86613"/>
+    </linearGradient>
+    <!-- Storage (S3) - Green -->
+    <linearGradient id="aws-green" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#7AA116"/>
+      <stop offset="100%" stop-color="#3F8624"/>
+    </linearGradient>
+    <!-- Database (DynamoDB) - Blue -->
+    <linearGradient id="aws-blue" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#527FFF"/>
+      <stop offset="100%" stop-color="#2E27AD"/>
+    </linearGradient>
+    <!-- AI / ML (Bedrock) - Teal -->
+    <linearGradient id="aws-teal" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#06B69A"/>
+      <stop offset="100%" stop-color="#007E6A"/>
+    </linearGradient>
+    <!-- Security, Identity, Compliance (Cognito) - Red -->
+    <linearGradient id="aws-red" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F54749"/>
+      <stop offset="100%" stop-color="#C7131F"/>
+    </linearGradient>
+    <!-- Application Integration (EventBridge) - Pink/Magenta -->
+    <linearGradient id="aws-pink" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FF4F8B"/>
+      <stop offset="100%" stop-color="#C91265"/>
+    </linearGradient>
+
+    <!-- Arrow Markers -->
+    <marker id="arrow-dark" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8.5 5 L 0 8.5 z" fill="#334155"/>
+    </marker>
+    <marker id="arrow-orange" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8.5 5 L 0 8.5 z" fill="#D86613"/>
+    </marker>
+    <marker id="arrow-teal" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8.5 5 L 0 8.5 z" fill="#007E6A"/>
+    </marker>
+    <marker id="arrow-red" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8.5 5 L 0 8.5 z" fill="#C7131F"/>
+    </marker>
+    <marker id="arrow-pink" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8.5 5 L 0 8.5 z" fill="#C91265"/>
+    </marker>
+    <marker id="arrow-slate" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8.5 5 L 0 8.5 z" fill="#64748b"/>
+    </marker>
+  </defs>
+
+  <!-- Canvas Background -->
+  <rect width="1160" height="660" rx="10" fill="#F8FAFC" stroke="#CBD5E1" stroke-width="1.5"/>
+
+  <!-- Header Banner -->
+  <rect x="0" y="0" width="1160" height="52" rx="10" fill="#232F3E"/>
+  <rect x="0" y="36" width="1160" height="16" fill="#232F3E"/>
+  <!-- AWS Cloud Header Badge -->
+  <g transform="translate(22, 12)">
+    <rect width="46" height="28" rx="4" fill="#FF9900"/>
+    <text x="23" y="19" text-anchor="middle" fill="#232F3E" font-size="13" font-weight="800" letter-spacing="0.5">AWS</text>
+  </g>
+  <text x="82" y="31" fill="#FFFFFF" font-size="16" font-weight="700">ULYSSE — Cloud Architecture (Serverless, Scale-to-Zero, Cost-Capped)</text>
+  <text x="1136" y="31" text-anchor="end" fill="#94A3B8" font-size="12" font-weight="600">Region: ca-central-1 (Canada Central)</text>
+
+  <!-- ==================== AWS CLOUD BOUNDARY BOX ==================== -->
+  <rect x="200" y="72" width="730" height="564" rx="8" fill="#FFFFFF" stroke="#232F3E" stroke-width="2"/>
+  <!-- AWS Cloud Top-Left Label Badge -->
+  <g transform="translate(214, 84)">
+    <rect width="30" height="22" rx="3" fill="#232F3E"/>
+    <path d="M7 15.5 C4.5 15.5 3 13.8 3 11.8 C3 9.9 4.4 8.4 6.2 8.2 C6.9 5.8 9.1 4 11.8 4 C14.9 4 17.5 6.4 17.7 9.5 C19.5 9.8 20.8 11.3 20.8 13.1 C20.8 15.1 19.2 16.5 17.2 16.5 Z" fill="none" stroke="#FF9900" stroke-width="1.6" transform="translate(3, -1)"/>
+    <text x="38" y="15" fill="#232F3E" font-size="13" font-weight="700">AWS Cloud</text>
+    <text x="112" y="15" fill="#64748B" font-size="11.5" font-weight="500">(No VPC / No NAT Gateway — IAM &amp; OAC Secured)</text>
+  </g>
+
+  <!-- ==================== CLIENT / BROWSER (LEFT) ==================== -->
+  <g transform="translate(24, 240)" filter="url(#card-shadow)">
+    <rect width="136" height="145" rx="8" fill="#FFFFFF" stroke="#94A3B8" stroke-width="1.5"/>
+    <!-- User / Browser Icon -->
+    <g transform="translate(40, 16)" filter="url(#icon-shadow)">
+      <rect width="56" height="56" rx="8" fill="#334155"/>
+      <!-- Browser window + user glyph -->
+      <rect x="10" y="12" width="36" height="26" rx="3" fill="none" stroke="#F8FAFC" stroke-width="2"/>
+      <line x1="10" y1="19" x2="46" y2="19" stroke="#F8FAFC" stroke-width="1.8"/>
+      <circle cx="14.5" cy="15.5" r="1.2" fill="#FF9900"/>
+      <circle cx="18.5" cy="15.5" r="1.2" fill="#F8FAFC"/>
+      <circle cx="28" cy="27" r="4" fill="#38BDF8"/>
+      <path d="M21 36 C21 32.5 35 32.5 35 36" stroke="#38BDF8" stroke-width="2" fill="none"/>
+    </g>
+    <text x="68" y="92" text-anchor="middle" fill="#0F172A" font-size="13" font-weight="700">Client Browser</text>
+    <text x="68" y="109" text-anchor="middle" fill="#475569" font-size="11">React 19 + TypeScript</text>
+    <text x="68" y="124" text-anchor="middle" fill="#64748B" font-size="10.5">Single Domain HTTPS</text>
+  </g>
+
+  <!-- ==================== 1. AMAZON CLOUDFRONT ==================== -->
+  <g transform="translate(232, 232)" filter="url(#card-shadow)">
+    <rect width="166" height="162" rx="8" fill="#FAF5FF" stroke="#8C4FFF" stroke-width="1.8"/>
+    <g transform="translate(55, 14)" filter="url(#icon-shadow)">
+      <rect width="56" height="56" rx="8" fill="url(#aws-purple)"/>
+      <!-- Official-style CloudFront Globe + Edge Nodes Icon -->
+      <circle cx="28" cy="28" r="16" fill="none" stroke="#FFFFFF" stroke-width="2"/>
+      <ellipse cx="28" cy="28" rx="8" ry="16" fill="none" stroke="#FFFFFF" stroke-width="1.6"/>
+      <line x1="12" y1="28" x2="44" y2="28" stroke="#FFFFFF" stroke-width="1.6"/>
+      <line x1="15" y1="20" x2="41" y2="20" stroke="#FFFFFF" stroke-width="1.3"/>
+      <line x1="15" y1="36" x2="41" y2="36" stroke="#FFFFFF" stroke-width="1.3"/>
+      <circle cx="28" cy="12" r="2.8" fill="#FFFFFF"/>
+      <circle cx="44" cy="28" r="2.8" fill="#FFFFFF"/>
+      <circle cx="12" cy="28" r="2.8" fill="#FFFFFF"/>
+      <circle cx="28" cy="44" r="2.8" fill="#FFFFFF"/>
+    </g>
+    <text x="83" y="90" text-anchor="middle" fill="#1E1B4B" font-size="13" font-weight="700">Amazon CloudFront</text>
+    <text x="83" y="107" text-anchor="middle" fill="#5B21B6" font-size="11" font-weight="600">Edge CDN &amp; Router</text>
+    <text x="83" y="124" text-anchor="middle" fill="#475569" font-size="10.5">• /* → S3 UI (OAC)</text>
+    <text x="83" y="139" text-anchor="middle" fill="#475569" font-size="10.5">• /api/* → Lambda (OAC)</text>
+    <text x="83" y="153" text-anchor="middle" fill="#64748B" font-size="10">HTTP/2 &amp; HTTP/3 • Gzip</text>
+  </g>
+
+  <!-- ==================== 2. AMAZON S3 (UI BUCKET) ==================== -->
+  <g transform="translate(475, 96)" filter="url(#card-shadow)">
+    <rect width="190" height="132" rx="8" fill="#F4FCE3" stroke="#3F8624" stroke-width="1.8"/>
+    <g transform="translate(18, 18)" filter="url(#icon-shadow)">
+      <rect width="54" height="54" rx="8" fill="url(#aws-green)"/>
+      <!-- Official-style S3 Bucket Icon -->
+      <ellipse cx="27" cy="16" rx="14" ry="5" fill="none" stroke="#FFFFFF" stroke-width="2"/>
+      <path d="M13 16 L16 39 C16 42 38 42 38 39 L41 16" fill="none" stroke="#FFFFFF" stroke-width="2"/>
+      <path d="M13 22 C13 26 27 29 41 22" fill="none" stroke="#FFFFFF" stroke-width="1.6"/>
+      <circle cx="27" cy="29" r="2.2" fill="#FFFFFF"/>
+    </g>
+    <text x="84" y="34" fill="#14532D" font-size="13" font-weight="700">Amazon S3</text>
+    <text x="84" y="50" fill="#3F8624" font-size="11.5" font-weight="600">Private « UI » Bucket</text>
+    <text x="84" y="67" fill="#475569" font-size="10.5">Static SPA (Vite dist/)</text>
+    <line x1="16" y1="84" x2="174" y2="84" stroke="#BBF7D0" stroke-width="1"/>
+    <text x="18" y="101" fill="#334155" font-size="10.5">• Public access blocked</text>
+    <text x="18" y="116" fill="#334155" font-size="10.5">• SSE-S3 AES-256 encrypted</text>
+  </g>
+
+  <!-- ==================== 3. AWS LAMBDA (SINGLE FUNCTION) ==================== -->
+  <g transform="translate(465, 250)" filter="url(#card-shadow)">
+    <rect width="210" height="205" rx="8" fill="#FFF7ED" stroke="#ED7100" stroke-width="2.2"/>
+    <g transform="translate(18, 18)" filter="url(#icon-shadow)">
+      <rect width="56" height="56" rx="8" fill="url(#aws-orange)"/>
+      <!-- Official AWS Lambda (λ) Icon -->
+      <path d="M17 42 L26.5 22 L22.5 14 L18 14 L18 10.5 L25.5 10.5 L37.5 36.5 L41.5 36.5 L41.5 40 L34.5 40 L28.5 26.8 L21.5 42 Z" fill="#FFFFFF"/>
+    </g>
+    <text x="84" y="32" fill="#7C2D12" font-size="13.5" font-weight="800">AWS Lambda</text>
+    <text x="84" y="48" fill="#C2410C" font-size="11" font-weight="700">Single Function (ARM64)</text>
+    <text x="84" y="63" fill="#475569" font-size="10.5">Python 3.12 • Function URL</text>
+    <line x1="16" y1="82" x2="194" y2="82" stroke="#FED7AA" stroke-width="1.2"/>
+    <text x="16" y="99" fill="#1E293B" font-size="10.5" font-weight="600">Built-in Guards &amp; Engine:</text>
+    <text x="16" y="115" fill="#334155" font-size="10.5">• In-Code Rate Limiter (HTTP 429)</text>
+    <text x="16" y="130" fill="#334155" font-size="10.5">• Contract &amp; Signal Policy (~10ms)</text>
+    <text x="16" y="145" fill="#334155" font-size="10.5">• Deterministic Code Verifier</text>
+    <text x="16" y="160" fill="#334155" font-size="10.5">• Dossier Orchestrator &amp; Debate</text>
+    <text x="16" y="175" fill="#334155" font-size="10.5">• Cached 6.5 MB Datapack (/tmp)</text>
+    <text x="16" y="190" fill="#C2410C" font-size="10" font-weight="600">• Daily LLM USD Cap → Template Fallback</text>
+  </g>
+
+  <!-- ==================== 4. AMAZON COGNITO ==================== -->
+  <g transform="translate(232, 468)" filter="url(#card-shadow)">
+    <rect width="166" height="146" rx="8" fill="#FEF2F2" stroke="#DD344C" stroke-width="1.8"/>
+    <g transform="translate(55, 14)" filter="url(#icon-shadow)">
+      <rect width="56" height="56" rx="8" fill="url(#aws-red)"/>
+      <!-- Official-style Cognito User + Shield/Key Icon -->
+      <circle cx="24" cy="21" r="6" fill="none" stroke="#FFFFFF" stroke-width="2"/>
+      <path d="M13 38 C13 31 35 31 35 38" fill="none" stroke="#FFFFFF" stroke-width="2"/>
+      <path d="M38 22 L45 25 L45 32 C45 37 41.5 40.5 38 42 C34.5 40.5 31 37 31 32 L31 25 Z" fill="#C7131F" stroke="#FFFFFF" stroke-width="1.8"/>
+      <path d="M35.5 32 L37.5 34 L41 30" fill="none" stroke="#FFFFFF" stroke-width="1.6"/>
+    </g>
+    <text x="83" y="88" text-anchor="middle" fill="#7F1D1D" font-size="13" font-weight="700">Amazon Cognito</text>
+    <text x="83" y="104" text-anchor="middle" fill="#B91C1C" font-size="11" font-weight="600">User Pool &amp; Auth</text>
+    <text x="83" y="120" text-anchor="middle" fill="#475569" font-size="10.5">• Direct browser sign-in</text>
+    <text x="83" y="135" text-anchor="middle" fill="#475569" font-size="10.5">• Token verified via GetUser</text>
+  </g>
+
+  <!-- ==================== 5. AMAZON EVENTBRIDGE SCHEDULER ==================== -->
+  <g transform="translate(475, 488)" filter="url(#card-shadow)">
+    <rect width="190" height="126" rx="8" fill="#FDF2F8" stroke="#E7157B" stroke-width="1.8"/>
+    <g transform="translate(16, 16)" filter="url(#icon-shadow)">
+      <rect width="52" height="52" rx="8" fill="url(#aws-pink)"/>
+      <!-- Official-style EventBridge Scheduler Clock + Event Nodes Icon -->
+      <circle cx="26" cy="26" r="14" fill="none" stroke="#FFFFFF" stroke-width="2"/>
+      <polyline points="26,18 26,26 32,30" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"/>
+      <circle cx="26" cy="10" r="2.2" fill="#FFFFFF"/>
+      <circle cx="42" cy="26" r="2.2" fill="#FFFFFF"/>
+    </g>
+    <text x="78" y="32" fill="#831843" font-size="12.5" font-weight="700">Amazon EventBridge</text>
+    <text x="78" y="48" fill="#BE185D" font-size="11" font-weight="600">Hourly Scheduler</text>
+    <text x="78" y="64" fill="#475569" font-size="10.5">rate(1 hour)</text>
+    <line x1="16" y1="78" x2="174" y2="78" stroke="#FBCFE8" stroke-width="1"/>
+    <text x="16" y="95" fill="#334155" font-size="10.5">Triggers « La Vigie »:</text>
+    <text x="16" y="110" fill="#475569" font-size="10">Drift, hype &amp; signal pre-compute</text>
+  </g>
+
+  <!-- ==================== 6. AMAZON BEDROCK ==================== -->
+  <g transform="translate(736, 96)" filter="url(#card-shadow)">
+    <rect width="176" height="136" rx="8" fill="#F0FDFA" stroke="#01A88D" stroke-width="1.8"/>
+    <g transform="translate(16, 16)" filter="url(#icon-shadow)">
+      <rect width="52" height="52" rx="8" fill="url(#aws-teal)"/>
+      <!-- Official-style Bedrock Foundation Blocks + AI Spark Icon -->
+      <polygon points="26,11 40,18 26,25 12,18" fill="none" stroke="#FFFFFF" stroke-width="1.8"/>
+      <polyline points="12,25 26,32 40,25" fill="none" stroke="#FFFFFF" stroke-width="1.8"/>
+      <polyline points="12,32 26,39 40,32" fill="none" stroke="#FFFFFF" stroke-width="1.8"/>
+      <circle cx="26" cy="18" r="2.2" fill="#FFFFFF"/>
+    </g>
+    <text x="78" y="31" fill="#134E4A" font-size="12.5" font-weight="700">Amazon Bedrock</text>
+    <text x="78" y="47" fill="#0F766E" font-size="11" font-weight="600">Claude Foundation LLM</text>
+    <text x="78" y="62" fill="#475569" font-size="10">Structured Outputs</text>
+    <line x1="14" y1="77" x2="162" y2="77" stroke="#99F6E4" stroke-width="1"/>
+    <text x="14" y="94" fill="#334155" font-size="10.5">• Plan analysis modules</text>
+    <text x="14" y="109" fill="#334155" font-size="10.5">• Draft from evidence only</text>
+    <text x="14" y="124" fill="#0F766E" font-size="10" font-weight="600">• Never computes numbers</text>
+  </g>
+
+  <!-- ==================== 7. AMAZON DYNAMODB ==================== -->
+  <g transform="translate(736, 250)" filter="url(#card-shadow)">
+    <rect width="176" height="132" rx="8" fill="#EEF2FF" stroke="#3B48CC" stroke-width="1.8"/>
+    <g transform="translate(16, 16)" filter="url(#icon-shadow)">
+      <rect width="52" height="52" rx="8" fill="url(#aws-blue)"/>
+      <!-- Official-style DynamoDB Cylinder + Lightning Bolt Icon -->
+      <ellipse cx="23" cy="15" rx="11" ry="4" fill="none" stroke="#FFFFFF" stroke-width="1.8"/>
+      <path d="M12 15 L12 35 C12 38 34 38 34 35 L34 15" fill="none" stroke="#FFFFFF" stroke-width="1.8"/>
+      <path d="M12 22 C12 25 34 25 34 22" fill="none" stroke="#FFFFFF" stroke-width="1.5"/>
+      <path d="M12 29 C12 32 34 32 34 29" fill="none" stroke="#FFFFFF" stroke-width="1.5"/>
+      <polygon points="37,16 31,27 36,27 33,38 43,25 37.5,25" fill="#FF9900" stroke="#FFFFFF" stroke-width="0.7"/>
+    </g>
+    <text x="78" y="31" fill="#1E1B4B" font-size="12.5" font-weight="700">Amazon DynamoDB</text>
+    <text x="78" y="47" fill="#3730A3" font-size="11" font-weight="600">On-Demand Table</text>
+    <text x="78" y="62" fill="#475569" font-size="10">Pay-per-request (pk / sk)</text>
+    <line x1="14" y1="77" x2="162" y2="77" stroke="#C7D2FE" stroke-width="1"/>
+    <text x="14" y="94" fill="#334155" font-size="10.5">• Profiles, Contracts, Positions</text>
+    <text x="14" y="109" fill="#334155" font-size="10.5">• Pre-computed Signal Packs</text>
+    <text x="14" y="124" fill="#334155" font-size="10.5">• Daily LLM Spend Counter</text>
+  </g>
+
+  <!-- ==================== 8. AMAZON S3 (DATA BUCKET) ==================== -->
+  <g transform="translate(736, 398)" filter="url(#card-shadow)">
+    <rect width="176" height="120" rx="8" fill="#F4FCE3" stroke="#3F8624" stroke-width="1.8"/>
+    <g transform="translate(16, 16)" filter="url(#icon-shadow)">
+      <rect width="52" height="52" rx="8" fill="url(#aws-green)"/>
+      <ellipse cx="26" cy="16" rx="13" ry="4.8" fill="none" stroke="#FFFFFF" stroke-width="1.8"/>
+      <path d="M13 16 L16 38 C16 41 36 41 36 38 L39 16" fill="none" stroke="#FFFFFF" stroke-width="1.8"/>
+      <path d="M13 22 C13 25.5 26 28.5 39 22" fill="none" stroke="#FFFFFF" stroke-width="1.5"/>
+    </g>
+    <text x="78" y="31" fill="#14532D" font-size="12.5" font-weight="700">Amazon S3</text>
+    <text x="78" y="47" fill="#3F8624" font-size="11" font-weight="600">Private « Data » Bucket</text>
+    <text x="78" y="62" fill="#475569" font-size="10">Encrypted Object Store</text>
+    <line x1="14" y1="76" x2="162" y2="76" stroke="#BBF7D0" stroke-width="1"/>
+    <text x="14" y="93" fill="#334155" font-size="10.5">• Market Datapack (~6.5 MB)</text>
+    <text x="14" y="108" fill="#334155" font-size="10.5">• Dossiers &amp; Traces (&gt;300 KB)</text>
+  </g>
+
+  <!-- ==================== 9. AWS BUDGETS ==================== -->
+  <g transform="translate(736, 532)" filter="url(#card-shadow)">
+    <rect width="176" height="84" rx="8" fill="#F8FAFC" stroke="#475569" stroke-width="1.5" stroke-dasharray="5 3"/>
+    <g transform="translate(16, 16)" filter="url(#icon-shadow)">
+      <rect width="48" height="48" rx="8" fill="url(#aws-green)"/>
+      <text x="24" y="32" text-anchor="middle" fill="#FFFFFF" font-size="22" font-weight="800">$</text>
+    </g>
+    <text x="74" y="32" fill="#0F172A" font-size="12.5" font-weight="700">AWS Budgets</text>
+    <text x="74" y="48" fill="#3F8624" font-size="10.5" font-weight="600">Monthly Cost Guard</text>
+    <text x="74" y="64" fill="#475569" font-size="10">Email alerts @ 80% &amp; 100%</text>
+  </g>
+
+  <!-- ==================== EXTERNAL PUBLIC DATA SOURCES (RIGHT) ==================== -->
+  <g transform="translate(956, 215)" filter="url(#card-shadow)">
+    <rect width="180" height="230" rx="8" fill="#FFFFFF" stroke="#64748B" stroke-width="1.8" stroke-dasharray="6 4"/>
+    <rect x="14" y="14" width="152" height="26" rx="4" fill="#F1F5F9"/>
+    <text x="90" y="31" text-anchor="middle" fill="#334155" font-size="11.5" font-weight="700">External Public Sources</text>
+
+    <!-- SEC EDGAR Card -->
+    <rect x="14" y="52" width="152" height="76" rx="6" fill="#F8FAFC" stroke="#CBD5E1" stroke-width="1.2"/>
+    <text x="24" y="71" fill="#0F172A" font-size="12" font-weight="700">SEC EDGAR API</text>
+    <text x="24" y="87" fill="#475569" font-size="10">U.S. Official Filings</text>
+    <text x="24" y="102" fill="#475569" font-size="10">(10-K, 10-Q, 8-K items)</text>
+    <text x="24" y="117" fill="#0284C7" font-size="9.5" font-weight="600">data.sec.gov • As-Of Filtered</text>
+
+    <!-- GDELT Project Card -->
+    <rect x="14" y="140" width="152" height="76" rx="6" fill="#F8FAFC" stroke="#CBD5E1" stroke-width="1.2"/>
+    <text x="24" y="159" fill="#0F172A" font-size="12" font-weight="700">GDELT DOC 2.0 API</text>
+    <text x="24" y="175" fill="#475569" font-size="10">Global Press Metadata</text>
+    <text x="24" y="190" fill="#475569" font-size="10">Deduplicated News</text>
+    <text x="24" y="205" fill="#0284C7" font-size="9.5" font-weight="600">api.gdeltproject.org • As-Of</text>
+  </g>
+
+  <!-- ==================== CONNECTORS & ARROWS ==================== -->
+
+  <!-- Browser -> CloudFront -->
+  <line x1="160" y1="312" x2="228" y2="312" stroke="#334155" stroke-width="2.2" marker-end="url(#arrow-dark)"/>
+  <text x="194" y="304" text-anchor="middle" fill="#0F172A" font-size="10.5" font-weight="700">HTTPS</text>
+
+  <!-- Browser <-> Cognito (Direct Public Client Auth) -->
+  <path d="M 92 385 L 92 540 L 228 540" fill="none" stroke="#C7131F" stroke-width="1.8" stroke-dasharray="4 3" marker-end="url(#arrow-red)"/>
+  <text x="155" y="532" text-anchor="middle" fill="#B91C1C" font-size="10" font-weight="600">SRP Sign-In (No Secret)</text>
+
+  <!-- CloudFront -> S3 UI Bucket -->
+  <path d="M 398 272 L 432 272 L 432 162 L 471 162" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow-dark)"/>
+  <rect x="404" y="182" width="58" height="32" rx="4" fill="#FFFFFF" stroke="#CBD5E1"/>
+  <text x="433" y="196" text-anchor="middle" fill="#1E293B" font-size="9.5" font-weight="700">GET /*</text>
+  <text x="433" y="208" text-anchor="middle" fill="#5B21B6" font-size="9">OAC SigV4</text>
+
+  <!-- CloudFront -> Lambda Function URL -->
+  <line x1="398" y1="335" x2="461" y2="335" stroke="#D86613" stroke-width="2.2" marker-end="url(#arrow-orange)"/>
+  <rect x="403" y="302" width="54" height="26" rx="4" fill="#FFFFFF" stroke="#FED7AA"/>
+  <text x="430" y="313" text-anchor="middle" fill="#9A3412" font-size="9.5" font-weight="700">/api/*</text>
+  <text x="430" y="324" text-anchor="middle" fill="#C2410C" font-size="8.5">OAC IAM</text>
+
+  <!-- Lambda -> Cognito (GetUser Token Validation) -->
+  <path d="M 465 420 L 430 420 L 430 540 L 402 540" fill="none" stroke="#C7131F" stroke-width="1.8" marker-end="url(#arrow-red)"/>
+  <text x="432" y="478" text-anchor="end" fill="#B91C1C" font-size="9.5" font-weight="600">GetUser (x-ulysse-jeton)</text>
+
+  <!-- EventBridge Scheduler -> Lambda -->
+  <line x1="570" y1="488" x2="570" y2="459" stroke="#C91265" stroke-width="2" marker-end="url(#arrow-pink)"/>
+  <text x="625" y="476" text-anchor="middle" fill="#9D174D" font-size="9.5" font-weight="700">Hourly « Vigie »</text>
+
+  <!-- Lambda -> Bedrock -->
+  <path d="M 675 290 L 705 290 L 705 164 L 732 164" fill="none" stroke="#007E6A" stroke-width="2" marker-end="url(#arrow-teal)"/>
+  <text x="703" y="215" text-anchor="end" fill="#0F766E" font-size="9.5" font-weight="700">Plan &amp; Write</text>
+
+  <!-- Lambda <-> DynamoDB -->
+  <line x1="675" y1="325" x2="732" y2="325" stroke="#334155" stroke-width="2" marker-start="url(#arrow-dark)" marker-end="url(#arrow-dark)"/>
+  <text x="704" y="317" text-anchor="middle" fill="#1E1B4B" font-size="9.5" font-weight="600">State</text>
+
+  <!-- Lambda <-> S3 Data Bucket -->
+  <path d="M 675 385 L 705 385 L 705 458 L 732 458" fill="none" stroke="#334155" stroke-width="2" marker-start="url(#arrow-dark)" marker-end="url(#arrow-dark)"/>
+  <text x="703" y="438" text-anchor="end" fill="#14532D" font-size="9.5" font-weight="600">Datapack / Traces</text>
+
+  <!-- Lambda -> External Sources (SEC EDGAR & GDELT) -->
+  <path d="M 675 265 L 692 265 L 692 78 L 942 78 L 942 325 L 952 325" fill="none" stroke="#64748B" stroke-width="1.8" stroke-dasharray="5 3" marker-end="url(#arrow-slate)"/>
+  <text x="820" y="72" text-anchor="middle" fill="#475569" font-size="10" font-weight="600">HTTPS GET (Filings &amp; News strictly ≤ simulated as_of date, cached in /tmp)</text>
+</svg>

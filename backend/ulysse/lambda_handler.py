@@ -46,6 +46,12 @@ def handler(event, context):
     if body and event.get("isBase64Encoded"):
         body = base64.b64decode(body).decode()
     payload = json.loads(body) if body else None
-    status, out = handle(method, path, event.get("queryStringParameters") or {}, payload, event.get("headers") or {})
-    return {"statusCode": status, "headers": {"content-type": "application/json; charset=utf-8", "cache-control": "no-store"},
+    hdrs = dict(event.get("headers") or {})
+    if http.get("sourceIp") and "x-real-ip" not in hdrs:
+        hdrs["x-real-ip"] = http["sourceIp"]
+    status, out = handle(method, path, event.get("queryStringParameters") or {}, payload, hdrs)
+    resp_headers = {"content-type": "application/json; charset=utf-8", "cache-control": "no-store"}
+    if status == 429 and isinstance(out, dict) and "reessayer_apres_s" in out:
+        resp_headers["retry-after"] = str(out["reessayer_apres_s"])
+    return {"statusCode": status, "headers": resp_headers,
             "body": json.dumps(out, ensure_ascii=False, default=str)}

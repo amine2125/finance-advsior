@@ -156,6 +156,8 @@ Resources:
           ULYSSE_DEMO_MOT_DE_PASSE: !Ref DemoPassword
           ULYSSE_CACHE_RECHERCHE: /tmp/nouvelles
           ULYSSE_SEC_USER_AGENT: !Ref SecUserAgent
+          ULYSSE_LIMITE_REQ_PAR_MIN: "180"
+          ULYSSE_LIMITE_LLM_PAR_MIN: "20"
       FunctionUrlConfig:
         AuthType: AWS_IAM          # only CloudFront (OAC) may invoke it
       Policies:

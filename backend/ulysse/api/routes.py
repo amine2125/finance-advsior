@@ -3,6 +3,7 @@ function URL. Every route takes `as_of` (time machine); default = DEFAULT_ASOF."
 from __future__ import annotations
 
 import json
+import os
 import re
 import threading
 import time
@@ -50,6 +51,68 @@ def _publique(path: str) -> bool:
     return path in PUBLIQUES or (path.startswith("/api/marche") and "profil" not in path) or path == "/api/tendances"
 
 
+# ----------------------------------------------------------------------------------------- rate limiting (in-code guard)
+
+FENETRE_DEBIT_S = 60.0
+_DEBIT_LOCK = threading.Lock()
+_DEBIT_FENETRES: dict[str, list[float]] = {}
+
+
+def reinitialiser_limiteur() -> None:
+    """Clear rate-limiter sliding windows (used by tests)."""
+    with _DEBIT_LOCK:
+        _DEBIT_FENETRES.clear()
+
+
+def _cle_client(headers: dict | None, c: compte.Compte | None) -> str:
+    if c is not None:
+        return f"compte:{c.id}"
+    h = {k.lower(): str(v).strip() for k, v in (headers or {}).items() if v}
+    if h.get("cloudfront-viewer-address"):
+        return f"ip:{h['cloudfront-viewer-address'].rsplit(':', 1)[0]}"
+    if h.get("x-forwarded-for"):
+        return f"ip:{h['x-forwarded-for'].split(',')[0].strip()}"
+    if h.get("x-real-ip"):
+        return f"ip:{h['x-real-ip']}"
+    return "ip:anonyme"
+
+
+def _est_route_lourde(method: str, path: str) -> bool:
+    return method == "POST" and (
+        path == "/api/dossiers" or path.endswith("/assistant") or path == "/api/vigie/executer"
+    )
+
+
+def _verifier_debit(method: str, path: str, headers: dict | None, c: compte.Compte | None) -> int | None:
+    """Sliding-window rate limiter per account/IP (general API + stricter bucket for LLM/heavy routes).
+    Returns retry_after (seconds >= 1) when rate-limited, or None when allowed."""
+    lim_gen = int(os.environ.get("ULYSSE_LIMITE_REQ_PAR_MIN", "180"))
+    lim_llm = int(os.environ.get("ULYSSE_LIMITE_LLM_PAR_MIN", "20"))
+    if lim_gen <= 0 and lim_llm <= 0:
+        return None
+    now = time.monotonic()
+    seuil = now - FENETRE_DEBIT_S
+    cle = _cle_client(headers, c)
+    paliers = []
+    if lim_gen > 0:
+        paliers.append((f"gen:{cle}", lim_gen))
+    if lim_llm > 0 and _est_route_lourde(method, path):
+        paliers.append((f"llm:{cle}", lim_llm))
+    with _DEBIT_LOCK:
+        if len(_DEBIT_FENETRES) > 5000:
+            _DEBIT_FENETRES.clear()
+        for seau, limite in paliers:
+            ts = [t for t in _DEBIT_FENETRES.get(seau, ()) if t > seuil]
+            if len(ts) >= limite:
+                _DEBIT_FENETRES[seau] = ts
+                return max(1, int(FENETRE_DEBIT_S - (now - ts[0])) + 1)
+        for seau, _ in paliers:
+            ts = [t for t in _DEBIT_FENETRES.get(seau, ()) if t > seuil]
+            ts.append(now)
+            _DEBIT_FENETRES[seau] = ts
+    return None
+
+
 def handle(method: str, path: str, query: dict | None = None, body: Any = None, headers: dict | None = None) -> tuple[int, Any]:
     query = query or {}
     for m, rx, fn in ROUTES:
@@ -61,6 +124,13 @@ def handle(method: str, path: str, query: dict | None = None, body: Any = None, 
                 if not _publique(path) or query.get("profil"):
                     return 401, {"erreur": str(e), "code": "non_connecte"}
                 c = None
+            attente = _verifier_debit(method, path, headers, c)
+            if attente is not None:
+                return 429, {
+                    "erreur": "Trop de requêtes : patiente quelques secondes avant de réessayer.",
+                    "code": "limite_debit",
+                    "reessayer_apres_s": attente,
+                }
             tok = compte.entrer(c)
             try:
                 return 200, fn(query=query, body=body or {}, **mm.groupdict())

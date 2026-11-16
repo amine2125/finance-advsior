@@ -80,3 +80,32 @@ def test_local_mode_is_unchanged(tmp_path, monkeypatch):
     monkeypatch.delenv("ULYSSE_AUTH", raising=False)
     assert {p["id"] for p in handle("GET", "/api/profils")[1]} == {"amira", "mateo", "robert"}
     assert handle("GET", "/api/config")[1]["auth"] == {"mode": "aucune"}
+
+
+def test_rate_limiting_per_account_and_llm_routes(cognito, monkeypatch):
+    from ulysse.api.routes import reinitialiser_limiteur
+    reinitialiser_limiteur()
+    monkeypatch.setenv("ULYSSE_LIMITE_REQ_PAR_MIN", "4")
+    monkeypatch.setenv("ULYSSE_LIMITE_LLM_PAR_MIN", "2")
+    try:
+        # 1. General limit: 4 allowed for account A, 5th returns 429, while account B is still allowed
+        for _ in range(4):
+            assert handle("GET", "/api/profils", {}, None, h("jeton-a"))[0] == 200
+        status, err = handle("GET", "/api/profils", {}, None, h("jeton-a"))
+        assert status == 429 and err["code"] == "limite_debit" and err["reessayer_apres_s"] >= 1
+        assert handle("GET", "/api/profils", {}, None, h("jeton-b"))[0] == 200
+
+        # 2. Heavy/LLM route limit: stricter bucket (2/min) triggers before general limit (10/min)
+        reinitialiser_limiteur()
+        monkeypatch.setenv("ULYSSE_LIMITE_REQ_PAR_MIN", "10")
+        s, d = handle("POST", "/api/profils", {}, PROFIL, h("jeton-a"))
+        assert s == 200
+        pid = d["profil"]["id"]
+        for _ in range(2):
+            assert handle("POST", f"/api/profils/{pid}/assistant", {}, {"message": "20 000 $ dans NVDA"}, h("jeton-a"))[0] == 200
+        status_llm, err_llm = handle("POST", f"/api/profils/{pid}/assistant", {}, {"message": "20 000 $ dans NVDA"}, h("jeton-a"))
+        assert status_llm == 429 and err_llm["code"] == "limite_debit"
+        # General GET routes still work for account A even when LLM route limit is reached
+        assert handle("GET", "/api/profils", {}, None, h("jeton-a"))[0] == 200
+    finally:
+        reinitialiser_limiteur()

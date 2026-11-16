@@ -6,6 +6,8 @@
 
 ## 1. Schéma
 
+![Architecture AWS ULYSSE](aws-architecture.svg)
+
 ```mermaid
 flowchart LR
   U[Navigateur] -->|HTTPS| CF[CloudFront]
@@ -66,6 +68,7 @@ AWS Budgets : alarme de coût par courriel
 - Comptes : le jeton Cognito voyage dans l'en-tête `x-ulysse-jeton` (l'en-tête `Authorization` sert à la signature CloudFront → Lambda) ; chaque route liée à un profil vérifie qu'il appartient au compte, sinon « inconnu » (404), sans révéler son existence.
 - Textes externes (pages, rapports) traités comme des données, jamais comme des instructions pour le LLM.
 - Plafond de dépense LLM : compteur quotidien dans DynamoDB ; au-delà, l'app passe en mode gabarit (sans LLM) et le dit.
+- Limitation de débit (rate limiting) intégrée au routeur (`ulysse/api/routes.py`) : fenêtre glissante de 60 s par compte Cognito (ou par adresse IP CloudFront / `X-Forwarded-For`), avec deux paliers configurables (`ULYSSE_LIMITE_REQ_PAR_MIN=180` pour l'API générale et `ULYSSE_LIMITE_LLM_PAR_MIN=20` pour les routes lourdes `/api/dossiers`, `/assistant` et `/api/vigie/executer`), renvoyant `HTTP 429` + en-tête `Retry-After` sans nécessiter API Gateway.
 
 ## 5. Région et modèle
 

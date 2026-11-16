@@ -69,10 +69,30 @@ Avec Bedrock en local : connecte-toi une fois avec l'AWS CLI (`aws configure` ou
 | `ULYSSE_COMPTES_DEMO`, `ULYSSE_DEMO_MOT_DE_PASSE` | désactivé | comptes de démonstration du jury (mode `cognito`) |
 | `ULYSSE_RECHERCHE_WEB` | `1` | `0` coupe la recherche SEC EDGAR / GDELT (tests, démo hors ligne) |
 | `ULYSSE_SEC_USER_AGENT`, `ULYSSE_CACHE_RECHERCHE` | valeurs génériques | contact demandé par la SEC ; dossier du cache de recherche |
+| `ULYSSE_LIMITE_REQ_PAR_MIN` | `180` | limite de débit générale par compte / IP (fenêtre glissante de 60 s, HTTP `429`, `0` désactive) |
+| `ULYSSE_LIMITE_LLM_PAR_MIN` | `20` | limite stricte sur les routes lourdes / LLM (`/api/dossiers`, `/assistant`, `/api/vigie/executer`) |
 
 Aucun secret dans le code ni dans le dépôt.
 
 ## Architecture
+
+### Architecture Cloud AWS (Serverless, coût nul au repos)
+
+![Architecture AWS ULYSSE](docs/aws-architecture.svg)
+
+| Service AWS / Externe | Rôle dans ULYSSE | Pourquoi ce choix (sans sur-ingénierie) |
+|---|---|---|
+| **Amazon CloudFront** | Point d'entrée HTTPS unique : sert l'interface React (`/*`) depuis S3 et achemine `/api/*` vers l'URL de fonction Lambda via **Origin Access Control (OAC SigV4)** | Un seul domaine (aucun problème CORS), compression Gzip/Brotli, cache mondial, buckets et Lambda jamais exposés publiquement |
+| **AWS Lambda** (1 seule fonction `arm64`, Python 3.12, Function URL) | Monolithe serverless (« Lambdalith ») : routeur HTTP `/api/*`, moteur d'analyse `numpy`, vérificateur déterministe, limiteur de débit intégré (`429`), orchestration des dossiers et exécution de la Vigie | Évite le découpage en microservices, les démarrages à froid multiples, la duplication du datapack de 6,5 Mo et la limite de 29 s d'API Gateway |
+| **Amazon S3 (`UiBucket` & `DataBucket`)** | `UiBucket` : fichiers statiques compilés (`frontend/dist`). `DataBucket` : datapack de marché (~6,5 Mo, copié une seule fois par conteneur dans `/tmp/datapack`) et traces/dossiers > 300 Ko | Stockage chiffré (SSE-S3 AES-256), privé (accès public bloqué), coût négligeable (< 0,10 $/mois) |
+| **Amazon DynamoDB** (`PAY_PER_REQUEST`) | Table unique (`pk` / `sk`) : profils, contrats versionnés, positions simulées, paquets de signaux pré-calculés, journal d'audit et compteur quotidien de budget LLM | Lecture en quelques millisecondes (< 300 ms pour les signaux), facturation à la requête (0 $ au repos dans l'offre gratuite) |
+| **Amazon Cognito** (User Pool + Client public) | Authentification SRP directe depuis le navigateur (les mots de passe ne transitent jamais par le backend) ; jeton validé via `GetUser` (`x-ulysse-jeton`) | Isolation stricte des profils par compte + 3 comptes de démo auto-confirmés pour le jury ; gratuit jusqu'à 10 000+ utilisateurs actifs |
+| **Amazon Bedrock** (Claude) | **Planifier** les outils d'analyse et **rédiger / reformuler** uniquement à partir des preuves calculées (sorties structurées Pydantic) | Aucun calcul ni décision par le LLM ; protégé par un plafond quotidien en USD (`ULYSSE_LLM_LIMITE_JOUR_USD`) avec repli automatique sur gabarit déterministe |
+| **Amazon EventBridge Scheduler** | Déclencheur horaire (`rate(1 hour)`) qui invoque la même fonction Lambda avec l'action `vigie` | Pré-calcule la dérive, l'engouement, le régime de marché et pré-charge SEC EDGAR / GDELT sans serveur permanent |
+| **AWS Budgets** | Alarme mensuelle de coût (alertes courriel à 80 % du réel et 100 % du prévisionnel) | Garde-fou financier au niveau du compte AWS |
+| **SEC EDGAR & GDELT DOC 2.0** | Sources publiques externes interrogées en HTTPS (filtrées strictement `<= as_of` pour respecter la machine à remonter le temps, mises en cache dans `/tmp`) | Dépôts réglementaires officiels américains (`10-K`, `10-Q`, `8-K`) et couverture de presse mondiale dédoublonnée, sans clé API payante |
+
+### Architecture logicielle (une seule base de code)
 
 ```
 frontend/ (React + TypeScript)  ──/api──>  backend/ulysse (Python, une seule base de code)
@@ -81,9 +101,9 @@ frontend/ (React + TypeScript)  ──/api──>  backend/ulysse (Python, une s
                                              ├─ contract/    contrat, évaluation des clauses, contradictions, ESG sur preuves
                                              ├─ policy.py    politique de signal (règles nommées, score de gravité)
                                              ├─ governance.py, verifier.py, writer.py, llm.py, orchestrator.py, vigie.py
-                                             └─ api/         routes communes au serveur local et à la Lambda
+                                             └─ api/         routes communes au serveur local et à la Lambda (+ limiteur de débit intégré)
 infra/ (AWS SAM)   CloudFront → S3 (interface) + URL de fonction Lambda ; DynamoDB ; S3 (données, preuves, traces) ;
-                   EventBridge Scheduler (Vigie horaire) ; Bedrock ; budget AWS — voir docs/aws.md
+                   EventBridge Scheduler (Vigie horaire) ; Cognito ; Bedrock ; budget AWS — voir docs/aws.md
 bench/             banc d'essai (scénarios étiquetés, propriétés, latence)
 ```
 
