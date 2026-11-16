@@ -10,6 +10,7 @@ import { Button } from "./ui";
 const ETAPES_VISITE: { titre: string; texte: string }[] = [
   { titre: "Bienvenue", texte: "ULYSSE compare chaque intention de placement aux règles que tu as fixées toi-même. Tout est simulé : argent fictif, aucune transaction réelle, jamais un conseil." },
   { titre: "Ton contrat", texte: "Tes règles, écrites à froid : perte maximale en crise, part en actions, poids d'une seule entreprise, cryptoactifs, liquidités. Chacune dit d'où elle vient : ce que tu as dit, ou une valeur par défaut documentée." },
+  { titre: "Trouver un titre", texte: "Apple, NVIDIA, un fonds d'obligations… Le bouton « Rechercher un titre » (ou la touche /) ouvre n'importe lequel des 31 actifs du jeu de données." },
   { titre: "Le Mât", texte: "Sur la fiche d'un titre, tape un montant : l'ordre est vérifié en direct contre tes règles, en code. S'il s'en écarte nettement, une pause de réflexion s'affiche. Tu gardes le dernier mot." },
   { titre: "Le dossier", texte: "Pour aller plus loin, ouvre un dossier : des agents réunissent les données, deux d'entre eux argumentent pour et contre, et un vérificateur rejette tout chiffre sans preuve." },
   { titre: "Tes placements et la Vigie", texte: "Saisis, importe ou connecte (en simulation) tes placements. La Vigie les surveille et ne te parle que lorsqu'elle a quelque chose de pertinent. Tout est consigné dans le Journal." },

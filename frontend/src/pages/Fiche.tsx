@@ -3,9 +3,10 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { api } from "../api";
 import { GraphiqueCours } from "../charts/GraphiqueCours";
 import { Chargement, Erreur, Etiquette, Note, Prouve, PuceNiveau, PuceStatut, Terme } from "../components/base";
+import { Montant } from "../components/Montant";
 import { PauseReflexion } from "../components/pause";
 import { Signale } from "../components/signal";
-import { Button, Notice, Panel, Section, Tile, inputCls } from "../components/ui";
+import { Button, Notice, Panel, Section, Tile } from "../components/ui";
 import * as f from "../format";
 import { SECTEURS, inhabituel } from "../libelles";
 import { useApp, useData } from "../state";
@@ -36,6 +37,8 @@ export function Fiche() {
   const timer = useRef<number | undefined>(undefined);
   const parMesure = useMemo(() => Object.fromEntries((data?.preuves ?? []).map((p) => [p.mesure + (p.mesure === "rendement_total_passe" ? `_${p.parametres.fenetre_annees}` : ""), p])), [data]);
   const m = Number(String(montant).replace(/\s/g, "").replace(",", "."));
+  const { data: positions } = useData<{ liquidites_cad: number }>(profil ? `/profils/${profil}/positions` : null, { as_of: asOf });
+  const cash = positions?.liquidites_cad ?? null;
   useEffect(() => { setDirect(null); setConfirme(null); setConsigne(null); }, [ticker, profil, asOf]);
   useEffect(() => { const s = sp.get("montant"); if (s) setMontant(s); }, [sp]);
   useEffect(() => {                 // live check while typing (policy only, no LLM; < 300 ms)
@@ -116,14 +119,16 @@ export function Fiche() {
       <Panel className="p-6" id="section-ordre" aria-labelledby="ordre">
         <h2 id="ordre" className="font-display text-xl font-medium tracking-[-0.02em]">{t("action.preparer_ordre")}</h2>
         <p className="mt-1 text-sm text-ink-muted">Vérifié en direct contre tes règles, en code, sans LLM. Simulation : aucune transaction réelle.</p>
-        <div className="mt-4 flex flex-wrap items-end gap-3">
-          <div className="w-full max-w-[260px]">
-            <label htmlFor="montant" className="text-sm font-semibold">Montant (CAD)</label>
-            <input id="montant" name="montant" inputMode="decimal" autoComplete="off" value={montant} onChange={(e) => setMontant(e.target.value)} placeholder="ex. 20 000…" className={`${inputCls} mt-1.5 text-base`} />
-            <p className="mt-1 h-4 text-xs text-ink-muted">{m > 0 && total ? `≈ ${f.pct((m / total) * 100)} de ton portefeuille` : ""}</p>
-          </div>
-          <Button variant="accent" size="lg" onClick={preparer} disabled={!(m > 0) || verif === "en_cours"} className="mb-5">{verif ? "Vérification…" : "Vérifier et préparer l'ordre"}</Button>
-          <Button variant="secondary" size="lg" onClick={ouvrirDossier} className="mb-5">{t("action.dossier")}</Button>
+        <div className="mt-4">
+          <p className="text-sm font-semibold">Montant (CAD)</p>
+          <div className="mt-2"><Montant value={m > 0 ? m : null} onChange={(v) => setMontant(v == null ? "" : String(v))} suggestions={[500, 1000, 2500, 5000]} min={1} max={10_000_000} /></div>
+          <p className="mt-2 min-h-4 text-xs text-ink-muted">{m > 0 && total ? `≈ ${f.pct((m / total) * 100)} de ton portefeuille` : ""}
+            {cash != null && <> · liquidités disponibles : {f.cad(cash)}</>}
+            {cash != null && m > cash && <span className="text-warn-700"> · au-delà de tes liquidités : l'ordre sera refusé tant que tu n'ajoutes pas de fonds (Mes placements)</span>}</p>
+        </div>
+        <div className="mt-3 flex flex-wrap items-end gap-3">
+          <Button variant="accent" size="lg" onClick={preparer} disabled={!(m > 0) || verif === "en_cours"}>{verif ? "Vérification…" : m > 0 ? `Vérifier et préparer l'ordre de ${f.cad(m)}` : "Vérifier et préparer l'ordre"}</Button>
+          <Button variant="secondary" size="lg" onClick={ouvrirDossier}>{t("action.dossier")}</Button>
         </div>
         <div aria-live="polite" className="min-h-[40px]">
           {direct && m > 0 && (
@@ -182,7 +187,7 @@ function Recherche({ ticker }: { ticker: string }) {
           {depots.statut !== "ok" ? <p className="mt-2 text-sm text-ink-muted">{depots.note}</p> : (depots.valeur.depots as Depot[]).length === 0 ? <p className="mt-2 text-sm text-ink-muted">Aucun dépôt sur les {String(depots.parametres.fenetre_jours)} jours précédents.</p> : (
             <ul className="mt-2 space-y-2 text-sm">{(depots.valeur.depots as Depot[]).map((x) => (
               <li key={x.url}><a href={x.url} target="_blank" rel="noreferrer noopener" className="font-medium text-ink hover:underline">{x.forme}</a> <span className="text-ink-muted">· {f.date(x.date)}{x.objet ? ` · ${x.objet}` : ""}</span></li>))}</ul>)}
-          <Note>{depots.reference}</Note>
+          <Note>{depots.valeur?.lu_le ? `Lu à la source le ${new Date(depots.valeur.lu_le).toLocaleString("fr-CA", { dateStyle: "medium", timeStyle: "short" })}. ` : ""}{depots.reference}</Note>
         </Panel>
         <Panel>
           <h3 className="flex items-center gap-2 text-sm font-semibold"><Etiquette e="DOCUMENTE" /> Presse ({articles.statut === "ok" ? `${articles.valeur.n_articles} articles, ${articles.valeur.n_independants} nouvelles distinctes` : "indisponible"})</h3>
@@ -190,7 +195,7 @@ function Recherche({ ticker }: { ticker: string }) {
             <ul className="mt-2 space-y-2 text-sm">{(articles.valeur.articles as Article[]).map((x) => (
               <li key={x.url}><a href={x.url} target="_blank" rel="noreferrer noopener" className="text-ink hover:underline">{x.titre}</a>
                 <span className="block text-xs text-ink-muted">{x.source} · {f.date(x.date)}{x.reprises > 1 ? ` · repris ${x.reprises} fois` : ""}</span></li>))}</ul>)}
-          <Note>{articles.note ?? ""} {articles.reference}</Note>
+          <Note>{articles.valeur?.lu_le ? `Lu à la source le ${new Date(articles.valeur.lu_le).toLocaleString("fr-CA", { dateStyle: "medium", timeStyle: "short" })}. ` : ""}{articles.note ?? ""} {articles.reference}</Note>
         </Panel>
       </div>
     </Section>

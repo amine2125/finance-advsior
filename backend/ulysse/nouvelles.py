@@ -16,7 +16,7 @@ import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import numpy as np
@@ -44,10 +44,18 @@ class Indisponible(RuntimeError):
     pass
 
 
+_LU: dict[str, str] = {}   # file name -> moment the source was really read (UTC), shown next to the results (PDF p. 14)
+
+
+def lu_le(nom: str) -> str | None:
+    return _LU.get(nom)
+
+
 def _json(url: str, nom: str, headers: dict | None = None) -> dict:
     """GET with a file cache (one file per day and query). Short timeout: the app never waits long for a live source."""
     dest = OUT / nom
     if dest.exists():
+        _LU.setdefault(nom, datetime.fromtimestamp(dest.stat().st_mtime, tz=timezone.utc).isoformat(timespec="minutes"))
         return json.loads(dest.read_text(encoding="utf-8"))
     req = urllib.request.Request(url, headers={"User-Agent": SEC_UA, "Accept": "application/json", **(headers or {})})
     try:
@@ -56,6 +64,7 @@ def _json(url: str, nom: str, headers: dict | None = None) -> dict:
         data = json.loads(raw.decode("utf-8"))
     except (urllib.error.URLError, TimeoutError, ValueError, OSError) as e:
         raise Indisponible(str(e)[:120]) from e
+    _LU[nom] = datetime.now(timezone.utc).isoformat(timespec="minutes")
     try:
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_bytes(raw)
@@ -88,7 +97,8 @@ def ev_depots(v: AsOf, t: str) -> Evidence:
         cik = _cik(t)
         if not cik:
             return insufficient(**base, unite="nombre", note="Émetteur introuvable dans la table officielle de la SEC.")
-        sub = _json(f"https://data.sec.gov/submissions/CIK{cik}.json", f"sec_submissions_{cik}_{date.today().isoformat()}.json", {"User-Agent": SEC_UA})
+        nom = f"sec_submissions_{cik}_{date.today().isoformat()}.json"
+        sub = _json(f"https://data.sec.gov/submissions/CIK{cik}.json", nom, {"User-Agent": SEC_UA})
     except Indisponible as e:
         return insufficient(**base, unite="nombre", note=f"SEC EDGAR indisponible ({str(e)[:80]}).")
     r = sub.get("filings", {}).get("recent", {})
@@ -106,7 +116,7 @@ def ev_depots(v: AsOf, t: str) -> Evidence:
                        "url": f"https://www.sec.gov/Archives/edgar/data/{int(cik)}/{accn.replace('-', '')}/{doc}"})
     depots.sort(key=lambda x: x["date"], reverse=True)
     return evidence(**base, unite="nombre",
-                    valeur={"n_depots": len(depots), "plus_recent": depots[0]["date"] if depots else None, "depots": depots[:8]},
+                    valeur={"n_depots": len(depots), "plus_recent": depots[0]["date"] if depots else None, "depots": depots[:8], "lu_le": lu_le(nom)},
                     periode=(debut, fin))
 
 
@@ -137,8 +147,9 @@ def ev_articles(v: AsOf, t: str) -> Evidence:
     q = {"query": f"\"{nom}\"", "mode": "artlist", "maxrecords": "75", "sort": "datedesc", "format": "json",
          "startdatetime": debut.strftime("%Y%m%d000000"), "enddatetime": fin.strftime("%Y%m%d235959")}
     url = "https://api.gdeltproject.org/api/v2/doc/doc?" + urllib.parse.urlencode(q)
+    nom = f"gdelt_{t}_{fin.isoformat()}.json"
     try:
-        d = _json(url, f"gdelt_{t}_{fin.isoformat()}.json")
+        d = _json(url, nom)
     except Indisponible as e:
         return insufficient(**base, unite="nombre", note=f"GDELT indisponible ({str(e)[:80]}).")
     groupes: dict[str, dict] = {}
@@ -153,6 +164,22 @@ def ev_articles(v: AsOf, t: str) -> Evidence:
         g["reprises"] += 1
     arts = sorted(groupes.values(), key=lambda x: x["date"], reverse=True)
     n_total = sum(g["reprises"] for g in arts)
-    return evidence(**base, unite="nombre", valeur={"n_articles": n_total, "n_independants": len(arts), "articles": arts[:8]},
+    return evidence(**base, unite="nombre", valeur={"n_articles": n_total, "n_independants": len(arts), "articles": arts[:8], "lu_le": lu_le(nom)},
                     periode=(debut.isoformat(), fin.isoformat()),
                     note="Date = première détection par GDELT, proxy de la date de publication. Titres affichés tels quels, non vérifiés.")
+
+
+def lire_d_avance(v: AsOf, tickers: list[str]) -> dict:
+    """Read the sources of the watched securities ahead of time (Vigie), so a dossier or a security page does not wait for them
+    (idea from AEGIS, Raouf). Results are only cached; their real reading moment stays visible."""
+    if not actif():
+        return {"lus": 0, "echecs": []}
+    lus, echecs = 0, []
+    for t in dict.fromkeys(tickers):
+        for fn in (ev_depots, ev_articles):
+            e = fn(v, t)
+            if e.statut == "ok":
+                lus += 1
+            elif e.note and "indisponible" in e.note:
+                echecs.append(f"{t}: {e.note}")
+    return {"lus": lus, "echecs": echecs}

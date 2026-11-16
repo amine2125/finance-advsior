@@ -51,3 +51,9 @@ def test_old_dates_say_gdelt_does_not_cover_them(monkeypatch, dp):
 
 def test_switched_off_by_default_in_tests(dp):
     assert nouvelles.ev_depots(dp.asof("2026-11-14"), "NVDA").statut == "donnees_insuffisantes"
+
+
+def test_vigie_reads_watched_sources_ahead(monkeypatch, dp):
+    _fake(monkeypatch, [])
+    r = nouvelles.lire_d_avance(dp.asof("2026-11-14"), ["NVDA", "NVDA", "XIU.TO"])
+    assert r["lus"] >= 1 and r["echecs"] == []          # NVDA filings read once; a Canadian fund has no SEC filings (not a failure)

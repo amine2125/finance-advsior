@@ -119,6 +119,12 @@ def executer(as_of: str | None = None, profils: list[str] | None = None, store=N
                 store.append("journal", pid, {"type": "notification", "a": now_iso(), "as_of": as_of, "niveau": n["niveau"],
                                               "titre": n["titre"], "id": n["id"]})
         out["profils"][pid] = {"plan": plan["modules"], "notifications_creees": len(kept), "signaux_precalcules": len(pack)}
+    from ulysse import nouvelles
+    suivis = [t for pid in out["profils"] for t in store.get("surveillance", pid, [])]
+    try:
+        out["recherche_d_avance"] = nouvelles.lire_d_avance(v, suivis)
+    except Exception as e:  # noqa: BLE001 - an accelerator: a failure only means « read live later »
+        out["recherche_d_avance"] = {"erreur": str(e)[:200]}
     out["duree_ms"] = round((time.perf_counter() - t0) * 1000)
     out["fin"] = now_iso()
     store.append("vigie_executions", "historique", out)

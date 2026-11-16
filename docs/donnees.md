@@ -9,7 +9,7 @@
 | # | Source | Contenu utilisé | Période | Fréquence | Extraction |
 |---|---|---|---|---|---|
 | S1 | Kit AlphaForge (organisateurs) | 31 actifs, prix quotidiens, opérations sur titres, USD/CAD, 9 séries macro | 2021-11-12 → 2026-11-12 | quotidienne / mensuelle | fournie (extraction du 2026-11-13) |
-| S2 | Yahoo Finance via `yfinance` 1.8.0 | Prolongation des prix et opérations sur titres des 31 actifs | 2016-01-01 → 2022-03-31 (chevauchement de contrôle inclus) | séances de chaque marché ; crypto 7 j/7 | 2026-11-14 |
+| S2 | Yahoo Finance via `yfinance` 0.2.x (1.8.0 pour l'extraction initiale ; 0.2.x depuis, voir `backend/pyproject.toml`) | Prolongation des prix et opérations sur titres des 31 actifs | 2016-01-01 → 2022-03-31 (chevauchement de contrôle inclus) | séances de chaque marché ; crypto 7 j/7 | 2026-11-14 |
 | S3 | Banque du Canada, API Valet | FXUSDCAD 2017-01-03 → 2021-11-11 ; taux de midi IEXE0101 pour 2016 ; taux directeur, rendements 2 et 10 ans, IPC Canada avant le kit | 2016-01-01 → 2022-03-31 | jours ouvrables / mensuelle | 2026-11-14 |
 | S4 | FRED (Federal Reserve Bank of St. Louis) | DFF, DGS2, DGS10, CPIAUCSL, UNRATE avant le kit | 2016-01-01 → 2022-03-31 | quotidienne / mensuelle | 2026-11-14 |
 | S5 | Wikimedia REST API (pages vues) | Pages vues quotidiennes de 22 articles en.wikipedia (agent « user ») | 2016-01-01 → 2026-11-12 | quotidienne | 2026-11-14 |
@@ -17,6 +17,8 @@
 | S7 | State Street (SSGA), téléchargements publics | Composition de SPY ; appartenance aux 11 FNB Select Sector SPDR → secteur GICS de chaque membre du S&P 500 | au 2026-11-12 | instantané | 2026-11-14 |
 | S8 | iShares Canada (BlackRock), téléchargements publics | XIU : 125 instantanés de fin de mois 2016-01 → 2026-10 + 2026-11-12 ; XBB : 2026-11-12 | 2016-01-29 → 2026-11-12 | mensuelle | 2026-11-14 |
 | S9 | Communiqué de CNQ du 2022-08-04 (copie SEC EDGAR) | Preuve du dividende spécial de 1,50 $ CA (ex-date 2022-08-22) | — | — | 2026-11-14 |
+| S10 | SEC EDGAR (submissions, table officielle des symboles) | Dépôts officiels des émetteurs américains de l'univers (8-K, 10-Q, 10-K…) : forme, date, objet, lien | 120 jours avant la date simulée | à la demande, lu d'avance par la Vigie | en direct (date de lecture affichée) |
+| S11 | GDELT DOC 2.0 (métadonnées d'articles) | Titre, source, date de première détection et lien des articles de presse nommant l'entreprise | 14 jours avant la date simulée (couverture GDELT : 90 jours) | à la demande, lu d'avance par la Vigie | en direct (date de lecture affichée) |
 
 À venir (phase 3, gouvernance ESG) : méthodologies publiques d'indices ESG et appartenance à leurs FNB. Voir « Données non disponibles » plus bas.
 
@@ -89,6 +91,21 @@ Ces délais sont volontairement plus longs que la réalité : une simulation peu
 ## S9 — Preuve de la correction CNQ
 
 - Communiqué « Canadian Natural Resources Limited Announces Special Dividend », 2022-08-04 : dividende spécial de 1,50 $ CA par action, payable le 2022-08-31 aux actionnaires inscrits le 2022-08-23 (donc ex-date 2022-08-22 en règlement T+2). Copie officielle : SEC EDGAR, numéro d'accès 0001017413-22-000049 (https://www.sec.gov/Archives/edgar/data/1017413/000101741322000049/a08042022specialdividend.htm) ; aussi sur cnrl.com.
+
+## S10 — SEC EDGAR (dépôts officiels)
+
+- Origine : `https://www.sec.gov/files/company_tickers.json` (symbole → CIK) et `https://data.sec.gov/submissions/CIK##########.json`.
+- Traitement : dépôts filtrés par date de dépôt (après la date simulée : exclus ; plus de 120 jours avant : exclus), formes retenues 8-K, 10-Q, 10-K, 6-K, 20-F, 40-F, S-1, DEF 14A ; objet des 8-K traduit depuis le numéro d'item. Rien n'est copié du document : forme, date, objet et lien vers l'original.
+- Limites : émetteurs américains seulement (aucun dépôt pour les titres et FNB canadiens) ; la page de dépôts récents de la SEC peut ne pas remonter loin pour les grands émetteurs.
+- Licence : données publiques du gouvernement des États-Unis ; politique d'accès équitable de la SEC (User-Agent avec contact, `ULYSSE_SEC_USER_AGENT`).
+
+## S11 — GDELT (presse)
+
+- Origine : `https://api.gdeltproject.org/api/v2/doc/doc` (mode `artlist`, nom de l'entreprise entre guillemets, fenêtre `startdatetime` / `enddatetime`).
+- Traitement : articles dont la date de première détection dépasse la date simulée exclus ; titres normalisés (accents, ponctuation, mots courts) et regroupés quand ils reprennent la même nouvelle ; titres nettoyés (caractères de contrôle) et traités comme des données, jamais comme des instructions.
+- Limites : GDELT ne couvre que 90 jours : pour une date simulée plus ancienne, rien n'est montré (plutôt que des nouvelles postérieures) ; la date de détection n'est qu'un indice de la date de publication ; la présence d'un article ne prouve pas son contenu.
+- Licence : GDELT Project, usage libre avec citation ; seules les métadonnées (titre, source, date, lien) sont affichées.
+- Lecture d'avance : la Vigie lit ces deux sources pour les titres suivis, pour que le dossier ou la fiche n'attendent pas (idée reprise d'AEGIS) ; la date de lecture réelle est affichée à côté des résultats (énoncé p. 14 : date d'observation et date de publication distinguées).
 
 ## Données non disponibles (déclarées, pas contournées)
 

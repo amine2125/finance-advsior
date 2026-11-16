@@ -8,6 +8,7 @@ import { seDeconnecter } from "./auth";
 import { AssistantProvider, AvatarAssistant, useAssistant } from "./components/Assistant";
 import { Chargement } from "./components/base";
 import { CommentCaMarche, Visite } from "./components/Guide";
+import { RechercheTitre, ouvrirRecherche } from "./components/Recherche";
 import { PageIn, Segmented, spring } from "./components/motion";
 import { TiroirPreuve } from "./components/preuve";
 import { Disclaimer, inputCls } from "./components/ui";
@@ -100,6 +101,10 @@ function Coquille() {
           <Logo />
           <NavPrincipale suffixe={suffixe} />
           <div className="ml-auto flex items-center gap-1.5">
+            <button onClick={ouvrirRecherche} aria-label="Rechercher un titre" title="Rechercher un titre (touche /)"
+              className="flex h-9 items-center gap-2 rounded-full px-2.5 text-sm text-ink-muted hover:bg-ink/[0.04] hover:text-ink xl:w-52 xl:bg-ink/[0.035] xl:px-3.5">
+              <Search className="h-4 w-4" aria-hidden /><span className="hidden xl:inline">Rechercher un titre</span><kbd className="ml-auto hidden rounded-md bg-white px-1.5 text-[11px] font-medium text-ink-muted shadow-card xl:inline">/</kbd>
+            </button>
             <BoutonAssistant />
             <Cloche suffixe={suffixe} />
             <MenuProfil />
@@ -141,11 +146,13 @@ function Coquille() {
       </main>
       <footer className="mx-auto flex max-w-[1140px] flex-wrap items-start justify-between gap-3 px-4 pb-10 sm:px-8">
         <Disclaimer className="max-w-2xl" />
-        <Link to={`/fiabilite${suffixe}`} className="text-xs font-semibold text-ink-muted hover:text-ink">Fiabilité des chiffres</Link>
+        <div className="flex gap-4"><Link to={`/apprendre${suffixe}`} className="text-xs font-semibold text-ink-muted hover:text-ink">Apprendre les bases</Link>
+          <Link to={`/fiabilite${suffixe}`} className="text-xs font-semibold text-ink-muted hover:text-ink">Fiabilité des chiffres</Link></div>
       </footer>
       <NavMobile suffixe={suffixe} />
       <TiroirPreuve />
       <CommentCaMarche />
+      <RechercheTitre />
       <Visite />
     </div>
   );
