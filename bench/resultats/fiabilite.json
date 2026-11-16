@@ -1,0 +1,429 @@
+{
+ "disponible": true,
+ "execute_le": "2026-11-14 22:07",
+ "environnement": "local, LLM simulé, datapack du 2026-11-12",
+ "duree_s": 28.1,
+ "metriques": [
+  {
+   "cle": "signaux_attendus",
+   "libelle": "Signaux attendus qui se déclenchent (scénarios étiquetés d'après l'énoncé)",
+   "valeur": 100.0,
+   "unite": "%",
+   "n": 22,
+   "ic95": [
+    85.13404742740389,
+    100.0
+   ],
+   "niveau": "Mesuré"
+  },
+  {
+   "cle": "fausses_alertes",
+   "libelle": "Fausses alertes : pause sur un scénario où aucune pause n'est attendue",
+   "valeur": 0.0,
+   "unite": "%",
+   "n": 12,
+   "ic95": [
+    0.0,
+    24.25007574992425
+   ],
+   "niveau": "Mesuré"
+  },
+  {
+   "cle": "stabilite",
+   "libelle": "Stabilité : même entrée exécutée 5 fois, même statut",
+   "valeur": 100.0,
+   "unite": "%",
+   "n": 8,
+   "ic95": [
+    67.55843804891231,
+    100.0
+   ],
+   "niveau": "Mesuré"
+  },
+  {
+   "cle": "proportionnalite",
+   "libelle": "Proportionnalité : un ordre plus gros n'est jamais jugé moins sévèrement (1 %, 5 %, 10 %, 20 %)",
+   "valeur": 100.0,
+   "unite": "%",
+   "n": 496,
+   "ic95": [
+    99.23143651908926,
+    100.0
+   ],
+   "niveau": "Mesuré"
+  },
+  {
+   "cle": "pas_d_information_future",
+   "libelle": "Aucune preuve postérieure à la date simulée (4 dates, dont 2021 et 2022)",
+   "valeur": 100.0,
+   "unite": "%",
+   "n": 1984,
+   "ic95": [
+    99.80674516520834,
+    100.0
+   ],
+   "niveau": "Mesuré"
+  },
+  {
+   "cle": "chiffres_prouves",
+   "libelle": "Dossiers publiés dont chaque chiffre est relié à une preuve citée (vérificateur)",
+   "valeur": 100.0,
+   "unite": "%",
+   "n": 16,
+   "ic95": [
+    80.638658172728,
+    100.0
+   ],
+   "niveau": "Mesuré"
+  },
+  {
+   "cle": "rejets_verificateur",
+   "libelle": "Brouillons rejetés au moins une fois par le vérificateur (LLM simulé, défauts injectés dans la moitié des cas)",
+   "valeur": 43.75,
+   "unite": "%",
+   "n": 16,
+   "ic95": [
+    23.09836333518552,
+    66.82180439322349
+   ],
+   "niveau": "Indicatif",
+   "note": "7 défauts injectés corrigés au second essai sur 7. Le taux réel se mesure avec Bedrock (phase 7)."
+  },
+  {
+   "cle": "latence_signal_p50",
+   "libelle": "Latence du signal (vérification d'ordre), médiane, local",
+   "valeur": 8.8,
+   "unite": "ms",
+   "n": 2006,
+   "niveau": "Mesuré"
+  },
+  {
+   "cle": "latence_signal_p95",
+   "libelle": "Latence du signal, 95e centile, local",
+   "valeur": 12.6,
+   "unite": "ms",
+   "n": 2006,
+   "niveau": "Mesuré",
+   "note": "Cible : moins de 300 ms. Mesure sur AWS en phase 7."
+  },
+  {
+   "cle": "duree_dossier",
+   "libelle": "Durée d'un dossier complet, médiane, local avec LLM simulé",
+   "valeur": 188.65,
+   "unite": "ms",
+   "n": 16,
+   "niveau": "Indicatif",
+   "note": "Sans appel LLM réel : la durée avec Bedrock sera mesurée en phase 7."
+  },
+  {
+   "cle": "cout_dossier",
+   "libelle": "Coût par dossier",
+   "valeur": null,
+   "unite": "$ US",
+   "n": 0,
+   "niveau": "Indicatif",
+   "note": "Non mesuré : nécessite Bedrock (phase 7). Estimation a priori dans docs/aws.md."
+  }
+ ],
+ "scenarios": [
+  {
+   "profil": "robert",
+   "titre": "TSLA",
+   "taille_pct": 20.0,
+   "date": "2026-11-14",
+   "attendu": "pause..pause",
+   "obtenu": "pause",
+   "regles": [
+    "P1",
+    "P2"
+   ],
+   "conforme": true,
+   "pourquoi": "PDF p.7 : remettre en question une demande médiatisée incohérente (20 % d'un titre très volatil à 3–5 ans de la retraite)"
+  },
+  {
+   "profil": "robert",
+   "titre": "NVDA",
+   "taille_pct": 20.0,
+   "date": "2026-11-14",
+   "attendu": "pause..pause",
+   "obtenu": "pause",
+   "regles": [
+    "P1",
+    "P2"
+   ],
+   "conforme": true,
+   "pourquoi": "idem, titre réellement en engouement à la date"
+  },
+  {
+   "profil": "robert",
+   "titre": "SHOP.TO",
+   "taille_pct": 20.0,
+   "date": "2026-11-14",
+   "attendu": "pause..pause",
+   "obtenu": "pause",
+   "regles": [
+    "P1",
+    "P2"
+   ],
+   "conforme": true,
+   "pourquoi": "idem, titre de croissance très volatil"
+  },
+  {
+   "profil": "robert",
+   "titre": "BTC-USD",
+   "taille_pct": 5.0,
+   "date": "2026-11-14",
+   "attendu": "attention..pause",
+   "obtenu": "pause",
+   "regles": [
+    "P2"
+   ],
+   "conforme": true,
+   "pourquoi": "PDF p.7 : peu intéressé par les cryptoactifs"
+  },
+  {
+   "profil": "robert",
+   "titre": "TSLA",
+   "taille_pct": 20.0,
+   "date": "2021-12-15",
+   "attendu": "pause..pause",
+   "obtenu": "pause",
+   "regles": [
+    "P1",
+    "P2"
+   ],
+   "conforme": true,
+   "pourquoi": "machine à remonter le temps : même incohérence en décembre 2021"
+  },
+  {
+   "profil": "robert",
+   "titre": "ZST.TO",
+   "taille_pct": 2.0,
+   "date": "2026-11-14",
+   "attendu": "aucun..attention",
+   "obtenu": "attention",
+   "regles": [
+    "A2"
+   ],
+   "conforme": true,
+   "pourquoi": "obligations à très court terme, petite taille : pas de pause attendue"
+  },
+  {
+   "profil": "robert",
+   "titre": "XBB.TO",
+   "taille_pct": 2.0,
+   "date": "2026-11-14",
+   "attendu": "aucun..attention",
+   "obtenu": "attention",
+   "regles": [
+    "A1",
+    "A2"
+   ],
+   "conforme": true,
+   "pourquoi": "obligations canadiennes, petite taille : pas de pause attendue"
+  },
+  {
+   "profil": "robert",
+   "titre": "JNJ",
+   "taille_pct": 1.0,
+   "date": "2026-11-14",
+   "attendu": "aucun..attention",
+   "obtenu": "attention",
+   "regles": [
+    "A1"
+   ],
+   "conforme": true,
+   "pourquoi": "entreprise établie, 1 % : pas de pause attendue"
+  },
+  {
+   "profil": "amira",
+   "titre": "BTC-USD",
+   "taille_pct": 5.0,
+   "date": "2026-11-14",
+   "attendu": "aucun..attention",
+   "obtenu": "ok",
+   "regles": [
+    "O1"
+   ],
+   "conforme": true,
+   "pourquoi": "prompt §11 : Amira + 5 % de BTC -> pas de ⛔ (risque élevé, intérêt crypto)"
+  },
+  {
+   "profil": "amira",
+   "titre": "ETH-USD",
+   "taille_pct": 3.0,
+   "date": "2026-11-14",
+   "attendu": "aucun..attention",
+   "obtenu": "ok",
+   "regles": [
+    "O1"
+   ],
+   "conforme": true,
+   "pourquoi": "idem, petite position crypto"
+  },
+  {
+   "profil": "amira",
+   "titre": "NVDA",
+   "taille_pct": 2.0,
+   "date": "2026-11-14",
+   "attendu": "aucun..attention",
+   "obtenu": "attention",
+   "regles": [
+    "A1",
+    "A2"
+   ],
+   "conforme": true,
+   "pourquoi": "petite position techno : signal discret au plus"
+  },
+  {
+   "profil": "amira",
+   "titre": "NVDA",
+   "taille_pct": 25.0,
+   "date": "2026-11-14",
+   "attendu": "pause..pause",
+   "obtenu": "pause",
+   "regles": [
+    "P2"
+   ],
+   "conforme": true,
+   "pourquoi": "PDF p.5 : « risque élevé » ≠ « tout est acceptable » ; diversification qu'elle a demandée"
+  },
+  {
+   "profil": "amira",
+   "titre": "SHOP.TO",
+   "taille_pct": 25.0,
+   "date": "2026-11-14",
+   "attendu": "pause..pause",
+   "obtenu": "pause",
+   "regles": [
+    "P2"
+   ],
+   "conforme": true,
+   "pourquoi": "idem"
+  },
+  {
+   "profil": "amira",
+   "titre": "XIU.TO",
+   "taille_pct": 5.0,
+   "date": "2026-11-14",
+   "attendu": "aucun..attention",
+   "obtenu": "attention",
+   "regles": [
+    "A2"
+   ],
+   "conforme": true,
+   "pourquoi": "FNB large : diversifiant, pas de pause attendue"
+  },
+  {
+   "profil": "mateo",
+   "titre": "XOM",
+   "taille_pct": 3.0,
+   "date": "2026-11-14",
+   "attendu": "attention..attention",
+   "obtenu": "attention",
+   "regles": [
+    "A1",
+    "A2",
+    "A3"
+   ],
+   "conforme": true,
+   "pourquoi": "PDF p.6 : critères ESG ; la clause doit être évaluée (preuve ou données insuffisantes), sans pause"
+  },
+  {
+   "profil": "mateo",
+   "titre": "ENB.TO",
+   "taille_pct": 3.0,
+   "date": "2026-11-14",
+   "attendu": "attention..attention",
+   "obtenu": "attention",
+   "regles": [
+    "A1",
+    "A2"
+   ],
+   "conforme": true,
+   "pourquoi": "PDF p.6 : controverse documentée -> au moins ⚠, jamais ⛔ sur une clause qualitative"
+  },
+  {
+   "profil": "mateo",
+   "titre": "CNQ.TO",
+   "taille_pct": 3.0,
+   "date": "2026-11-14",
+   "attendu": "attention..attention",
+   "obtenu": "attention",
+   "regles": [
+    "A1",
+    "A2",
+    "A3"
+   ],
+   "conforme": true,
+   "pourquoi": "énergie, pas de preuve ESG dans la base -> données insuffisantes"
+  },
+  {
+   "profil": "mateo",
+   "titre": "ESGV",
+   "taille_pct": 2.0,
+   "date": "2026-11-14",
+   "attendu": "aucun..attention",
+   "obtenu": "attention",
+   "regles": [
+    "A2"
+   ],
+   "conforme": true,
+   "pourquoi": "FNB filtré ESG, petite taille : pas de pause attendue"
+  },
+  {
+   "profil": "mateo",
+   "titre": "BTC-USD",
+   "taille_pct": 10.0,
+   "date": "2026-11-14",
+   "attendu": "pause..pause",
+   "obtenu": "pause",
+   "regles": [
+    "P2"
+   ],
+   "conforme": true,
+   "pourquoi": "PDF p.6 : peu intéressé par les placements hautement spéculatifs"
+  },
+  {
+   "profil": "prudent",
+   "titre": "NVDA",
+   "taille_pct": 10.0,
+   "date": "2026-11-14",
+   "attendu": "pause..pause",
+   "obtenu": "pause",
+   "regles": [
+    "P1",
+    "P2"
+   ],
+   "conforme": true,
+   "pourquoi": "PDF p.14 : profil prudent préparant un achat prochain"
+  },
+  {
+   "profil": "prudent",
+   "titre": "TSLA",
+   "taille_pct": 5.0,
+   "date": "2026-11-14",
+   "attendu": "attention..pause",
+   "obtenu": "pause",
+   "regles": [
+    "P1",
+    "P2"
+   ],
+   "conforme": true,
+   "pourquoi": "idem"
+  },
+  {
+   "profil": "prudent",
+   "titre": "ZST.TO",
+   "taille_pct": 5.0,
+   "date": "2026-11-14",
+   "attendu": "aucun..attention",
+   "obtenu": "attention",
+   "regles": [
+    "A2"
+   ],
+   "conforme": true,
+   "pourquoi": "obligations à très court terme : cohérent avec un achat prochain"
+  }
+ ]
+}

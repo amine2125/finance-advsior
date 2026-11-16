@@ -26,7 +26,7 @@ def article_views(project: str, article: str, refresh: bool = False) -> pd.Serie
     safe = article.replace("/", "_").replace(",", "").replace("&", "and")
     tag = "" if end == KIT_END.replace("-", "") else f"__{end}"  # an extended kit needs views up to its own last day
     path = fetch(url, OUT / f"{project}__{safe}{tag}.json", refresh=refresh)
-    items = json.loads(path.read_text()).get("items", [])
+    items = json.loads(path.read_text(encoding="utf-8")).get("items", [])
     s = pd.Series({pd.Timestamp(i["timestamp"][:8]): i["views"] for i in items}, dtype="float64")
     return s.sort_index()
 

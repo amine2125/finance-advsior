@@ -1,123 +1,92 @@
-# Documentation technique — AEGIS × ULYSSE
+# Documentation technique — ULYSSE
 
-> Document synthétique demandé par l'énoncé (p. 15) : méthodes et justification ; sources, actifs, traitements et hypothèses ;
-> mécanisme d'explicabilité avec un exemple réel ; validations, limites et améliorations. Version du 2026-11-15, branche `fusion`.
+> Document synthétique exigé par le PDF (p. 15) : méthodes et justification ; sources, actifs, traitements, hypothèses ; mécanisme d'explicabilité avec un exemple réel ; validations, limites, améliorations. Version du 2026-11-14.
 
-## 1. Question traitée
+## 1. Problème et question utile
 
-Les investisseurs ont accès à beaucoup d'informations ; leur difficulté est de les **relier à leur propre situation** (énoncé p. 3).
-AEGIS répond à une question précise :
+L'écart à combler est celui entre l'information (« tout le monde parle de NVIDIA ») et la décision personnelle (« est-ce cohérent avec **ma** situation ? »). ULYSSE répond à une seule question :
 
-> « Ce que je veux faire de mon argent est-il compatible avec le profil que j'ai déclaré, et sur quels chiffres vérifiables repose
-> la réponse ? »
+> « Cette intention est-elle cohérente avec les règles que j'ai moi-même fixées à froid, et sur quels faits vérifiables repose la réponse ? »
 
-La personne décrit sa situation (questionnaire « Connaître son client »), connecte un portefeuille simulé, puis formule une demande
-en français : « J'ai 10 000 $ à investir », « Je veux 2 000 $ de NVIDIA », « Rééquilibre mon portefeuille ». Des agents produisent
-une **proposition simulée** qu'elle approuve, modifie ou refuse. Aucune transaction réelle, aucun conseil personnalisé (p. 17),
-aucune prédiction de rendement (p. 18).
+Il ne recommande jamais et ne prédit aucun rendement (PDF p. 17–18).
 
 ## 2. Architecture agentique
 
-Principe : **le code calcule et décide ; le modèle de langage argumente et rédige ; un validateur vérifie chaque chiffre écrit**.
-Chaque étape de la trace indique ce qui a fait le travail : « Calcul Python », « IA (Bedrock) » ou « Calcul + IA ».
+Chaque composant a un rôle, des outils limités et des interdits explicites. Le LLM n'intervient que pour **planifier** et **rédiger** (décision D-031).
 
-| # | Agent | Rôle | Moteur | Ce qu'il n'a pas le droit de faire |
+| Composant | Nature | Rôle | N'a pas le droit de | Pourquoi il existe |
 |---|---|---|---|---|
-| 1 | Profil | lit les limites du profil, le solde, les préférences (ESG, secteurs exclus) | calcul | modifier les limites |
-| 2 | Superviseur | extrait montant, titre et intention ; retrouve un nom mal écrit dans la liste fermée des 31 actifs | calcul + IA | inventer un titre hors liste |
-| 3 | Données | valide prix, devises et taux ; signale les données douteuses | calcul | combler un trou |
-| 4 | Recherche | si un titre est demandé : dépôts SEC, nouvelles dédupliquées, attention inhabituelle (ULYSSE) | calcul + IA | tenir une manchette pour une preuve |
-| 5 | Analyste | construit les ordres : comble ce qui manque, ou corrige au minimum un dépassement | calcul | proposer un actif hors limites |
-| 6 | Gouvernance (ordres) | accepte, réduit au montant permis ou bloque chaque ordre ; avertit (ESG, qualité des données) | calcul | être contournée : un ordre bloqué est retiré |
-| 7 | Scénarios | rejoue 2022 et des chocs hypothétiques, avant et après | calcul | présenter un choc comme une prévision |
-| 8 | Opportunités / Risques | arguments pour et contre, en parallèle, délai borné | IA | calculer ; citer un chiffre absent du registre |
-| 9 | Gouvernance (audit) | vérifie chaque chiffre et chaque formulation des arguments | calcul | accepter un chiffre non traçable |
-| 10 | Explicabilité | rédige la réponse à partir du dossier ; phrases corrigées si l'audit les rejette | IA | recommander, prédire |
-| 11 | La personne | approuve, modifie ou refuse | humain | — |
+| Contrat | code + LLM (rédaction optionnelle) | réponses → clauses typées, origine, versions ; contradictions K1–K7 en code | calculer ; décider un niveau | rendre explicites les règles « à froid » |
+| Politique de signal | code | à chaque intention : aucun / ✅ / ⚠ / ⛔ par règles nommées (P1, P2, A1–A3, O1, N1, D1) | appeler un LLM | décision rapide (~10 ms), déterministe, testée |
+| Planificateur | LLM (Bedrock) | choisir des modules d'analyse **en plus** des modules de base imposés par le code | calculer ; inventer un outil (rejeté et journalisé) | adapter l'analyse au contexte (ESG, crypto, horizon court, profil avancé) |
+| Outils d'analyse | code | 15 outils → objets de preuve | utiliser une donnée future (vue « as-of ») | le code calcule, jamais le LLM |
+| Gouvernance | code | statut de chaque clause, conflits, informations manquantes, contrôles visibles | juger sans preuve (ESG : preuves citées sinon « données insuffisantes ») | PDF p. 9 : contrôles visibles |
+| Explication | LLM (Bedrock) | rédiger le dossier à partir des **seules** preuves fournies, phrase par phrase étiquetée | accéder aux outils ; recommander ; prédire | rendre le résultat compréhensible |
+| Vérificateur | code | V1 étiquette, V2 preuves citées et existantes, V3 chaque chiffre retrouvé dans les preuves citées (tolérance d'arrondi), V4 formulations interdites, V5 cinq étapes ; défaut **nommé** renvoyé (2 essais), puis gabarit | être contourné : le texte non vérifié n'est jamais publié | aucune justification inventée |
+| Vigie | code (+ plan LLM au changement de contrat) | dérive, attention inhabituelle, climat, pré-calcul des signaux, notifications sans répétition | parler à chaque heure : seulement le nouveau et le pertinent | prévenir sans harceler |
 
-Code : `backend/app/agents/mandate.py` (orchestration, liste `STEPS`), `backend/app/governance/validator.py` (audit).
-Si Bedrock est lent ou absent, les étapes 8 et 10 sont marquées « échec » ou « ignorée » et une explication déterministe les remplace :
-la proposition reste complète.
-
-**Léa** (assistante) suit le même principe avec des outils fermés (`check_investment`, `model_portfolio`, `portfolio_xray`,
-`hype_research`…) ; sa réponse est auditée avant affichage, et réécrite une fois si l'audit la rejette.
+Principes de la méthode en 10 niveaux appliqués : règles qui nomment leur cas et leur limite (docstrings de `policy.py`) ; agents à outils limités (registre fermé, paramètres à valeurs autorisées) ; modules chargés selon le cas ; le code calcule ; garde-fous qui bloquent (vérificateur) ; l'orchestrateur vérifie que chaque étape a produit sa preuve ; état écrit après chaque étape (reprise, rejeu) ; défaut nommé renvoyé au rédacteur ; tout se mesure (banc d'essai).
 
 ## 3. Méthodes et justification
 
-| Question | Méthode | Référence |
+| Question | Méthode retenue | Référence publique |
 |---|---|---|
-| Ce titre est-il risqué ? | volatilité annualisée (√252, √365 pour la crypto), pire baisse sur 5 ans, niveau faible / moyen / élevé par seuils gelés (`docs/hypotheses.md` §4) | Bacon (2008) |
-| Que pèserait-il dans le portefeuille ? | ajout hypothétique, recalcul de toutes les limites, montant maximal compatible par dichotomie | code maison, testé |
-| Le portefeuille est-il diversifié ? | parts par émetteur, secteur et thème, FNB ouverts quand leur composition est publiée ; contributions au risque ; corrélations en période de stress | Maillard, Roncalli & Teïletche (2010) |
-| Et si une crise revenait ? | rejeu de 2022 avec les poids actuels ; chocs hypothétiques explicites | — |
-| Le risque monte-t-il ? | EWMA λ = 0,94 rapportée à la volatilité sur un an ; CVaR historique 95 % sur 20 séances | RiskMetrics (1996) ; Acerbi & Tasche (2002) |
-| « Tout le monde en parle » ? | Isolation Forest par titre, entraîné sur son seul passé (pages vues de la veille, volume, ampleur du mouvement), puis règle écrite : 5 % les plus inhabituels **et** vues ou volume ≥ 1,5 × l'habituel | Liu, Ting & Zhou (2008) |
-| Quel climat de marché ? | mélange gaussien à 3 états (calme, agité, tendu) sur des mesures hebdomadaires S&P 500, TSX 60 et pentes de taux 10 ans − 2 ans | Bishop (2006), ch. 9 |
-| Le profil | quatre mesures (tolérance, comportement, capacité, connaissances) ; la plus basse fixe le niveau | `docs/hypotheses.md` §2 |
+| Ce titre est-il risqué ? | volatilité annualisée (√252) ; pire baisse avec dates et durée de récupération ; CVaR historique 95 % sur 20 séances | Bacon (2008) ; Acerbi & Tasche (2002), J. Banking & Finance 26(7) |
+| Le risque monte-t-il ? | EWMA λ = 0,94, rapportée à la volatilité sur un an | J.P. Morgan/Reuters, RiskMetrics Technical Document (1996) |
+| Combien pèse ce titre dans le risque ? | contributions d'Euler (covariance hebdomadaire, 3 ans) | Maillard, Roncalli & Teïletche (2010), JPM 36(4) |
+| Le portefeuille est-il diversifié ? | transparence des FNB par compositions publiées ; regroupement hiérarchique sur la distance √((1−ρ)/2) (« paris réels ») ; inverse de l'indice de Herfindahl des parts de risque | López de Prado (2016), JPM 42(4) ; Meucci (2009), Risk 22(5) |
+| Et si une crise revenait ? | rejeu des épisodes passés (fin 2018, COVID 2020, 2022) avec les poids actuels ; bootstrap stationnaire (blocs moyens de 20 séances, graine fixe), queue basse seulement | Politis & Romano (1994), JASA 89(428) |
+| « Tout le monde en parle » ? | Isolation Forest par titre, réentraîné chaque mois sur son seul passé (pages vues de la veille, volume, ampleur du mouvement, volatilité relative) + règle d'attention écrite | Liu, Ting & Zhou (2008), IEEE ICDM |
+| Quel climat de marché ? | mélange gaussien à 3 composantes (rendements et volatilités S&P 500 / TSX 60, pentes 10 ans − 2 ans avec délai de publication), descriptif | Bishop (2006), PRML ch. 9 |
+| Est-ce cohérent avec le profil ? | règles explicites d'une politique de placement (objectifs datés, perte maximale, horizon par périodes glissantes, concentration, liquidités, ESG documenté) ; score de gravité | code maison, testé |
 
-**Volontairement exclus** : prédiction de prix (p. 18) ; classement par meilleur rendement passé (p. 3) ; Markowitz « pur »
-(allocations extrêmes et instables, qui ressembleraient à une recommandation) ; VaR paramétrique normale seule (queues sous-estimées) ;
-classifieur « convient / ne convient pas » (aucune donnée étiquetée, et la décision appartient aux règles explicites).
+**Volontairement exclus**, et pourquoi :
+- un ML qui prédit les prix : le PDF l'exclut (p. 18) et ce serait une fausse précision ;
+- un classement par meilleur rendement passé : le passé ne prédit pas, et l'énoncé l'exclut (p. 3) ;
+- un Markowitz « pur » : il est instable face aux erreurs d'estimation et produit des allocations extrêmes qui ressembleraient à une recommandation ;
+- une VaR paramétrique normale seule : elle sous-estime les queues épaisses (cf. 2020, 2022) ; on lui préfère la CVaR historique et les rejeux ;
+- un classifieur « convient / ne convient pas » : aucune donnée étiquetée n'existe, et la décision appartient aux règles de l'utilisateur.
+
+Toutes les procédures aléatoires utilisent la graine 20261114. Chaque preuve porte la version du code et l'empreinte du datapack (ex. `ulysse-0.1.0+dp1-d8fb7edf`).
 
 ## 4. Données, actifs, traitements, hypothèses
 
-- **Univers** : les 31 actifs du kit (10 actions canadiennes, 10 américaines, 9 FNB dont un FNB ESG, Bitcoin et Ether). Il couvre les
-  tests des personas : technologie et crypto pour Amira, ESG et énergie pour Mateo, titres médiatisés pour Robert.
-- **Sources** : `docs/donnees.md` (S1 à S12), avec origine, période, traitement, limites et conditions de chaque source.
-- **Cohérence temporelle** (p. 14) : délais de publication prudents pour la macro, pages vues et compositions utilisables le
-  lendemain, états financiers SEC lus « à date ». Les prix peuvent être prolongés après le 2026-11-12 avec le script officiel du kit
-  (S10) ; quand les nouvelles lues sont plus récentes que les prix, l'écran l'affiche.
-- **Hypothèses** : `docs/hypotheses.md` (seuils, limites par profil, chocs, comptes de démonstration, ESG).
+- **Univers** : les 31 actifs du jeu de départ (10 actions canadiennes, 10 américaines, 9 FNB, 2 cryptoactifs). Il couvre les tests des personas : énergie pour Mateo, titres médiatisés pour Robert, crypto pour Amira.
+- **Traitements** (détail dans `docs/donnees.md`) : rendements sur `adj_close` ; prolongation 2016–2021 jointe par rendements chaînés (écart ≤ 1,3 × 10⁻⁶ sur le chevauchement) ; calendrier maître des jours ouvrables (prix reportés quand un marché est fermé ; crypto échantillonnée à la ligne UTC) ; conversion en CAD avec le taux de la Banque du Canada reporté les jours fériés ; correction de CNQ (faux fractionnement de 1,021 du 2022-08-22, prouvé par le communiqué de CNQ) ; délais de publication prudents pour la macro ; pages vues de la veille.
+- **Cohérence temporelle** : un seul accès aux données, la vue `AsOf`, testé sur 1 984 évaluations sans aucune donnée postérieure à la date simulée.
+- **Hypothèses** (`docs/hypotheses.md`) : capital et portefeuilles fictifs des personas ; valeurs par défaut des clauses par tolérance ; seuils de la politique ; définition d'une controverse « importante ».
 
 ## 5. Mécanisme d'explicabilité, avec un exemple réel
 
-Chaîne : **donnée publique → calcul Python → registre de métriques (valeur, méthode, période, source) → règle du profil →
-phrase → audit → trace**. Les modèles de langage n'écrivent que des identifiants de métriques ; l'interface affiche les vraies valeurs.
+Chaîne : **donnée publique → outil (code) → objet de preuve → statut de clause (code) → niveau (politique écrite) → phrase étiquetée (LLM ou gabarit) → vérificateur → trace**.
 
-**Exemple** exécuté le 2026-11-15 sur le compte de démonstration de Robert (jeu officiel, données au 2026-11-12, modèle de langage
-désactivé pour montrer le chemin déterministe). Demande : « Je veux 3 000 $ de Tesla ».
+Exemple tiré d'un dossier exécuté le 2026-11-14 (`D-20261114-221606-10f5d4`) : Robert prépare un ordre simulé de 160 000 $ sur TSLA.
 
-1. **Conclusion affichée** : « Hors de vos limites : 3 000 $ dans Tesla ne respecte pas votre profil. Alternative simulée : la même
-   somme dans un portefeuille faible à modéré. »
-2. **Raisons**, chacune calculée :
-   - « Tesla a un risque élevé : il varie typiquement de ± 59,6 % par année, et sa pire baisse sur 5 ans a été de −73,0 %. »
-     → métriques `mnd.asset.vol` (volatilité historique 5 ans) et `mnd.asset.mdd` (perte maximale 5 ans), source `prices_daily.csv` ;
-   - « Votre portefeuille a déjà trop d'actions et de cryptos (86,0 % ; votre zone : 30,0 % à 45,0 %). » → limite `growth_min/max`
-     du niveau « faible à modéré » ;
-   - « Tesla pèserait 10,2 % de votre portefeuille ; la limite de votre profil par entreprise est 5,0 %. »
-3. **Gouvernance** : « Demande « Tesla » refusée » (bloquée) ; montant maximal compatible `mnd.request.max` = 0 $.
-4. **Proposition** : XBB.TO 1 605 $ et AGG 1 395 $ (obligations), pour la même somme.
-5. **Trace** (extrait) :
-   `profile.read` Calcul Python · « Profil Faible à modéré · actions entre 30,0 % et 45,0 % · max 5,0 % par entreprise… » ;
-   `supervisor.understand` Calcul + IA · « Acheter 3 000 $ de TSLA » ;
-   `quant.proposal` Calcul Python · « 2 ordre(s) : achats 3 000 $ » ;
-   `scenario.stress` Calcul Python · « 2022 rejoué : −22,1 % → −21,9 % » ;
-   `opportunity.r1` / `risk.r1` IA (Bedrock) · « Indisponible : IA générative non connectée ».
+1. **Phrase publiée** (section Analyse, étiquette MESURÉ) : « Ta règle « Pas plus de 5 % de mon portefeuille dans une seule entreprise (FNB compris). » : dépassée. TSLA pèserait 17,8 % du portefeuille (direct + via FNB), pour une limite de 5 %. »
+2. **Preuves citées** : `ev-eba8e341afc9` (statut de la clause : dépassée, valeur après 17,83 %, limite 5 %, origine « valeur par défaut », causée par l'intention) et `ev-1b057acc5bf8` (exposition à TSLA avant 0,14 %, après 17,83 %, méthode « transparence des FNB », sources : positions fictives, cours de clôture, compositions SSGA et iShares Canada, données au 2026-11-12).
+3. **Vérificateur** : « 5 », « 17,8 » et « 5 » sont retrouvés dans ces deux preuves (17,83 arrondi à 17,8) ; essai 1 accepté.
+4. **Trace** : gouvernance → `C-CONCENTRATION-TITRE : depassee` ; politique de signal → `pause` (règles P1 et P2, gravité 10,7) ; planification → 5 modules de base imposés par le code et 8 ajoutés ; outils → « Composition des FNB ✓ (7 preuves) », etc.
 
-Avec Bedrock connecté, les agents Opportunités et Risques ajoutent leurs arguments ; chaque chiffre qu'ils citent doit exister dans le
-registre (tolérance d'arrondi), sinon la phrase est rejetée et corrigée. Le raisonnement interne des modèles n'est jamais affiché (p. 17).
+Dans l'interface, chaque chiffre de cette phrase est un bouton qui ouvre le tiroir de preuve (source, date, période, devise, méthode, paramètres, version du code). Le raisonnement interne du modèle n'est jamais affiché (PDF p. 17).
 
 ## 6. Validations
 
-| Validation | Résultat |
+| Validation | Résultat (mesuré) |
 |---|---|
-| Tests automatisés (`make test`) | 108 tests verts, dont 10 qui demandent le datapack ULYSSE (`make data` d'abord) : formules financières, profil, verdicts, mandats, solde, validateur (formulations interdites, conseil personnalisé, chiffres non traçables), ESG, dates de recherche, signaux ULYSSE, absence d'information future |
-| Prolongation des prix (`make data-refresh`) | clôtures identiques au kit sur le chevauchement (écart maximal 0,000 % le 2026-11-15) ; contrôles du kit sans avertissement |
-| Parcours en navigateur (`make e2e`, Playwright) | inscription, questionnaire, deux mandats, approbation, leçon ; à relancer avant la remise |
-| Trois comptes de démonstration (exécution locale du 2026-11-15) | Robert : Tesla refusée, alternative obligataire ; Amira : rééquilibrage, volatilité 24,9 % → 12,9 %, rejeu 2022 −24,3 % → −6,8 % ; Mateo : « rien à corriger » |
+| Tests automatisés (`make test`) | 71 verts : données, outils sur cas calculables à la main, contrat, politique (chaque règle nommée), vérificateur (chaque défaut), orchestrateur (trace, défaut corrigé, repli sans LLM, outil inventé rejeté), Vigie (pas de répétition, rejeu dans le passé), API = Lambda |
+| Banc d'essai (`make bench`, local, LLM simulé) | signaux attendus 22/22 (IC 95 % 85–100 %) ; fausses alertes 0/12 (0–24 %) ; stabilité 8/8 ; proportionnalité 496/496 ; aucune information future 1 984/1 984 ; dossiers entièrement prouvés 16/16 ; latence du signal p50 9 ms, p95 13 ms |
+| Accessibilité (axe-core, 30 vues, WCAG 2.2 A/AA) | 0 violation après correction de 3 règles |
+| Lighthouse (mobile simulé) | Performance 97–98, Accessibilité 100, Bonnes pratiques 100 (3 écrans) |
+| Parcours en navigateur (6 scénarios de démo) | de bout en bout, 0 erreur ; clics : consulter un titre 2, préparer un ordre 4, créer un contrat 4, lire un dossier 1 |
 
 ## 7. Limites
 
-- Simulation : argent fictif, aucune transaction, aucun lien avec un vrai courtier.
-- Seuils et limites par profil : heuristiques lisibles, pas des règles réglementaires.
-- ESG : filtre sectoriel sourcé, pas de note ESG ni de vérification des controverses par entreprise.
-- Données Yahoo non certifiées ; biais du survivant ; compositions de QQQ et d'ESGV non disponibles.
-- Nouvelles : couverture GDELT ; dépôts SEDAR+ non connectés.
-- Le passé ne prédit pas l'avenir : rejeux et chocs décrivent un fait passé ou une hypothèse explicite.
+Voir le README (section « Limites »). Les principales : déploiement AWS et mesures Bedrock en attente des accès ; compositions de QQQ et ESGV non disponibles ; preuves ESG sur quelques titres seulement ; scénarios du banc d'essai écrits par l'auteur du moteur ; valeurs par défaut non normatives ; données historiques non certifiées et biais du survivant.
 
 ## 8. Améliorations envisagées
 
-1. Compositions N-PORT (SEC) pour ouvrir QQQ et ESGV.
-2. Dépôts SEDAR+ pour les émetteurs canadiens, et extraits ESG documentés par entreprise avec revue humaine.
-3. Mise à jour quotidienne des prix sur AWS (EventBridge) plutôt qu'au déploiement, avec recalcul des signaux ULYSSE.
-4. Calibrage des limites par profil avec des utilisateurs.
+1. Compositions N-PORT (SEC) avec historique trimestriel daté, pour ouvrir QQQ et ESGV et rendre la transparence exacte dans le passé.
+2. Base ESG élargie (dépôts SEDAR+ et EDGAR, rapports de durabilité), avec revue humaine des extraits.
+3. Scénarios du banc d'essai écrits par des tiers (conseillers, utilisateurs) et mesure en double aveugle.
+4. Seuils de la politique calibrés avec des utilisateurs (fatigue des alertes) ; préférences de notification plus fines.
+5. Univers élargi à la demande, avec la même rigueur documentaire.

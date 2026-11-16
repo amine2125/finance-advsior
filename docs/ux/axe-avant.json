@@ -1,0 +1,222 @@
+{
+ "bureau /?p=robert": [
+  {
+   "id": "label-content-name-mismatch",
+   "impact": "serious",
+   "help": "Elements must have their visible text as part of their accessible name",
+   "n": 2,
+   "cibles": [
+    ".essentiel > .prouve[type=\"button\"]",
+    "section[aria-labelledby=\"t-climat\"] > p > .prouve[type=\"button\"]"
+   ]
+  }
+ ],
+ "bureau /marche?p=amira": [],
+ "bureau /tendances?p=robert": [
+  {
+   "id": "label-content-name-mismatch",
+   "impact": "serious",
+   "help": "Elements must have their visible text as part of their accessible name",
+   "n": 2,
+   "cibles": [
+    ".prouve[type=\"button\"]:nth-child(2)",
+    ".prouve[type=\"button\"]:nth-child(3)"
+   ]
+  }
+ ],
+ "bureau /titre/NVDA?p=robert": [
+  {
+   "id": "aria-prohibited-attr",
+   "impact": "serious",
+   "help": "Elements must only use permitted ARIA attributes",
+   "n": 3,
+   "cibles": [
+    "rect[x=\"436.17856242118535\"]",
+    "rect[x=\"317.49205548549816\"]",
+    "rect[x=\"229.69180327868855\"]"
+   ]
+  },
+  {
+   "id": "label-content-name-mismatch",
+   "impact": "serious",
+   "help": "Elements must have their visible text as part of their accessible name",
+   "n": 1,
+   "cibles": [
+    "p > .prouve[type=\"button\"]"
+   ]
+  }
+ ],
+ "bureau /titre/XOM?p=mateo": [
+  {
+   "id": "aria-prohibited-attr",
+   "impact": "serious",
+   "help": "Elements must only use permitted ARIA attributes",
+   "n": 3,
+   "cibles": [
+    "rect[x=\"436.17856242118535\"]",
+    "rect[x=\"317.49205548549816\"]",
+    "rect[x=\"229.69180327868855\"]"
+   ]
+  },
+  {
+   "id": "label-content-name-mismatch",
+   "impact": "serious",
+   "help": "Elements must have their visible text as part of their accessible name",
+   "n": 1,
+   "cibles": [
+    "p > .prouve[type=\"button\"]"
+   ]
+  }
+ ],
+ "bureau /portefeuille?p=amira": [
+  {
+   "id": "label-content-name-mismatch",
+   "impact": "serious",
+   "help": "Elements must have their visible text as part of their accessible name",
+   "n": 2,
+   "cibles": [
+    ".essentiel > .prouve[type=\"button\"]:nth-child(1)",
+    ".prouve[type=\"button\"]:nth-child(2)"
+   ]
+  }
+ ],
+ "bureau /comparer?p=mateo": [],
+ "bureau /surveillance?p=robert": [],
+ "bureau /contrat?p=robert": [],
+ "bureau /nouveau-profil": [],
+ "bureau /journal?p=robert": [],
+ "bureau /fiabilite": [],
+ "bureau /demo": [],
+ "bureau /titre/TSLA?p=robert&d=2021-12-15": [
+  {
+   "id": "aria-prohibited-attr",
+   "impact": "serious",
+   "help": "Elements must only use permitted ARIA attributes",
+   "n": 2,
+   "cibles": [
+    "rect[x=\"533.3554327808471\"]",
+    "rect[x=\"373.0755064456722\"]"
+   ]
+  },
+  {
+   "id": "label-content-name-mismatch",
+   "impact": "serious",
+   "help": "Elements must have their visible text as part of their accessible name",
+   "n": 1,
+   "cibles": [
+    "p > .prouve[type=\"button\"]"
+   ]
+  }
+ ],
+ "bureau pause de réflexion": [],
+ "bureau dossier": [],
+ "mobile /?p=robert": [
+  {
+   "id": "label-content-name-mismatch",
+   "impact": "serious",
+   "help": "Elements must have their visible text as part of their accessible name",
+   "n": 2,
+   "cibles": [
+    ".essentiel > .prouve[type=\"button\"]",
+    "section[aria-labelledby=\"t-climat\"] > p > .prouve[type=\"button\"]"
+   ]
+  }
+ ],
+ "mobile /marche?p=amira": [],
+ "mobile /tendances?p=robert": [
+  {
+   "id": "label-content-name-mismatch",
+   "impact": "serious",
+   "help": "Elements must have their visible text as part of their accessible name",
+   "n": 2,
+   "cibles": [
+    ".prouve[type=\"button\"]:nth-child(2)",
+    ".prouve[type=\"button\"]:nth-child(3)"
+   ]
+  }
+ ],
+ "mobile /titre/NVDA?p=robert": [
+  {
+   "id": "aria-prohibited-attr",
+   "impact": "serious",
+   "help": "Elements must only use permitted ARIA attributes",
+   "n": 3,
+   "cibles": [
+    "rect[x=\"436.17856242118535\"]",
+    "rect[x=\"317.49205548549816\"]",
+    "rect[x=\"229.69180327868855\"]"
+   ]
+  },
+  {
+   "id": "label-content-name-mismatch",
+   "impact": "serious",
+   "help": "Elements must have their visible text as part of their accessible name",
+   "n": 1,
+   "cibles": [
+    "p > .prouve[type=\"button\"]"
+   ]
+  }
+ ],
+ "mobile /titre/XOM?p=mateo": [
+  {
+   "id": "aria-prohibited-attr",
+   "impact": "serious",
+   "help": "Elements must only use permitted ARIA attributes",
+   "n": 3,
+   "cibles": [
+    "rect[x=\"436.17856242118535\"]",
+    "rect[x=\"317.49205548549816\"]",
+    "rect[x=\"229.69180327868855\"]"
+   ]
+  },
+  {
+   "id": "label-content-name-mismatch",
+   "impact": "serious",
+   "help": "Elements must have their visible text as part of their accessible name",
+   "n": 1,
+   "cibles": [
+    "p > .prouve[type=\"button\"]"
+   ]
+  }
+ ],
+ "mobile /portefeuille?p=amira": [
+  {
+   "id": "label-content-name-mismatch",
+   "impact": "serious",
+   "help": "Elements must have their visible text as part of their accessible name",
+   "n": 2,
+   "cibles": [
+    ".essentiel > .prouve[type=\"button\"]:nth-child(1)",
+    ".prouve[type=\"button\"]:nth-child(2)"
+   ]
+  }
+ ],
+ "mobile /comparer?p=mateo": [],
+ "mobile /surveillance?p=robert": [],
+ "mobile /contrat?p=robert": [],
+ "mobile /nouveau-profil": [],
+ "mobile /journal?p=robert": [],
+ "mobile /fiabilite": [],
+ "mobile /demo": [],
+ "mobile /titre/TSLA?p=robert&d=2021-12-15": [
+  {
+   "id": "aria-prohibited-attr",
+   "impact": "serious",
+   "help": "Elements must only use permitted ARIA attributes",
+   "n": 2,
+   "cibles": [
+    "rect[x=\"533.3554327808471\"]",
+    "rect[x=\"373.0755064456722\"]"
+   ]
+  },
+  {
+   "id": "label-content-name-mismatch",
+   "impact": "serious",
+   "help": "Elements must have their visible text as part of their accessible name",
+   "n": 1,
+   "cibles": [
+    "p > .prouve[type=\"button\"]"
+   ]
+  }
+ ]
+}
