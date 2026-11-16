@@ -31,7 +31,8 @@ LIBELLES_OUTILS = {
     "risque_recent": "Risque récent (EWMA)", "rendement_passe": "Rendement passé", "dividendes": "Dividendes",
     "engouement": "Attention inhabituelle", "regime": "Climat de marché", "valeur_portefeuille": "Valeur du portefeuille",
     "transparence": "Composition des FNB", "contribution_risque": "Contributions au risque", "paris_reels": "Paris réels",
-    "rejeu_historique": "Rejeu historique", "scenarios_reechantillonnes": "Scénarios rééchantillonnés",
+    "rejeu_historique": "Rejeu historique", "choc_hypothetique": "Choc hypothétique", "scenarios_reechantillonnes": "Scénarios rééchantillonnés",
+    "depots_officiels": "Dépôts SEC", "nouvelles": "Presse (GDELT)",
 }
 MAX_ESSAIS = 2
 

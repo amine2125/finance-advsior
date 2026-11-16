@@ -1,0 +1,5 @@
+Generated 2026-11-13. Window 2021-11-12 to 2026-11-12.
+No warnings.
+
+# AEGIS import notes
+Macro: daily rates marked point-in-time safe (1-day lag); monthly CPI/unemployment pit_safe=0

@@ -1,30 +1,54 @@
 import clsx from "clsx";
-import { motion } from "framer-motion";
-import { Check, Loader2, X } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
+import { Check, Loader2, RotateCcw, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../api";
 import { Chargement, Erreur, Note, PuceNiveau, PuceStatut } from "../components/base";
 import { Stagger, StaggerItem, spring } from "../components/motion";
 import { Phrase } from "../components/phrase";
-import { Hero, Notice, Panel, Section } from "../components/ui";
+import { Hero, Notice, Panel, Section, TextButton } from "../components/ui";
 import * as f from "../format";
 import { useApp } from "../state";
 import type { Preuve, Signal } from "../types";
 
 const ETAPES: Record<string, string> = { donnees: "Données", constats: "Constats", analyse: "Analyse", options: "Options", explication: "Explication" };
-const NOMS: Record<string, [string, string]> = {
-  contexte: ["Contexte", "code"], planification: ["Planification", "LLM, validé par le code"], outils: ["Outils d'analyse", "code"], gouvernance: ["Gouvernance", "code"],
-  signal: ["Politique de signal", "code"], debat: ["Débat Pour / Contre", "LLM, vérifié par le code"], redaction: ["Rédaction", "LLM"], verification: ["Vérification", "code"], publication: ["Publication", "code"],
+const NOMS: Record<string, [string, string, string]> = {
+  contexte: ["Contexte", "code", "Lecture de ton profil, de ton contrat et des données à la date simulée…"],
+  planification: ["Planification", "LLM, validé par le code", "L'Agent Planificateur sélectionne les modules d'analyse pertinents…"],
+  outils: ["Outils d'analyse", "code", "Exécution des outils d'analyse et production des preuves chiffrées…"],
+  gouvernance: ["Gouvernance", "code", "Vérification de chaque règle du contrat et détection des contradictions…"],
+  signal: ["Politique de signal", "code", "Détermination du niveau (✅ / ⚠ / ⛔) par la politique écrite…"],
+  debat: ["Débat Pour / Contre", "LLM, vérifié par le code", "Confrontation de l'Agent Opportunités et de l'Agent Risques sur les mêmes preuves…"],
+  redaction: ["Rédaction", "LLM", "L'Agent Explication rédige les 5 sections à partir des seules preuves…"],
+  verification: ["Vérification", "code", "Contrôle de chaque chiffre et de chaque preuve (garde-fous V1 à V5)…"],
+  publication: ["Publication", "code", "Assemblage final du dossier vérifié et inscription au journal…"],
 };
+const CADENCE_TRACE_MS = 320;
+
+function resumeEtape(e: { etape: string; details?: any; preuves?: string[] }): string | null {
+  const det = e.details ?? {};
+  if (e.etape === "contexte" && det.contrat_version) return `contrat v${det.contrat_version}`;
+  if (e.etape === "planification" && det.modules_de_base) return `${(det.modules_de_base.length ?? 0) + (det.modules_ajoutes?.length ?? 0)} modules`;
+  if (e.etape === "outils" && det.appels) return `${det.appels.length} outils · ${(e.preuves ?? []).length} preuves`;
+  if (e.etape === "gouvernance" && det.statuts) return `${det.statuts.length} règles évaluées`;
+  if (e.etape === "signal" && det.regles) return `règle${det.regles.length > 1 ? "s" : ""} ${det.regles.join(", ")}`;
+  if (e.etape === "debat") return "2 agents opposés";
+  if (e.etape === "redaction" && det.redige_par) return det.redige_par === "gabarit" ? "gabarit" : det.redige_par;
+  if (e.etape === "verification" && det.essais?.length) return `${det.essais.length} essai${det.essais.length > 1 ? "s" : ""}`;
+  if (e.etape === "publication" && det.preuves != null) return `${det.preuves} preuves liées`;
+  return null;
+}
 
 export function DossierPage() {
   const { id = "" } = useParams();
   const { profil, ouvrirPreuve } = useApp();
   const [d, setD] = useState<any>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [curseur, setCurseur] = useState<number>(0);
   useEffect(() => {
     let stop = false;
+    setCurseur(0);
     const tick = async () => {
       try { const x = await api<any>(`/dossiers/${id}`); if (stop) return; setD(x); if (x.etat === "en_cours") window.setTimeout(tick, 400); }
       catch (e) { if (!stop) setErr((e as Error).message); }
@@ -32,11 +56,25 @@ export function DossierPage() {
     tick();
     return () => { stop = true; };
   }, [id]);
+  const etapes = (d?.etapes ?? []) as { etape: string; statut: string; details?: any; preuves?: string[]; duree_ms?: number }[];
+  const cible = useMemo(() => {
+    if (!etapes.length) return 0;
+    const idx = etapes.findIndex((e) => e.statut === "a_faire" || e.statut === "en_cours");
+    return idx < 0 ? etapes.length : idx;
+  }, [etapes]);
+  useEffect(() => {
+    if (curseur >= cible) return;
+    const t = window.setTimeout(() => setCurseur((c) => Math.min(c + 1, cible)), CADENCE_TRACE_MS);
+    return () => window.clearTimeout(t);
+  }, [curseur, cible]);
   const preuves: Record<string, Preuve> = useMemo(() => d?.preuves ?? {}, [d]);
   if (err) return <Erreur message={err} />;
   if (!d) return <Chargement lignes={5} />;
-  const etapes = d.etapes as { etape: string; statut: string; details?: any; duree_ms?: number }[];
-  const outils = (etapes.find((e) => e.etape === "outils")?.details?.appels ?? d.progression_outils ?? []) as { libelle: string; statut: string }[];
+  const outils = (etapes.find((e) => e.etape === "outils")?.details?.appels ?? d.progression_outils ?? []) as { libelle: string; statut: string; duree_ms?: number }[];
+  const idxOutils = etapes.findIndex((e) => e.etape === "outils");
+  const montrerOutils = idxOutils >= 0 && curseur >= idxOutils;
+  const etapeActive = curseur < etapes.length ? etapes[curseur] : null;
+  const infoActive = etapeActive ? NOMS[etapeActive.etape] : null;
   const it = d.intention;
   return (
     <div className="space-y-8">
@@ -45,20 +83,49 @@ export function DossierPage() {
         <h1 className="mt-1 font-display text-[34px] font-medium leading-tight tracking-[-0.03em] sm:text-[40px]">{it.type === "ordre" ? `Ordre simulé de ${f.cad(it.montant_cad)} sur ${it.ticker}` : it.ticker ? `Titre ${it.ticker}` : "Portefeuille"}</h1>
       </div>
       <Panel className="p-5">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2 text-xs font-medium text-ink-soft" aria-live="polite">
+            {etapeActive ? (
+              <>
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-primary-600" aria-hidden />
+                <AnimatePresence mode="wait" initial={false}>
+                  <motion.span key={etapeActive.etape} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.18 }}>
+                    <strong className="text-ink">{infoActive?.[0] ?? etapeActive.etape}</strong> : {infoActive?.[2] ?? "en cours…"}
+                  </motion.span>
+                </AnimatePresence>
+              </>
+            ) : (
+              <>
+                <Check className="h-3.5 w-3.5 text-gain-700" aria-hidden />
+                <span><strong className="text-ink">Trace des agents terminée</strong> · {etapes.length} étapes vérifiées ({f.nombre((d.duree_totale_ms ?? 0) / 1000, 1)} s)</span>
+              </>
+            )}
+          </div>
+          {d.etat === "termine" && curseur >= etapes.length && (
+            <TextButton onClick={() => setCurseur(0)}>
+              <span className="inline-flex items-center gap-1 text-xs"><RotateCcw className="h-3 w-3" aria-hidden /> Rejouer la trace</span>
+            </TextButton>
+          )}
+        </div>
         <ol className="grid grid-cols-2 gap-2 sm:grid-cols-5" aria-label="Étapes du dossier">
-          {etapes.map((e) => {
-            const [nom, qui] = NOMS[e.etape] ?? [e.etape, ""];
-            const fait = e.statut === "termine", enCours = e.statut === "en_cours", rejet = e.statut === "rejet" || e.statut === "echec";
+          {etapes.map((e, i) => {
+            const [nom, qui] = NOMS[e.etape] ?? [e.etape, "", ""];
+            const reelRejet = e.statut === "rejet" || e.statut === "echec";
+            const fait = i < curseur && !reelRejet;
+            const rejet = i < curseur && reelRejet;
+            const enCours = i === curseur && (d.etat === "en_cours" || curseur < cible);
+            const resume = (fait || rejet) ? resumeEtape(e) : null;
             return (
-              <motion.li key={e.etape} layout transition={spring} className={clsx("rounded-xl p-2.5 text-xs", fait ? "bg-gain-50" : enCours ? "bg-primary-50" : rejet ? "bg-loss-50" : "bg-canvas")}>
+              <motion.li key={e.etape} layout transition={spring} className={clsx("rounded-xl p-2.5 text-xs transition-colors", fait ? "bg-gain-50" : enCours ? "bg-primary-50 ring-1 ring-primary-500/30" : rejet ? "bg-loss-50" : "bg-canvas")}>
                 <span className="flex items-center gap-1.5 font-semibold text-ink">
                   {fait ? <Check className="h-3.5 w-3.5 text-gain-700" aria-hidden /> : enCours ? <Loader2 className="h-3.5 w-3.5 animate-spin text-primary-600" aria-hidden /> : rejet ? <X className="h-3.5 w-3.5 text-loss-700" aria-hidden /> : <span className="h-3.5 w-3.5 rounded-full border border-ink/20" aria-hidden />}
                   {nom}<span className="visuellement-cache"> : {fait ? "terminé" : enCours ? "en cours" : rejet ? "rejeté" : "à faire"}</span></span>
-                <span className="mt-0.5 block text-ink-muted">{qui}{e.duree_ms != null ? ` · ${f.nombre(e.duree_ms, 0)} ms` : ""}</span>
+                <span className="mt-0.5 block text-ink-muted">{qui}{(fait || rejet) && e.duree_ms != null ? ` · ${f.nombre(e.duree_ms, 0)} ms` : ""}</span>
+                {resume && <span className="mt-0.5 block font-medium text-ink-soft">{resume}</span>}
               </motion.li>);
           })}
         </ol>
-        {outils.length > 0 && <p className="mt-3 text-xs text-ink-muted" aria-live="polite">{outils.map((o) => `${o.libelle} ${o.statut === "echec" ? "✕" : "✓"}`).join(" · ")}</p>}
+        {montrerOutils && outils.length > 0 && <p className="mt-3 text-xs text-ink-muted" aria-live="polite">{outils.map((o) => `${o.libelle} ${o.statut === "echec" ? "✕" : "✓"}`).join(" · ")}</p>}
       </Panel>
       {d.etat === "en_cours" && <Chargement lignes={3} />}
       {d.etat === "echec" && <Notice tone="bad" title="Le dossier n'a pas pu être produit">{d.erreur}</Notice>}

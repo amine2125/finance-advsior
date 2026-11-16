@@ -80,6 +80,8 @@ def _leaves(e: Evidence) -> list[float]:
     for d in (e.as_of, e.date_de_calcul):
         if d and len(d) >= 4 and d[:4].isdigit():
             vals.append(float(d[:4]))
+    for _raw, n, _t in _numbers(e.libelle):
+        vals.append(n)
     for s in affichage(e).values():   # displayed strings (e.g. rounded amounts) are valid too
         for raw, v, _t in _numbers(s):
             vals.append(v)

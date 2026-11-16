@@ -1,0 +1,32 @@
+asset_id,name,asset_class,sub_class,sector,region,sector_label,currency,exchange,is_single_issuer,is_leveraged,is_inverse,cik,coingecko_id,aliases,classification_source
+RY.TO,Royal Bank of Canada,equity,common_stock,Financials,Canada,Financials,CAD,TSX,1,0,0,,,royal bank;rbc,official_starter
+TD.TO,Toronto-Dominion Bank,equity,common_stock,Financials,Canada,Financials,CAD,TSX,1,0,0,,,td bank;toronto-dominion,official_starter
+MFC.TO,Manulife Financial,equity,common_stock,Financials,Canada,Financials,CAD,TSX,1,0,0,,,manulife,official_starter
+ENB.TO,Enbridge,equity,common_stock,Energy,Canada,Energy,CAD,TSX,1,0,0,,,enbridge,official_starter
+CNQ.TO,Canadian Natural Resources,equity,common_stock,Energy,Canada,Energy,CAD,TSX,1,0,0,,,canadian natural,official_starter
+CNR.TO,Canadian National Railway,equity,common_stock,Industrials,Canada,Industrials,CAD,TSX,1,0,0,,,cn rail;canadian national,official_starter
+FTS.TO,Fortis,equity,common_stock,Utilities,Canada,Utilities,CAD,TSX,1,0,0,,,fortis,official_starter
+ATD.TO,Alimentation Couche-Tard,equity,common_stock,Consumer Staples,Canada,Consumer Staples,CAD,TSX,1,0,0,,,couche-tard;circle k,official_starter
+SHOP.TO,Shopify,equity,common_stock,Information Technology,Canada,Information Technology,CAD,TSX,1,0,0,,,shopify,official_starter
+CSU.TO,Constellation Software,equity,common_stock,Information Technology,Canada,Information Technology,CAD,TSX,1,0,0,,,constellation software,official_starter
+AAPL,Apple,equity,common_stock,Information Technology,United States,Information Technology,USD,NASDAQ,1,0,0,0000320193,,apple,official_starter
+MSFT,Microsoft,equity,common_stock,Information Technology,United States,Information Technology,USD,NASDAQ,1,0,0,0000789019,,microsoft,official_starter
+NVDA,NVIDIA,equity,common_stock,Information Technology,United States,Information Technology,USD,NASDAQ,1,0,0,0001045810,,nvidia,official_starter
+GOOGL,Alphabet (Class A),equity,common_stock,Communication Services,United States,Communication Services,USD,NASDAQ,1,0,0,0001652044,,alphabet;google,official_starter
+AMZN,Amazon,equity,common_stock,Consumer Discretionary,United States,Consumer Discretionary,USD,NASDAQ,1,0,0,0001018724,,amazon,official_starter
+TSLA,Tesla,equity,common_stock,Consumer Discretionary,United States,Consumer Discretionary,USD,NASDAQ,1,0,0,0001318605,,tesla,official_starter
+JPM,JPMorgan Chase,equity,common_stock,Financials,United States,Financials,USD,NYSE,1,0,0,0000019617,,jpmorgan;jp morgan,official_starter
+JNJ,Johnson & Johnson,equity,common_stock,Health Care,United States,Health Care,USD,NYSE,1,0,0,0000200406,,johnson & johnson;j&j,official_starter
+PG,Procter & Gamble,equity,common_stock,Consumer Staples,United States,Consumer Staples,USD,NYSE,1,0,0,0000080424,,procter & gamble;p&g,official_starter
+XOM,Exxon Mobil,equity,common_stock,Energy,United States,Energy,USD,NYSE,1,0,0,0002115436,,exxon;exxonmobil,official_starter
+XIU.TO,iShares S&P/TSX 60 Index ETF,etf,equity_etf,Diversified,Canada,Broad market (Canada),CAD,TSX,0,0,0,,,,official_starter
+SPY,SPDR S&P 500 ETF Trust,etf,equity_etf,Diversified,United States,Broad market (U.S.),USD,NYSE Arca,0,0,0,,,s&p 500 etf,official_starter
+QQQ,Invesco QQQ Trust (Nasdaq-100),etf,equity_etf,Diversified,United States,Broad market (U.S. growth/tech-heavy),USD,NASDAQ,0,0,0,,,nasdaq-100 etf;invesco qqq,official_starter
+ESGV,Vanguard ESG U.S. Stock ETF,etf,esg_equity_etf,Diversified,United States,"Broad market (U.S., ESG-screened)",USD,Cboe BZX,0,0,0,,,vanguard esg,official_starter
+XBB.TO,iShares Core Canadian Universe Bond Index ETF,etf,bond_etf,Fixed Income,Canada,Bonds (Canada aggregate),CAD,TSX,0,0,0,,,canadian universe bond,official_starter
+ZST.TO,BMO Ultra Short-Term Bond ETF,etf,bond_etf,Fixed Income,Canada,Bonds (Canada ultra short-term),CAD,TSX,0,0,0,,,bmo ultra short,official_starter
+AGG,iShares Core U.S. Aggregate Bond ETF,etf,bond_etf,Fixed Income,United States,Bonds (U.S. aggregate),USD,NYSE Arca,0,0,0,,,aggregate bond,official_starter
+TLT,iShares 20+ Year Treasury Bond ETF,etf,bond_etf,Fixed Income,United States,Bonds (U.S. long Treasury),USD,NASDAQ,0,0,0,,,20+ year treasury,official_starter
+GLD,SPDR Gold Shares,etf,gold_etf,Commodities,Global,Gold,USD,NYSE Arca,0,0,0,,,gold etf,official_starter
+BTC-USD,Bitcoin,crypto,cryptoasset,Cryptoassets,Global,Crypto asset,USD,Crypto (24/7),1,0,0,,bitcoin,bitcoin;btc,official_starter
+ETH-USD,Ether,crypto,cryptoasset,Cryptoassets,Global,Crypto asset,USD,Crypto (24/7),1,0,0,,ethereum,ethereum;eth;ether,official_starter

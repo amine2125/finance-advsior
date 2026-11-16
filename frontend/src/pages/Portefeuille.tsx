@@ -1,5 +1,5 @@
 import { Barres } from "../charts/Barres";
-import { Chargement, Erreur, Note, Prouve, PuceNiveau, Terme } from "../components/base";
+import { Chargement, Erreur, Etiquette, Note, Prouve, PuceNiveau, Terme } from "../components/base";
 import { Signale } from "../components/signal";
 import { Hero, Panel, PageTitle, Table } from "../components/ui";
 import * as f from "../format";
@@ -9,7 +9,7 @@ import type { Preuve, Signal } from "../types";
 
 const PAYS: Record<string, string> = { CA: "Canada", US: "États-Unis", Mondial: "Mondial (crypto)" };
 
-interface P { valeur: Preuve; transparence: Preuve[]; risque: Preuve[]; paris_reels: Preuve; rejeux: Preuve[]; signal: Signal }
+interface P { valeur: Preuve; transparence: Preuve[]; risque: Preuve[]; paris_reels: Preuve; rejeux: Preuve[]; chocs?: Preuve[]; signal: Signal }
 
 export function Portefeuille() {
   const { profil, asOf } = useApp();
@@ -53,6 +53,34 @@ export function Portefeuille() {
           </Table></div>
           <Note>Poids actuels appliqués aux rendements réels de chaque épisode. Faits passés, pas une prévision.</Note></Panel>
       </div>
+      {data.chocs && data.chocs.length > 0 && (
+        <Panel>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="font-display text-lg font-medium tracking-[-0.02em]">Scénarios de choc inventés</h2>
+            <Etiquette e="HYPOTHESE" />
+          </div>
+          <p className="mt-1 text-sm text-ink-muted">Mise à l'épreuve instantanée de tes expositions actuelles (FNB ouverts) face à des chocs hypothétiques de taux, de secteur ou de devise.</p>
+          <div className="mt-3">
+            <Table caption="Scénarios de choc hypothétiques appliqués aux poids actuels">
+              <thead><tr><th>Scénario hypothétique</th><th className="!text-right">Variation</th><th className="!text-right">En dollars</th></tr></thead>
+              <tbody>{data.chocs.map((p) => (
+                <tr key={p.id}>
+                  <td>{p.libelle.replace("Choc : ", "")}</td>
+                  {p.statut === "ok" ? (
+                    <>
+                      <td className={`tabular text-right font-semibold ${p.valeur.variation_pct < 0 ? "text-loss-700" : "text-gain-700"}`}>
+                        <Prouve preuve={p}>{f.pct(p.valeur.variation_pct)}</Prouve>
+                      </td>
+                      <td className="tabular text-right">{f.cad(p.valeur.variation_cad)}</td>
+                    </>
+                  ) : <td colSpan={2} className="text-ink-muted">{p.note}</td>}
+                </tr>
+              ))}</tbody>
+            </Table>
+          </div>
+          <Note>Chocs hypothétiques appliqués instantanément aux expositions actuelles (directes et via FNB). Hypothèses de travail, jamais une prévision.</Note>
+        </Panel>
+      )}
       <Panel><Barres titre="Exposition par titre, directe et via FNB (15 premiers)" donnees={bars(tr["exposition_titres"])} source={`compositions publiées des FNB à la date ; part du portefeuille dont la composition est connue : ${f.pct(tr["couverture_transparence"]?.valeur)}`} /></Panel>
     </div>
   );

@@ -65,6 +65,11 @@ def ecrire(f: dict) -> dict:
         cv = by.get(("cvar_historique", t))
         if cv is not None and cv.statut == "ok":
             c.append(P(f"Indicateur détaillé : la perte moyenne des pires périodes (CVaR) est de {affichage(cv)['cvar_pct']}.", "MESURE", cv))
+    choc = next((e for e in ev.values() if e.mesure == "choc_hypothetique" and e.statut == "ok"), None)
+    if choc is not None:
+        chv = affichage(choc)
+        c.append(P(f"Sous le scénario de choc hypothétique testé ({choc.libelle.replace('Choc : ', '')}), "
+                   f"ton portefeuille varierait de {chv['variation_pct']} ({chv['variation_cad']}).", "HYPOTHESE", choc))
 
     for s in f["statuts_ev"][:5]:
         sv = s.valeur

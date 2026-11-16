@@ -296,6 +296,101 @@ EPISODES = {
     "fin_2018": ("2018-10-01", "2018-12-24", "Automne 2018 : correction des marchés"),
 }
 
+CHOCS: dict[str, tuple[str, dict[str, float]]] = {
+    "krach_techno_30": (
+        "Krach techno : technologie −30 %, autres actions −10 %, crypto −40 %, obligations +2 %",
+        {"sector:Information Technology": -0.30, "sector:Communication Services": -0.30,
+         "asset_class:equity": -0.10, "asset_class:etf_equity": -0.15,
+         "asset_class:etf_bond": 0.02, "asset_class:crypto": -0.40},
+    ),
+    "taux_plus_100pb": (
+        "Hausse de taux de +1 point (100 pb) : obligations −6 %, actions −5 %",
+        {"asset_class:etf_bond": -0.06, "asset_class:equity": -0.05, "asset_class:etf_equity": -0.05},
+    ),
+    "cad_plus_10": (
+        "Dollar canadien +10 % face au dollar US (actifs en USD −9,1 % en CAD)",
+        {"fx:USDCAD": -1.0 / 1.1 + 1.0},
+    ),
+    "hiver_crypto_60": (
+        "Hiver crypto : cryptoactifs −60 %",
+        {"asset_class:crypto": -0.60},
+    ),
+    "marche_baissier": (
+        "Marché baissier généralisé : actions −25 %, obligations −5 %, crypto −50 %, or +5 %",
+        {"asset_class:equity": -0.25, "asset_class:etf_equity": -0.25,
+         "asset_class:etf_bond": -0.05, "asset_class:etf_commodity": 0.05, "asset_class:crypto": -0.50},
+    ),
+}
+
+
+def _choc_unitaire(sector: str | None, asset_class: str, currency: str, shocks: dict[str, float],
+                   ticker: str | None = None) -> float:
+    """Return the combined price + FX shock multiplier (e.g. -0.30 for -30 %)."""
+    s = 0.0
+    for key in (f"asset:{ticker}" if ticker else "", f"sector:{sector}" if sector else "",
+                f"asset_class:{asset_class}", "default"):
+        if key and key in shocks:
+            s = float(shocks[key])
+            break
+    fx = float(shocks.get("fx:USDCAD", 0.0)) if currency == "USD" else 0.0
+    return (1.0 + s) * (1.0 + fx) - 1.0
+
+
+def ev_choc(v: AsOf, pf: Portfolio, scenario: str = "krach_techno_30") -> Evidence:
+    """Apply an explicit hypothetical shock instantaneously to the current portfolio (with ETF look-through)."""
+    if scenario not in CHOCS:
+        raise ValueError(f"scénario de choc inconnu : {scenario}")
+    label, shocks = CHOCS[scenario]
+    val = valuation(v, pf)
+    avant_cad = val["total_cad"]
+    apres_lignes = 0.0
+    detail: dict[str, dict[str, float]] = {}
+    for x in val["lignes"]:
+        if x["valeur_cad"] <= 0 or math.isnan(x["valeur_cad"]):
+            continue
+        t, v_avant = x["ticker"], x["valeur_cad"]
+        a = v.dp.asset[t]
+        snap = v.etf_snapshot(t) if a["asset_class"] == "etf_equity" else None
+        if snap is not None and snap.get("holdings"):
+            w_sum = sum(h["weight"] for h in snap["holdings"]) or 1.0
+            rel = sum(
+                (h["weight"] / w_sum) * _choc_unitaire(
+                    h.get("sector"), "equity", h.get("currency") or a["currency"], shocks, h.get("universe_ticker")
+                )
+                for h in snap["holdings"]
+            )
+        else:
+            rel = _choc_unitaire(a.get("sector"), a["asset_class"], a["currency"], shocks, t)
+        v_apres = v_avant * (1.0 + rel)
+        apres_lignes += v_apres
+        detail[t] = {"choc_pct": round(rel * 100, 2), "variation_cad": round(v_apres - v_avant, 2)}
+    apres_cad = pf.cash_cad + apres_lignes
+    var_cad = apres_cad - avant_cad
+    var_pct = (var_cad / avant_cad * 100) if avant_cad > 0 else 0.0
+    return evidence(
+        mesure="choc_hypothetique",
+        libelle=f"Choc : {label}",
+        sujet=pf.label,
+        valeur={
+            "variation_pct": float(var_pct),
+            "variation_cad": float(var_cad),
+            "pire_baisse_pct": float(var_pct),
+            "pire_baisse_cad": float(var_cad),
+            "valeur_avant_cad": float(avant_cad),
+            "valeur_apres_cad": float(apres_cad),
+            "lignes": detail,
+        },
+        unite="%",
+        devise="CAD",
+        as_of=str(v.day),
+        date_de_calcul=v.date,
+        donnees_source=["S1+S2:close", "S1+S3:FXUSDCAD", "S7:SSGA", "S8:iShares Canada", "profil:positions (fictives)"],
+        methode="choc_hypothetique_instantane_transparence_fnb",
+        parametres={"scenario": scenario, "chocs_pct": {k: round(val_s * 100, 2) for k, val_s in shocks.items()}},
+        reference="Scénario de choc hypothétique appliqué instantanément aux expositions actuelles (FNB ouverts) ; hypothèse de travail, jamais une prévision.",
+        note="Hypothèse appliquée instantanément aux poids actuels : ce n'est pas une prévision.",
+    )
+
 
 def ev_rejeu(v: AsOf, pf: Portfolio, episode: str = "2022") -> Evidence:
     start, end, label = EPISODES[episode]

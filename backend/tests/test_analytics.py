@@ -84,6 +84,22 @@ def test_replay_refuses_future_information(sdp):
     assert covid.statut == "ok" and covid.valeur["pire_baisse_pct"] <= 0
 
 
+def test_hypothetical_shock_opens_etf_and_matches_hand_computation(sdp):
+    v = sdp.asof(None)
+    # ETF1 holds 60 % AAA (Financials, CAD) and 40 % BBB (Information Technology, USD)
+    pf = pfm.Portfolio([pfm.Holding("ETF1", 10), pfm.Holding("CRY", 1)], cash_cad=0.0)
+    val = pfm.valuation(v, pf)
+    w_etf = next(x["poids"] for x in val["lignes"] if x["ticker"] == "ETF1")
+    w_cry = next(x["poids"] for x in val["lignes"] if x["ticker"] == "CRY")
+    e = pfm.ev_choc(v, pf, "krach_techno_30")
+    # krach_techno_30: tech -30 %, other equities -10 %, crypto -40 % -> ETF1 = 0.6*(-10 %) + 0.4*(-30 %) = -18 %
+    expected_pct = (w_etf * (-0.18) + w_cry * (-0.40)) * 100
+    assert e.statut == "ok"
+    assert e.valeur["variation_pct"] == pytest.approx(expected_pct, abs=1e-6)
+    assert e.valeur["lignes"]["ETF1"]["choc_pct"] == pytest.approx(-18.0, abs=1e-2)
+    assert "pas une prévision" in e.note
+
+
 def test_bootstrap_is_reproducible_and_ordered(sdp):
     v = sdp.asof(None)
     pf = pfm.Portfolio([pfm.Holding("AAA", 10), pfm.Holding("BBB", 20)])

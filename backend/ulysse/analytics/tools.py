@@ -65,6 +65,8 @@ TOOLS: dict[str, Tool] = {t.name: t for t in [
          {}, ("portefeuille",), _p(pfm.ev_paris_reels)),
     Tool("rejeu_historique", "scenarios", "Rejeu d'un épisode passé (2022, COVID 2020, fin 2018) sur le portefeuille.",
          {"episode": {"type": "string", "enum": list(pfm.EPISODES), "default": "2022"}}, ("portefeuille",), _p(pfm.ev_rejeu)),
+    Tool("choc_hypothetique", "scenarios", "Impact instantané d'un scénario de choc hypothétique (krach techno, hausse de taux, CAD +10 %, hiver crypto, marché baissier) sur le portefeuille.",
+         {"scenario": {"type": "string", "enum": list(pfm.CHOCS), "default": "krach_techno_30"}}, ("portefeuille",), _p(pfm.ev_choc)),
     Tool("scenarios_reechantillonnes", "scenarios", "Éventail de résultats rééchantillonnés du passé (pas une prévision).",
          {"horizon_annees": {"type": "number", "enum": [1, 3, 5, 10], "default": 3}}, ("portefeuille",), _p(pfm.ev_scenarios_bootstrap)),
 ]}

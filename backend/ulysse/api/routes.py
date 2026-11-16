@@ -135,7 +135,8 @@ def config(query, body):
     dp = get_datapack()
     return {"as_of_defaut": DEFAULT_ASOF, "donnees_debut": str(dp.calendar[0]), "donnees_jusqu_au": str(dp.last_day),
             "llm": get_llm().name, "univers": dp.assets, "mention": "Simulation, pas un conseil financier.", "auth": compte.config_publique(),
-            "episodes": {k: {"debut": s, "fin": e, "libelle": l} for k, (s, e, l) in pfm.EPISODES.items()}}
+            "episodes": {k: {"debut": s, "fin": e, "libelle": l} for k, (s, e, l) in pfm.EPISODES.items()},
+            "chocs": {k: {"libelle": l, "chocs": s} for k, (l, s) in pfm.CHOCS.items()}}
 
 
 @route("POST", "/api/demo/reinitialiser")
@@ -283,7 +284,9 @@ def portefeuille(query, body, pid):
     pf = _pf(prof, as_of)
     out = {"as_of": as_of, "valeur": _ev(pfm.ev_valeur(v, pf)), "transparence": [_ev(e) for e in pfm.ev_transparence(v, pf)],
            "risque": [_ev(e) for e in pfm.ev_contribution_risque(v, pf)], "paris_reels": _ev(pfm.ev_paris_reels(v, pf)),
-           "rejeux": [_ev(pfm.ev_rejeu(v, pf, k)) for k in pfm.EPISODES], "signal": policy.signal_etat(v, con, pf).model_dump()}
+           "rejeux": [_ev(pfm.ev_rejeu(v, pf, k)) for k in pfm.EPISODES],
+           "chocs": [_ev(pfm.ev_choc(v, pf, k)) for k in pfm.CHOCS],
+           "signal": policy.signal_etat(v, con, pf).model_dump()}
     return out
 
 

@@ -84,7 +84,8 @@ class MockLLM:
         if p.get("horizon_le_plus_proche_annees", 99) < 5:
             calls.append(Appel(outil="rejeu_historique", parametres=[Param(nom="episode", valeur="2022")]))
         if c.get("type") == "portefeuille" or p.get("experience") == "avance":
-            calls += [Appel(outil="contribution_risque"), Appel(outil="paris_reels")]
+            calls += [Appel(outil="contribution_risque"), Appel(outil="paris_reels"),
+                      Appel(outil="choc_hypothetique", parametres=[Param(nom="scenario", valeur="krach_techno_30")])]
         if p.get("interet_crypto") or c.get("classe_actif") == "crypto":
             calls.append(Appel(outil="scenarios_reechantillonnes", parametres=[Param(nom="horizon_annees", valeur="3")]))
         calls.append(Appel(outil="regime"))
