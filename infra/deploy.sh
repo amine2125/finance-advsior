@@ -10,7 +10,13 @@ MODEL="${ULYSSE_BEDROCK_MODEL:-anthropic.claude-opus-5-5}"
 "$ROOT/infra/build_lambda.sh"
 (cd "$ROOT/frontend" && npm run build)
 cd "$ROOT/infra"
-sam deploy --template-file template.yaml --stack-name "$STACK" --region "$REGION" --resolve-s3 \
+SAM="sam"; command -v sam.cmd >/dev/null 2>&1 && SAM="sam.cmd"
+ACCT=$(aws sts get-caller-identity --query Account --output text)
+SAM_BUCKET="${SAM_BUCKET:-ulysse-sam-$ACCT-$REGION}"
+if ! aws s3api head-bucket --bucket "$SAM_BUCKET" --region "$REGION" 2>/dev/null; then
+  aws s3 mb "s3://$SAM_BUCKET" --region "$REGION"
+fi
+"$SAM" deploy --template-file template.yaml --stack-name "$STACK" --region "$REGION" --s3-bucket "$SAM_BUCKET" \
   --capabilities CAPABILITY_IAM --no-fail-on-empty-changeset \
   --parameter-overrides "BedrockModelId=$MODEL" "BudgetEmail=$BUDGET_EMAIL"
 out() { aws cloudformation describe-stacks --stack-name "$STACK" --region "$REGION" --query "Stacks[0].Outputs[?OutputKey=='$1'].OutputValue" --output text; }
