@@ -346,6 +346,15 @@ def impact(query, body, t):
     return _ev(e)
 
 
+@route("GET", "/api/marche/{t}/nouvelles")
+def nouvelles_titre(query, body, t):
+    """Official filings and press coverage of a security, up to the simulated date only."""
+    from ulysse import nouvelles
+    t = _ticker(t)
+    v = get_datapack().asof(_asof(query))
+    return {"as_of": str(v.day), "depots": _ev(nouvelles.ev_depots(v, t)), "articles": _ev(nouvelles.ev_articles(v, t))}
+
+
 @route("GET", "/api/tendances")
 def tendances(query, body):
     as_of = _asof(query)

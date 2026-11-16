@@ -31,6 +31,15 @@ def ecrire(f: dict) -> dict:
     if prix is not None:
         d.append(P(f"Données publiques : cours de {t} jusqu'au {prix.date_de_calcul} (Yahoo Finance, jeu de départ du datathon), "
                    "convertis en dollars canadiens avec le taux de la Banque du Canada.", "DOCUMENTE", prix))
+    dep = by.get(("depots_officiels", t))
+    if dep is not None and dep.statut == "ok":
+        n = dep.valeur["n_depots"]
+        d.append(P(f"Sources officielles : {n} dépôt(s) de {t} à la SEC sur les {dep.parametres['fenetre_jours']} jours précédant la date simulée"
+                   + (f", le plus récent le {dep.valeur['plus_recent']}." if n else "."), "DOCUMENTE", dep))
+    art = by.get(("couverture_mediatique", t))
+    if art is not None and art.statut == "ok":
+        d.append(P(f"Presse : {art.valeur['n_articles']} article(s) détecté(s) par GDELT sur {art.parametres['fenetre_jours']} jours, "
+                   f"soit {art.valeur['n_independants']} nouvelle(s) distincte(s) ; un article ne prouve pas son contenu.", "DOCUMENTE", art))
     pv = affichage(prof)
     d.append(P(f"Ton profil et ton portefeuille sont fictifs : capital de départ de {pv.get('capital_initial_cad', '?')}, "
                f"constitué le {prof.valeur.get('constitue_le')}.", "HYPOTHESE", prof))

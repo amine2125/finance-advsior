@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable
 
+from ulysse import nouvelles
 from ulysse.analytics import core, hype, portfolio as pfm, regime
 from ulysse.data.datapack import AsOf
 from ulysse.evidence import Evidence
@@ -50,6 +51,10 @@ TOOLS: dict[str, Tool] = {t.name: t for t in [
     Tool("dividendes", "revenu", "Dividendes des 12 derniers mois rapportés au cours.", {}, ("ticker",), _t(core.rendement_dividende)),
     Tool("engouement", "engouement", "Attention inhabituelle (pages vues, volume) détectée par Isolation Forest + règle écrite.",
          {}, ("ticker",), _t(hype.ev_engouement)),
+    Tool("depots_officiels", "recherche", "Dépôts officiels récents de l'émetteur à la SEC (8-K, 10-Q, 10-K), jusqu'à la date simulée.",
+         {}, ("ticker",), _t(nouvelles.ev_depots)),
+    Tool("nouvelles", "recherche", "Articles de presse récents (GDELT), regroupés quand ils reprennent la même nouvelle, jusqu'à la date simulée.",
+         {}, ("ticker",), _t(nouvelles.ev_articles)),
     Tool("regime", "marche", "Climat de marché descriptif (calme, agité, tendu).", {}, (), lambda v, ctx: [regime.ev_regime(v)]),
     Tool("valeur_portefeuille", "base", "Valeur et poids des lignes du portefeuille.", {}, ("portefeuille",), _p(pfm.ev_valeur)),
     Tool("transparence", "transparence", "Exposition réelle (secteurs, pays, devises, titres) en ouvrant les FNB.",

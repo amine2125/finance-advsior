@@ -80,7 +80,7 @@ class MockLLM:
             if c.get("classe_actif") in ("equity", "crypto"):
                 calls.append(Appel(outil="engouement"))
             if c.get("classe_actif") == "equity":
-                calls.append(Appel(outil="dividendes"))
+                calls += [Appel(outil="dividendes"), Appel(outil="depots_officiels"), Appel(outil="nouvelles")]
         if p.get("horizon_le_plus_proche_annees", 99) < 5:
             calls.append(Appel(outil="rejeu_historique", parametres=[Param(nom="episode", valeur="2022")]))
         if c.get("type") == "portefeuille" or p.get("experience") == "avance":

@@ -146,6 +146,8 @@ export function Fiche() {
           <Note>Aucune cote ESG propriétaire : preuves documentées et datées seulement (docs/donnees.md).</Note>
         </Section>)}
 
+      <Recherche ticker={ticker} />
+
       <Panel className="p-6"><GraphiqueCours ticker={ticker} serie={data.serie} titre={`Cours de ${a.ticker}`} /></Panel>
 
       <section aria-label="Indicateurs" className="grid grid-cols-2 gap-3 lg:grid-cols-3">
@@ -159,5 +161,38 @@ export function Fiche() {
       {pause && <PauseReflexion signal={pause} ticker={ticker} montant={m} ouvert={!!pause} fermer={() => setPause(null)}
         continuer={() => decider("continuer", "pause")} appliquerMontant={(x) => { setMontant(String(x)); setPause(null); }} ouvrirDossier={ouvrirDossier} />}
     </div>
+  );
+}
+
+interface Depot { forme: string; date: string; objet: string | null; url: string }
+interface Article { titre: string; source: string; date: string; url: string; reprises: number }
+
+/** Official filings (SEC EDGAR) and press coverage (GDELT), up to the simulated date only. */
+function Recherche({ ticker }: { ticker: string }) {
+  const { asOf } = useApp();
+  const { data, charge } = useData<{ depots: Preuve; articles: Preuve }>(`/marche/${encodeURIComponent(ticker)}/nouvelles`, { as_of: asOf });
+  if (charge && !data) return <Chargement lignes={2} />;
+  if (!data) return null;
+  const { depots, articles } = data;
+  return (
+    <Section id="recherche" title="Sources officielles et presse" subtitle={`Jusqu'au ${f.date(asOf)} seulement : rien de ce qui a été publié après n'est montré.`}>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Panel>
+          <h3 className="flex items-center gap-2 text-sm font-semibold"><Etiquette e="DOCUMENTE" /> Dépôts à la SEC</h3>
+          {depots.statut !== "ok" ? <p className="mt-2 text-sm text-ink-muted">{depots.note}</p> : (depots.valeur.depots as Depot[]).length === 0 ? <p className="mt-2 text-sm text-ink-muted">Aucun dépôt sur les {String(depots.parametres.fenetre_jours)} jours précédents.</p> : (
+            <ul className="mt-2 space-y-2 text-sm">{(depots.valeur.depots as Depot[]).map((x) => (
+              <li key={x.url}><a href={x.url} target="_blank" rel="noreferrer noopener" className="font-medium text-ink hover:underline">{x.forme}</a> <span className="text-ink-muted">· {f.date(x.date)}{x.objet ? ` · ${x.objet}` : ""}</span></li>))}</ul>)}
+          <Note>{depots.reference}</Note>
+        </Panel>
+        <Panel>
+          <h3 className="flex items-center gap-2 text-sm font-semibold"><Etiquette e="DOCUMENTE" /> Presse ({articles.statut === "ok" ? `${articles.valeur.n_articles} articles, ${articles.valeur.n_independants} nouvelles distinctes` : "indisponible"})</h3>
+          {articles.statut !== "ok" ? <p className="mt-2 text-sm text-ink-muted">{articles.note}</p> : (
+            <ul className="mt-2 space-y-2 text-sm">{(articles.valeur.articles as Article[]).map((x) => (
+              <li key={x.url}><a href={x.url} target="_blank" rel="noreferrer noopener" className="text-ink hover:underline">{x.titre}</a>
+                <span className="block text-xs text-ink-muted">{x.source} · {f.date(x.date)}{x.reprises > 1 ? ` · repris ${x.reprises} fois` : ""}</span></li>))}</ul>)}
+          <Note>{articles.note ?? ""} {articles.reference}</Note>
+        </Panel>
+      </div>
+    </Section>
   );
 }
