@@ -42,6 +42,7 @@ AWS Budgets : alarme de coût par courriel
 | **S3 « interface »** (privé) | Fichiers statiques de l'application React | Hébergement statique sans serveur | — |
 | **CloudFront** | Sert l'interface depuis le bucket privé (Origin Access Control) et relaie `/api/*` vers l'URL de fonction | HTTPS, cache, un seul domaine (pas de CORS), buckets jamais publics | Bucket public ou autre hébergeur |
 | **EventBridge Scheduler** | Un déclencheur **horaire** qui lance la Vigie (recalcul des indicateurs, détection d'engouement et de dérive, création des notifications) | Planification gérée, sans code d'ordonnancement | La Vigie ne tournerait qu'à la main |
+| **Amazon Cognito** (groupe d'utilisateurs + client public) | Comptes : inscription, connexion, jetons courts ; le navigateur parle directement à Cognito, l'API valide chaque jeton (GetUser). Déclencheur avant inscription qui confirme les comptes tout de suite (démo) | Les mots de passe ne passent jamais par le code d'ULYSSE ; chaque compte ne voit que ses profils | Tout le monde verrait tous les profils |
 | **AWS Budgets** | Une alarme de coût (seuil à fixer en phase 7) | Exigence de bonnes pratiques ; protège contre une facture imprévue | — |
 
 **Retirés** (décision D-030) : API Gateway, Step Functions, Amplify, tableaux de bord et alarmes CloudWatch dédiés. Les journaux d'exécution standard de Lambda restent dans CloudWatch Logs (comportement par défaut de Lambda), avec une rétention courte (14 jours).
@@ -61,7 +62,8 @@ AWS Budgets : alarme de coût par courriel
 - Buckets privés, chiffrés (SSE-S3), blocage de l'accès public ; le bucket « interface » n'est lisible que par CloudFront (OAC).
 - URL de fonction en authentification `AWS_IAM`, invocable seulement par CloudFront (OAC pour Lambda) ; les requêtes `POST` portent l'empreinte SHA-256 du corps (`x-amz-content-sha256`), calculée par l'interface. Repli documenté si ce montage bloque : authentification `NONE` + CORS limité au domaine CloudFront + concurrence réservée + plafond quotidien d'appels LLM.
 - Rôle IAM de la Lambda limité au strict nécessaire : `bedrock:InvokeModel` sur le seul modèle (ou profil d'inférence) retenu, lecture/écriture sur la seule table DynamoDB et le seul bucket « données », `lambda:InvokeFunction` sur elle-même (dossiers asynchrones).
-- Aucun secret dans le code ni dans le dépôt ; les accès de déploiement sont demandés en phase 7 et ne sont jamais écrits dans un fichier.
+- Aucun secret dans le code ni dans le dépôt, aucun fichier `.env` : le déploiement utilise les identifiants de l'AWS CLI de la personne qui déploie (`aws configure` ou `aws sso login`), ou la console.
+- Comptes : le jeton Cognito voyage dans l'en-tête `x-ulysse-jeton` (l'en-tête `Authorization` sert à la signature CloudFront → Lambda) ; chaque route liée à un profil vérifie qu'il appartient au compte, sinon « inconnu » (404), sans révéler son existence.
 - Textes externes (pages, rapports) traités comme des données, jamais comme des instructions pour le LLM.
 - Plafond de dépense LLM : compteur quotidien dans DynamoDB ; au-delà, l'app passe en mode gabarit (sans LLM) et le dit.
 

@@ -53,3 +53,30 @@ Ce que le PDF dit et que le contrat traduit en clauses « dites » : Amira veut 
 
 - Délais de publication macro : voir `docs/donnees.md` (S4).
 - « Aujourd'hui » de l'app : 2026-11-14 (dernières données de marché : 2026-11-12 ; les compositions publiées le 12 sont utilisables à partir du 13).
+
+## 6. « Connaître son client » (ulysse/contract/kyc.py)
+
+Heuristique documentée inspirée des questionnaires « Connaître son client » (OCRI, règle 3200) ; pas une évaluation réglementaire de convenance.
+
+| Mesure | Règle |
+|---|---|
+| Tolérance | moyenne (arrondie) du niveau déclaré et de la baisse supportable (≤ 10 % faible, ≤ 20 % faible à modéré, ≤ 30 % modéré, au-delà élevé), plafonnée par le comportement : « je vendrais tout » → faible, « une partie » → faible à modéré, « très stressé » → faible à modéré, « mal à l'aise » → modéré ; contradiction signalée si l'écart est d'au moins deux niveaux |
+| Capacité | horizon de l'objectif le plus proche (< 2 ans faible, < 5 faible à modéré, < 10 modéré) ; un niveau de moins pour : épargne < 3 mois de dépenses (deux si < 1 mois), dette de carte de crédit, dettes > 40 % du revenu annuel, emploi moins stable sans 6 mois d'épargne, personnes à charge sans 6 mois d'épargne, marge mensuelle nulle ou négative, besoin probable de l'argent |
+| Connaissances | quiz de 3 questions + produits détenus + niveau déclaré ; un débutant est plafonné à « modéré » et n'a pas de cryptoactifs |
+| Résultat | la plus basse des trois mesures fixe la tolérance du contrat ; l'âge n'est jamais utilisé ; taux de carte de crédit supposé : 20 % par an |
+
+## 7. Placements et argent fictif (ulysse/positions.py)
+
+- Tant que rien n'est modifié, le portefeuille est l'allocation fictive du profil (inchangé).
+- Un achat ou une vente simulé se fait au cours de clôture de la date simulée, converti en CAD ; frais et impôts ignorés ; un achat est refusé si les liquidités manquent.
+- Une opération ne peut pas être datée avant une opération déjà enregistrée ; à une date passée, les opérations postérieures sont ignorées.
+- Connexion à un courtier : simulée, aucun identifiant demandé ; comptes fictifs (CELI, REER, non enregistré, CELIAPP) achetés à des dates tirées entre 2022-02-01 et 2025-09-30, aux vrais cours de ces dates, toujours les mêmes pour un profil et une institution.
+
+## 8. Recherche de nouvelles (ulysse/nouvelles.py)
+
+- Dépôts SEC : émetteurs américains seulement, formulaires 8-K, 10-Q, 10-K, 6-K, 20-F, 40-F, S-1, DEF 14A, sur les 120 jours précédant la date simulée.
+- Presse : articles GDELT des 14 jours précédant la date simulée ; deux titres identiques une fois normalisés comptent pour une seule nouvelle ; la date est la première détection par GDELT. GDELT ne couvre que 90 jours : pour une date plus ancienne, rien n'est montré, plutôt que des nouvelles postérieures.
+
+## 9. Comptes de démonstration
+
+- Trois comptes Cognito fictifs (domaine réservé `example.com`), un par profil de référence de l'énoncé ; mot de passe affiché volontairement sur la page de connexion. Leur profil est recréé à la première connexion après « Effacer mes données ».

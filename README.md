@@ -3,7 +3,7 @@
 **Une application de placement simulée qui vérifie tes intentions contre les règles que tu as toi-même fixées, faits à l'appui.**
 Datathon PolyFinances 2026 « AlphaForge AI » (Banque Nationale × AWS × PolyFinances).
 
-> **Branche `fusion`** : la logique et le back-end de ULYSSE, avec l'interface visuelle d'AEGIS (barre en verre, navigation en pilule, Jost + Instrument Sans, fond crème, accent cobalt, animations) et un **assistant conversationnel encadré** qui remplace le conseiller virtuel d'AEGIS. Le one-pager et la vidéo sont produits à part.
+> **Branche `dev`** : le moteur et le workflow agentique de ULYSSE, l'interface visuelle d'AEGIS, et les fonctionnalités d'AEGIS reprises dans ULYSSE : comptes (Amazon Cognito), questionnaire « Connaître son client », placements modifiables et argent fictif, agents Pour / Contre, recherche de nouvelles (SEC EDGAR, GDELT), visite guidée et leçons. Le one-pager et la vidéo sont produits à part.
 
 > **Simulation, pas un conseil financier.** Aucune transaction réelle. ULYSSE ne dit jamais « achète », « vends » ou « tu devrais » : il montre si une intention est cohérente avec ton contrat, avec des preuves vérifiables. Profils et portefeuilles fictifs ; données publiques uniquement.
 
@@ -18,15 +18,22 @@ Ulysse s'est fait attacher au mât pour résister au chant des sirènes. Ici, le
 - **Le dossier de décision** : Données → Constats → Analyse → Options → Explication ; chaque phrase étiquetée (MESURÉ, DOCUMENTÉ, HYPOTHÈSE, INCERTAIN) ; chaque chiffre cliquable vers sa preuve ; un vérificateur en code rejette tout chiffre sans preuve.
 - **L'assistant (chatbot encadré)** : tu écris ce que tu envisages en français libre (« 20 000 $ dans NVIDIA », « et Tesla ? », « mon portefeuille respecte-t-il mes règles ? »). Le code comprend la question, calcule avec les mêmes outils que le reste de l'app (même niveau que le Mât) et vérifie chaque phrase ; le LLM peut seulement reformuler. Il ne recommande jamais, ne prédit rien, et le dit quand on le lui demande.
 - **La machine à remonter le temps** : toute l'app à une date passée, avec seulement l'information publiée à cette date.
+- **Comptes** (Amazon Cognito) : chaque compte ne voit que ses profils ; trois comptes de démonstration (profils de l'énoncé) pour le jury ; « Effacer mes données ».
+- **Connaître son client** : trois mesures (tolérance, capacité, connaissances) ; la plus basse fixe la tolérance du contrat, chaque raison est affichée, l'âge n'est jamais utilisé.
+- **Mes placements et l'argent fictif** : saisie, import CSV ou connexion simulée à un courtier ; « Enregistrer l'ordre » ou « Continuer quand même » applique l'achat aux vrais cours de clôture, payé avec les liquidités ; ventes et dépôts.
+- **Agents Pour / Contre** : dans chaque dossier, deux agents argumentent sur les mêmes preuves ; chacune de leurs phrases passe par le vérificateur.
+- **Sources officielles et presse** : dépôts SEC EDGAR et articles GDELT (regroupés quand ils reprennent la même nouvelle), jamais postérieurs à la date simulée.
+- **Apprendre** : visite guidée au premier passage, « Comment ça marche ? » sur chaque écran, sept leçons de 2 minutes.
 
 ## Démarrage (local, sans AWS)
 
-Prérequis : Python 3.12, Node 20+ (testé avec Node 26), macOS ou Linux.
+Prérequis : Python 3.12+, Node 20+. macOS ou Linux avec `make` ; sous Windows, commandes PowerShell plus bas.
+Aucun fichier `.env` : en local, rien à configurer.
 
 ```bash
 make setup        # environnement Python + dépendances de l'interface
-make data         # construit le datapack (télécharge une fois les sources publiques manquantes)
-make test         # 92 tests, sans AWS ni réseau, LLM simulé
+make data         # construit le datapack (internet requis une fois : Yahoo Finance, Banque du Canada, FRED, Wikipédia, émetteurs de FNB)
+make test         # 123 tests, sans AWS ni réseau, LLM simulé
 make web-build    # construit l'interface
 make api          # serveur local : http://127.0.0.1:8000
 make demo         # (autre terminal) remet la démo dans un état connu
@@ -34,6 +41,19 @@ make bench        # banc d'essai -> page Fiabilité
 ```
 
 Développement de l'interface avec rechargement : `make api` puis `make web` (http://localhost:5173).
+
+**Windows (PowerShell)**, sans `make` :
+
+```powershell
+python -m venv backend\.venv
+backend\.venv\Scripts\python -m pip install -e "backend[data,api,aws,dev]"
+cd frontend; npm install; cd ..
+cd backend; .venv\Scripts\python -m ulysse.data.build; .venv\Scripts\python -m pytest -q
+$env:ULYSSE_LLM = "simule"; .venv\Scripts\uvicorn ulysse.api.server:app --port 8000     # terminal 1
+cd frontend; npm run dev                                                                    # terminal 2 : http://localhost:5173
+```
+
+Avec Bedrock en local : connecte-toi une fois avec l'AWS CLI (`aws configure` ou `aws sso login`), puis lance l'API avec `ULYSSE_LLM=bedrock` ; les identifiants sont lus par le SDK, jamais écrits dans le dépôt.
 
 ## Configuration
 
@@ -45,6 +65,10 @@ Développement de l'interface avec rechargement : `make api` puis `make web` (ht
 | `ULYSSE_STORE` | local | `aws` : DynamoDB + S3 |
 | `ULYSSE_KIT_DIR`, `ULYSSE_DATA_DIR`, `ULYSSE_DATAPACK_DIR`, `ULYSSE_STATE_DIR` | dossiers du dépôt | emplacements des données et de l'état |
 | `ULYSSE_LLM_LIMITE_JOUR_USD` | 0 (aucun) | au-delà, rédaction par gabarit sans LLM, consignée |
+| `ULYSSE_AUTH` | `aucune` | `cognito` : comptes Amazon Cognito (avec `ULYSSE_COGNITO_REGION`, `ULYSSE_COGNITO_CLIENT_ID`) |
+| `ULYSSE_COMPTES_DEMO`, `ULYSSE_DEMO_MOT_DE_PASSE` | désactivé | comptes de démonstration du jury (mode `cognito`) |
+| `ULYSSE_RECHERCHE_WEB` | `1` | `0` coupe la recherche SEC EDGAR / GDELT (tests, démo hors ligne) |
+| `ULYSSE_SEC_USER_AGENT`, `ULYSSE_CACHE_RECHERCHE` | valeurs génériques | contact demandé par la SEC ; dossier du cache de recherche |
 
 Aucun secret dans le code ni dans le dépôt.
 
