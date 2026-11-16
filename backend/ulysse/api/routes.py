@@ -10,7 +10,7 @@ from typing import Any, Callable
 
 import numpy as np
 
-from ulysse import demo, orchestrator, policy, vigie
+from ulysse import demo, orchestrator, policy, positions, vigie
 from ulysse.adaptation import adaptation
 from ulysse.analytics import core, hype, portfolio as pfm, regime, tools
 from ulysse.config import DEFAULT_ASOF
@@ -74,7 +74,7 @@ def _profil(pid: str) -> tuple[Profil, Contrat]:
 
 
 def _pf(prof: Profil, as_of: str) -> pfm.Portfolio:
-    return pfm.from_allocation(get_datapack(), prof.allocation.capital_cad, prof.allocation.poids, prof.allocation.constitue_le, as_of=as_of)
+    return positions.portefeuille(prof, as_of)
 
 
 def _ev(e) -> dict:
@@ -207,8 +207,7 @@ def accueil(query, body, pid):
     if last and last.get("as_of") and last["as_of"] != as_of:
         try:
             v0 = dp.asof(last["as_of"])
-            val0 = pfm.valuation(v0, pfm.from_allocation(dp, prof.allocation.capital_cad, prof.allocation.poids,
-                                                          prof.allocation.constitue_le, as_of=as_of))
+            val0 = pfm.valuation(v0, positions.portefeuille(prof, last["as_of"]))
             changes.append({"type": "valeur", "depuis": last["as_of"], "avant_cad": val0["total_cad"], "apres_cad": val.valeur["total_cad"]})
         except ValueError:
             pass
@@ -404,14 +403,117 @@ def verifier_ordre(query, body):
     return d
 
 
+CHOIX_EXECUTES = ("confirmer", "continuer")
+
+
 @route("POST", "/api/ordres/decision")
 def decision_ordre(query, body):
-    """The user keeps the last word: « continuer quand même », « choisir une alternative » — logged."""
+    """The user keeps the last word: « enregistrer » or « continuer quand même » applies the simulated purchase to the
+    portfolio and cash; any other choice is only logged. Every decision goes to the Journal."""
     pid = body["profil"]
-    get_store().append("journal", pid, {"type": "decision", "a": now_iso(), "as_of": body.get("as_of") or DEFAULT_ASOF,
-                                        "ticker": body.get("ticker"), "choix": body.get("choix"), "montant_cad": body.get("montant_cad"),
-                                        "niveau": body.get("niveau"), "simulation": True})
-    return {"ok": True, "message": "Décision consignée (simulation : aucune transaction réelle)."}
+    prof, _con = _profil(pid)
+    as_of = body.get("as_of") or _asof(query)
+    choix = body.get("choix")
+    execution = None
+    if choix in CHOIX_EXECUTES:
+        t = _ticker(body["ticker"])
+        try:
+            execution = positions.acheter(prof, t, float(body["montant_cad"]), as_of, ordre_id=body.get("ordre_id"))
+        except positions.SoldeInsuffisant as e:
+            raise HttpError(409, str(e)) from e
+        _apres_changement(pid, as_of)
+    if not (execution or {}).get("deja_applique"):
+        get_store().append("journal", pid, {"type": "decision", "a": now_iso(), "as_of": as_of, "ticker": body.get("ticker"), "choix": choix,
+                                            "montant_cad": body.get("montant_cad"), "niveau": body.get("niveau"), "simulation": True,
+                                            "execute": execution is not None})
+    msg = ("Ordre simulé appliqué à ton portefeuille fictif (aucune transaction réelle)." if execution
+           else "Décision consignée (simulation : aucune transaction réelle).")
+    return {"ok": True, "execute": execution is not None, "message": msg, **({"liquidites_cad": execution["liquidites_cad"]} if execution else {})}
+
+
+# ----------------------------------------------------------------------------------------- holdings and simulated cash
+
+def _apres_changement(pid: str, as_of: str) -> None:
+    """The portfolio changed: the Vigie's pre-computed signals for this date are stale."""
+    get_store().delete("signal_packs", f"{pid}@{as_of}")
+
+
+@route("GET", "/api/profils/{pid}/positions")
+def voir_positions(query, body, pid):
+    prof, _ = _profil(pid)
+    return positions.vue(prof, _asof(query))
+
+
+@route("POST", "/api/profils/{pid}/depot")
+def depot(query, body, pid):
+    prof, _ = _profil(pid)
+    as_of = body.get("as_of") or _asof(query)
+    out = positions.deposer(prof, float(body.get("montant_cad") or 0), as_of)
+    get_store().append("journal", pid, {"type": "depot", "a": now_iso(), "as_of": as_of, "montant_cad": body.get("montant_cad"), "simulation": True})
+    _apres_changement(pid, as_of)
+    return out
+
+
+@route("POST", "/api/profils/{pid}/vente")
+def vente(query, body, pid):
+    prof, _ = _profil(pid)
+    as_of = body.get("as_of") or _asof(query)
+    t = _ticker(body["ticker"])
+    try:
+        out = positions.vendre(prof, t, body.get("montant_cad"), as_of, tout=bool(body.get("tout")), ordre_id=body.get("ordre_id"))
+    except positions.PositionInsuffisante as e:
+        raise HttpError(409, str(e)) from e
+    if not out.get("deja_applique"):
+        get_store().append("journal", pid, {"type": "vente", "a": now_iso(), "as_of": as_of, "ticker": t,
+                                            "montant_cad": round(out["montant_cad"], 2), "simulation": True})
+    _apres_changement(pid, as_of)
+    return out
+
+
+@route("POST", "/api/profils/{pid}/positions")
+def saisir_positions(query, body, pid):
+    """Manual entry or CSV import: the holdings become exactly what the person describes."""
+    prof, _ = _profil(pid)
+    as_of = body.get("as_of") or _asof(query)
+    lignes = positions.parse_csv(body["csv"]) if body.get("csv") else body.get("lignes") or []
+    if not lignes:
+        raise HttpError(400, "Ajoute au moins une ligne (titre et quantité ou montant).")
+    origine = "import_csv" if body.get("csv") else "saisie"
+    positions.remplacer(prof, lignes, float(body.get("liquidites_cad") or 0), as_of, origine)
+    get_store().append("journal", pid, {"type": "positions", "a": now_iso(), "as_of": as_of, "origine": origine, "n_lignes": len(lignes)})
+    _apres_changement(pid, as_of)
+    return positions.vue(prof, as_of)
+
+
+@route("POST", "/api/profils/{pid}/positions/reinitialiser")
+def reinitialiser_positions(query, body, pid):
+    prof, _ = _profil(pid)
+    positions.reinitialiser(pid)
+    get_store().append("journal", pid, {"type": "positions", "a": now_iso(), "origine": "allocation_initiale"})
+    _apres_changement(pid, body.get("as_of") or _asof(query))
+    return positions.vue(prof, body.get("as_of") or _asof(query))
+
+
+@route("GET", "/api/connexions/institutions")
+def institutions(query, body):
+    return {"institutions": positions.INSTITUTIONS, "mode": "simulation"}
+
+
+@route("GET", "/api/profils/{pid}/connexions/{inst}")
+def apercu_connexion(query, body, pid, inst):
+    _profil(pid)
+    return positions.apercu_connexion(pid, inst, _asof(query))
+
+
+@route("POST", "/api/profils/{pid}/connexions/{inst}")
+def connecter(query, body, pid, inst):
+    """Imports the (simulated) accounts as the profile's holdings. No credential is ever asked."""
+    prof, _ = _profil(pid)
+    as_of = body.get("as_of") or _asof(query)
+    rec = positions.connecter(prof, inst, body.get("comptes") or [], float(body.get("liquidites_cad") or 0), as_of)
+    get_store().append("journal", pid, {"type": "positions", "a": now_iso(), "as_of": as_of, "origine": rec["origine"], "comptes": rec["comptes"]})
+    _apres_changement(pid, as_of)
+    return positions.vue(prof, as_of)
 
 
 _RUNNER_LOCK = threading.Lock()

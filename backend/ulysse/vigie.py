@@ -19,7 +19,7 @@ import time
 
 import numpy as np
 
-from ulysse import policy
+from ulysse import policy, positions
 from ulysse.analytics import hype, portfolio as pfm, regime
 from ulysse.config import DEFAULT_ASOF
 from ulysse.contract.evaluate import asset_facts
@@ -57,7 +57,7 @@ def executer(as_of: str | None = None, profils: list[str] | None = None, store=N
         if not plan or plan.get("contrat_version") != con.version:
             plan = plan_surveillance(prof, con)
             store.put("vigie_plans", pid, plan)
-        pf = pfm.from_allocation(dp, prof.allocation.capital_cad, prof.allocation.poids, prof.allocation.constitue_le, as_of=as_of)
+        pf = positions.portefeuille(prof, as_of)
         total = pfm.valuation(v, pf)["total_cad"]
         notes = []
         # 1. drift --------------------------------------------------------------------------------

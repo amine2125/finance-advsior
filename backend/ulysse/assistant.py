@@ -19,7 +19,7 @@ import re
 import time
 import unicodedata
 
-from ulysse import orchestrator, policy
+from ulysse import orchestrator, policy, positions
 from ulysse.analytics import portfolio as pfm, tools
 from ulysse.contract.schema import Contrat, Profil, Signal
 from ulysse.data.datapack import get_datapack
@@ -202,7 +202,7 @@ def repondre(store, pid: str, prof: Profil, con: Contrat, message: str, as_of: s
     dp = get_datapack()
     v = dp.asof(as_of)
     day = str(v.day)
-    pf = pfm.from_allocation(dp, prof.allocation.capital_cad, prof.allocation.poids, prof.allocation.constitue_le, as_of=as_of)
+    pf = positions.portefeuille(prof, as_of)
     comp = comprendre(message, dp, contexte)
     preuves: dict[str, Evidence] = {}
     val_ev = tools.run_tool("valeur_portefeuille", v, {"portefeuille": pf})[0]

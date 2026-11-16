@@ -10,7 +10,7 @@ export const en: Partial<Record<Cle, string>> = {
   "app.temps": "Time machine: you see the app as of {date}, with only the information published by then.",
   "app.retour_present": "Back to the present",
   "nav.accueil": "Home", "nav.marche": "Market", "nav.tendances": "Trends", "nav.portefeuille": "Portfolio",
-  "nav.comparer": "Compare", "nav.surveillance": "Watchlist", "nav.contrat": "My contract", "nav.journal": "Log",
+  "nav.comparer": "Compare", "nav.surveillance": "Watchlist", "nav.contrat": "My contract", "nav.journal": "Log", "nav.placements": "Holdings",
   "nav.fiabilite": "Reliability", "nav.demo": "Demo",
   "niveau.ok": "Consistent", "niveau.attention": "Worth a look", "niveau.pause": "Pause", "niveau.aucun": "Nothing to report",
   "statut.respectee": "met", "statut.approchee": "approached", "statut.depassee": "exceeded",

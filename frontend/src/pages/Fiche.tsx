@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { GraphiqueCours } from "../charts/GraphiqueCours";
 import { Chargement, Erreur, Etiquette, Note, Prouve, PuceNiveau, PuceStatut, Terme } from "../components/base";
@@ -22,7 +22,7 @@ interface Fiche {
 export function Fiche() {
   const { ticker = "" } = useParams();
   const [sp] = useSearchParams();
-  const { profil, asOf, t } = useApp();
+  const { profil, asOf, t, toucher } = useApp();
   const nav = useNavigate();
   const { data, erreur, charge, recharger } = useData<Fiche>(`/marche/${encodeURIComponent(ticker)}`, { profil, as_of: asOf });
   const [montant, setMontant] = useState<string>(sp.get("montant") ?? "");
@@ -31,6 +31,8 @@ export function Fiche() {
   const [pause, setPause] = useState<Signal | null>(null);
   const [confirme, setConfirme] = useState<string | null>(null);
   const [consigne, setConsigne] = useState<string | null>(null);
+  const [erreurOrdre, setErreurOrdre] = useState<string | null>(null);
+  const ordreId = useRef<string>(crypto.randomUUID());   // one id per prepared order: a double click never buys twice
   const timer = useRef<number | undefined>(undefined);
   const parMesure = useMemo(() => Object.fromEntries((data?.preuves ?? []).map((p) => [p.mesure + (p.mesure === "rendement_total_passe" ? `_${p.parametres.fenetre_annees}` : ""), p])), [data]);
   const m = Number(String(montant).replace(/\s/g, "").replace(",", "."));
@@ -63,9 +65,14 @@ export function Fiche() {
     } finally { setVerif(""); }
   };
   const decider = async (choix: string, niveau: string) => {
-    await api("/ordres/decision", { body: { profil, ticker, montant_cad: m, as_of: asOf, choix, niveau } });
-    setPause(null); setConfirme(null);
-    setConsigne(choix === "continuer" ? "Ordre simulé consigné dans le Journal, avec ton choix « Continuer quand même » (aucune transaction réelle)." : "Ordre simulé enregistré dans le Journal (aucune transaction réelle).");
+    setErreurOrdre(null);
+    try {
+      const r = await api<{ execute: boolean; liquidites_cad?: number }>("/ordres/decision", { body: { profil, ticker, montant_cad: m, as_of: asOf, choix, niveau, ordre_id: ordreId.current } });
+      ordreId.current = crypto.randomUUID();
+      setPause(null); setConfirme(null); toucher();
+      const reste = r.liquidites_cad != null ? ` Il te reste ${f.cad(r.liquidites_cad)} de liquidités.` : "";
+      setConsigne((choix === "continuer" ? "Ordre simulé appliqué, avec ton choix « Continuer quand même », et consigné dans le Journal." : "Ordre simulé appliqué à ton portefeuille et consigné dans le Journal.") + reste + " Aucune transaction réelle.");
+    } catch (e) { setPause(null); setErreurOrdre((e as Error).message); }
   };
   const ref = pt?.signal_reference;
   const bandeSignal = ref ? { niveau: ref.niveau, titre: `Selon tes règles, pour une position de ${f.pct(ref.taille_reference_pct, 0)}`, regles_declenchees: ref.regles,
@@ -127,7 +134,8 @@ export function Fiche() {
           {confirme && (
             <div className="mt-3 rounded-2xl bg-canvas p-4"><p className="flex flex-wrap items-center gap-2 text-sm"><PuceNiveau niveau={confirme as Niveau} /> Ordre simulé prêt : {f.cad(m)} sur {ticker}.</p>
               <div className="mt-3 flex flex-wrap gap-2"><Button onClick={() => decider("confirmer", confirme)}>Enregistrer l'ordre simulé</Button><Button variant="ghost" onClick={() => setConfirme(null)}>Annuler</Button></div></div>)}
-          {consigne && <Notice tone="good" className="mt-3">{consigne}</Notice>}
+          {consigne && <Notice tone="good" className="mt-3">{consigne} <Link to={`/placements?p=${profil}`} className="font-semibold underline">Voir mes placements</Link></Notice>}
+          {erreurOrdre && <Notice tone="bad" className="mt-3">{erreurOrdre} <Link to={`/placements?p=${profil}`} className="font-semibold underline">Ajouter des fonds</Link></Notice>}
         </div>
       </Panel>
 

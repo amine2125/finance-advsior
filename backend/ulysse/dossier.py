@@ -81,7 +81,7 @@ def ev_option(o, as_of: str) -> Evidence:
 
 def ev_profil(p: Profil, contrat: Contrat, as_of: str, pf_meta: dict) -> Evidence:
     return evidence(mesure="hypotheses_profil", libelle="Profil et portefeuille fictifs (hypothèses)", sujet=p.id,
-                    valeur={"capital_initial_cad": p.allocation.capital_cad, "constitue_le": pf_meta.get("constitue_le"),
+                    valeur={"capital_initial_cad": pf_meta.get("capital_initial") or p.allocation.capital_cad, "constitue_le": pf_meta.get("constitue_le"),
                             "tolerance": p.tolerance, "experience": p.experience,
                             "horizon_le_plus_proche_annees": min(o.horizon_annees for o in p.objectifs),
                             "contrat_version": contrat.version, "fictif": True},

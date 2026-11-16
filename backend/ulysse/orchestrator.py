@@ -15,7 +15,7 @@ import traceback
 import uuid
 from typing import Any
 
-from ulysse import policy, verifier, writer
+from ulysse import policy, positions, verifier, writer
 from ulysse.analytics import portfolio as pfm, tools
 from ulysse.contract.schema import Contrat, Profil
 from ulysse.data.datapack import get_datapack
@@ -84,7 +84,7 @@ def executer(store, did: str, llm=None) -> dict:
         con = Contrat(**store.get("contrats", d["profil_id"]))
         dp = get_datapack()
         v = dp.asof(d["as_of"])
-        pf = pfm.from_allocation(dp, prof.allocation.capital_cad, prof.allocation.poids, prof.allocation.constitue_le, as_of=d["as_of"])
+        pf = positions.portefeuille(prof, d["as_of"])
         it = d["intention"]
         ticker = it.get("ticker")
         if ticker and ticker not in dp.idx:

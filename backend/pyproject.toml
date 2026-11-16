@@ -11,7 +11,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-data = ["pandas>=2.2", "yfinance>=0.2.50", "openpyxl>=3.1"]
+# curl_cffi >= 0.12 (required by yfinance >= 1.0) fails to resolve host names on some Windows machines
+# ("Resolving timed out"); this pair downloads correctly on Windows, macOS and Linux.
+data = ["pandas>=2.2", "yfinance>=0.2.50,<0.3", "curl_cffi>=0.10,<0.12", "openpyxl>=3.1"]
 api = ["fastapi>=0.115", "uvicorn[standard]>=0.30"]
 aws = ["boto3>=1.35", "anthropic[bedrock]>=2.0"]
 dev = ["pytest>=8", "httpx>=0.27"]

@@ -1,6 +1,6 @@
 import clsx from "clsx";
 import { AnimatePresence, motion } from "framer-motion";
-import { Bell, BookOpen, ChevronDown, FileSignature, Home, MoreHorizontal, PieChart, Sailboat, Search } from "lucide-react";
+import { Bell, BookOpen, ChevronDown, FileSignature, Home, MoreHorizontal, PieChart, Sailboat, Search, Wallet } from "lucide-react";
 import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, NavLink, Route, Routes, useLocation } from "react-router-dom";
 import { AssistantProvider, AvatarAssistant, useAssistant } from "./components/Assistant";
@@ -24,6 +24,7 @@ const Journal = lazy(() => import("./pages/Journal").then((m) => ({ default: m.J
 const DossierPage = lazy(() => import("./pages/Dossier").then((m) => ({ default: m.DossierPage })));
 const Fiabilite = lazy(() => import("./pages/Fiabilite").then((m) => ({ default: m.Fiabilite })));
 const Demo = lazy(() => import("./pages/Demo").then((m) => ({ default: m.Demo })));
+const Placements = lazy(() => import("./pages/Placements").then((m) => ({ default: m.Placements })));
 
 /** Product name is configuration (VITE_APP_NAME). */
 export const APP_NAME: string = (import.meta as any).env?.VITE_APP_NAME || "ULYSSE";
@@ -33,7 +34,8 @@ export function App() {
 }
 
 const PRINCIPAL = [
-  { to: "/", k: "nav.accueil", icon: Home }, { to: "/marche", k: "nav.marche", icon: Search }, { to: "/portefeuille", k: "nav.portefeuille", icon: PieChart },
+  { to: "/", k: "nav.accueil", icon: Home }, { to: "/marche", k: "nav.marche", icon: Search }, { to: "/placements", k: "nav.placements", icon: Wallet },
+  { to: "/portefeuille", k: "nav.portefeuille", icon: PieChart },
   { to: "/contrat", k: "nav.contrat", icon: FileSignature }, { to: "/journal", k: "nav.journal", icon: BookOpen },
 ] as const;
 const PLUS = [["/tendances", "nav.tendances"], ["/surveillance", "nav.surveillance"], ["/comparer", "nav.comparer"], ["/fiabilite", "nav.fiabilite"], ["/demo", "nav.demo"]] as const;
@@ -102,6 +104,7 @@ function Coquille() {
               <Route path="/tendances" element={<Tendances />} />
               <Route path="/titre/:ticker" element={<Fiche />} />
               <Route path="/portefeuille" element={<Portefeuille />} />
+              <Route path="/placements" element={<Placements />} />
               <Route path="/comparer" element={<Comparer />} />
               <Route path="/surveillance" element={<Surveillance />} />
               <Route path="/contrat" element={<ContratPage />} />
@@ -172,7 +175,7 @@ function NavMobile({ suffixe }: { suffixe: string }) {
       <AnimatePresence>{plus && (
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 12 }} transition={spring}
           className="fixed inset-x-3 bottom-[76px] z-40 rounded-2xl bg-white p-2 shadow-lift">
-          {[["/journal", "nav.journal"] as const, ...PLUS].map(([to, k]) => <Link key={to} to={`${to}${suffixe}`} className="block rounded-xl px-3 py-2.5 text-sm text-ink hover:bg-canvas">{t(k)}</Link>)}
+          {[["/contrat", "nav.contrat"] as const, ["/journal", "nav.journal"] as const, ...PLUS].map(([to, k]) => <Link key={to} to={`${to}${suffixe}`} className="block rounded-xl px-3 py-2.5 text-sm text-ink hover:bg-canvas">{t(k)}</Link>)}
         </motion.div>)}</AnimatePresence>
       <nav aria-label="Navigation" className="glass fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-line pb-[env(safe-area-inset-bottom)]">
         {items.map((n) => (

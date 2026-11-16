@@ -16,6 +16,7 @@ export const fr = {
   "nav.surveillance": "Surveillance",
   "nav.contrat": "Mon contrat",
   "nav.journal": "Journal",
+  "nav.placements": "Placements",
   "nav.fiabilite": "Fiabilité",
   "nav.demo": "Démo",
   "niveau.ok": "Cohérent",
