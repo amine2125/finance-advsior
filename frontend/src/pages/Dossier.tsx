@@ -15,7 +15,7 @@ import type { Preuve, Signal } from "../types";
 const ETAPES: Record<string, string> = { donnees: "Données", constats: "Constats", analyse: "Analyse", options: "Options", explication: "Explication" };
 const NOMS: Record<string, [string, string]> = {
   contexte: ["Contexte", "code"], planification: ["Planification", "LLM, validé par le code"], outils: ["Outils d'analyse", "code"], gouvernance: ["Gouvernance", "code"],
-  signal: ["Politique de signal", "code"], redaction: ["Rédaction", "LLM"], verification: ["Vérification", "code"], publication: ["Publication", "code"],
+  signal: ["Politique de signal", "code"], debat: ["Débat Pour / Contre", "LLM, vérifié par le code"], redaction: ["Rédaction", "LLM"], verification: ["Vérification", "code"], publication: ["Publication", "code"],
 };
 
 export function DossierPage() {
@@ -45,7 +45,7 @@ export function DossierPage() {
         <h1 className="mt-1 font-display text-[34px] font-medium leading-tight tracking-[-0.03em] sm:text-[40px]">{it.type === "ordre" ? `Ordre simulé de ${f.cad(it.montant_cad)} sur ${it.ticker}` : it.ticker ? `Titre ${it.ticker}` : "Portefeuille"}</h1>
       </div>
       <Panel className="p-5">
-        <ol className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8" aria-label="Étapes du dossier">
+        <ol className="grid grid-cols-2 gap-2 sm:grid-cols-5" aria-label="Étapes du dossier">
           {etapes.map((e) => {
             const [nom, qui] = NOMS[e.etape] ?? [e.etape, ""];
             const fait = e.statut === "termine", enCours = e.statut === "en_cours", rejet = e.statut === "rejet" || e.statut === "echec";
@@ -76,6 +76,7 @@ export function DossierPage() {
               </Section>
             </StaggerItem>))}
         </Stagger>
+        {d.debat && <Debat debat={d.debat} preuves={preuves} ouvrir={ouvrirPreuve} />}
         {it.type === "ordre" && <Sensibilite intention={it} asOf={d.as_of} profilId={d.profil_id} />}
         <div className="grid gap-4 lg:grid-cols-2">
           <Panel><h2 className="font-display text-lg font-medium">Contrôles visibles</h2>
@@ -93,6 +94,28 @@ export function DossierPage() {
         </div>
       </>}
     </div>
+  );
+}
+
+function Debat({ debat, preuves, ouvrir }: { debat: any; preuves: Record<string, Preuve>; ouvrir: (p: Preuve | null) => void }) {
+  const cotes: [string, string, string][] = [["pour", "Ce qui joue en faveur", "bg-gain-50"], ["contre", "Ce qui appelle à la prudence", "bg-loss-50"]];
+  return (
+    <section aria-labelledby="debat">
+      <h2 id="debat" className="font-display text-xl font-medium tracking-[-0.02em]">Deux agents, les mêmes preuves</h2>
+      <p className="mt-1 text-sm text-ink-muted">Chacun défend un point de vue ; aucun ne décide. Chaque phrase est vérifiée comme le reste du dossier.</p>
+      <div className="mt-4 grid gap-4 lg:grid-cols-2">{cotes.map(([c, titre, fond]) => {
+        const s = debat[c];
+        if (!s) return null;
+        const rejets = (s.essais ?? []).filter((e: any) => e.resultat !== "accepte").length;
+        return (
+          <Panel key={c}>
+            <p className={clsx("inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold text-ink", fond)}>{s.agent}</p>
+            <h3 className="mt-2 font-display text-lg font-medium">{titre}</h3>
+            <div className="mt-3 space-y-3 text-[15px] text-ink">{s.phrases.map((ph: any, i: number) => <Phrase key={i} texte={ph.texte} etiquette={ph.etiquette} ids={ph.preuves} preuves={preuves} ouvrir={ouvrir} />)}</div>
+            <Note>Rédigé par : {s.redige_par === "gabarit" ? "gabarit sans LLM" : s.redige_par}{rejets ? ` · ${rejets} version(s) rejetée(s) par le vérificateur` : ""}.</Note>
+          </Panel>);
+      })}</div>
+    </section>
   );
 }
 

@@ -15,7 +15,7 @@ import traceback
 import uuid
 from typing import Any
 
-from ulysse import policy, positions, verifier, writer
+from ulysse import debat, policy, positions, verifier, writer
 from ulysse.analytics import portfolio as pfm, tools
 from ulysse.contract.schema import Contrat, Profil
 from ulysse.data.datapack import get_datapack
@@ -25,7 +25,7 @@ from ulysse.governance import gouverner
 from ulysse.llm import LLMError, MockLLM, get_llm
 from ulysse.store import now_iso
 
-ETAPES = ["contexte", "planification", "outils", "gouvernance", "signal", "redaction", "verification", "publication"]
+ETAPES = ["contexte", "planification", "outils", "gouvernance", "signal", "debat", "redaction", "verification", "publication"]
 LIBELLES_OUTILS = {
     "prix": "Cours", "volatilite": "Volatilité", "pire_baisse": "Pire baisse", "cvar": "Pertes extrêmes (CVaR)",
     "risque_recent": "Risque récent (EWMA)", "rendement_passe": "Rendement passé", "dividendes": "Dividendes",
@@ -187,6 +187,15 @@ def executer(store, did: str, llm=None) -> dict:
                  "profil_ev": prof_ev, "statuts_ev": _ordonner(statuts_ev), "decision_ev": dec, "options_ev": options_ev,
                  "manquantes": g["informations_manquantes"], "conflits": g["conflits"]}
 
+        # 5b. debat (two opposing agents on the same evidence, every sentence verified) -----------------------
+        t0 = time.perf_counter()
+        step("debat", "en_cours")
+        deb = debat.debattre(faits, preuves, llm)
+        usage_total += deb.pop("usage")
+        step("debat", "termine", {c: {"agent": deb[c]["agent"], "redige_par": deb[c]["redige_par"], "phrases": len(deb[c]["phrases"]),
+                                      "essais": deb[c]["essais"]} for c in debat.COTES},
+             sorted({i for c in debat.COTES for ph in deb[c]["phrases"] for i in ph["preuves"]}), t0)
+
         # 6-7. redaction (LLM) + verification (code), named defect fed back, 2 attempts ---------------------------
         essais, defauts, redaction = [], None, None
         for k in range(1, MAX_ESSAIS + 1):
@@ -224,7 +233,7 @@ def executer(store, did: str, llm=None) -> dict:
         if cout:
             store.incr("llm_cout", time.strftime("%Y-%m-%d"), cout)
         d.update({"etat": "termine", "termine_le": now_iso(), "duree_totale_ms": round((time.perf_counter() - t_all) * 1000, 1),
-                  "redaction": redaction, "signal": sig.model_dump(), "essais_verification": essais,
+                  "redaction": redaction, "debat": deb, "signal": sig.model_dump(), "essais_verification": essais,
                   "preuves": {k: e.model_dump() for k, e in preuves.items()}, "usage_llm": usage_total, "cout_estime_usd": cout,
                   "gouvernance": {k: g[k] for k in ("conflits", "informations_manquantes", "controles")}})
         step("publication", "termine", {"phrases": sum(len(s["phrases"]) for s in redaction["sections"]),
@@ -287,4 +296,7 @@ class _Plafond(MockLLM):
         raise LLMError("plafond quotidien de dépense LLM atteint")
 
     def rediger(self, *a, **k):
+        raise LLMError("plafond quotidien de dépense LLM atteint")
+
+    def debattre(self, *a, **k):
         raise LLMError("plafond quotidien de dépense LLM atteint")
