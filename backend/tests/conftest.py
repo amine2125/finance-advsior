@@ -1,4 +1,8 @@
+import os
+
 import pytest
+
+os.environ.setdefault("ULYSSE_RECHERCHE_WEB", "0")   # no network in tests: research tools say « données insuffisantes »
 
 from ulysse.config import DATAPACK_DIR
 

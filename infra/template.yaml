@@ -1,0 +1,301 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  ULYSSE (Datathon AlphaForge AI 2026) - simulated investing app with an embedded, self-explaining agent.
+  One Python Lambda (function URL) behind CloudFront, DynamoDB, two private S3 buckets, an hourly
+  EventBridge Scheduler trigger for the Vigie, Amazon Bedrock for planning, writing and the pros/cons agents,
+  Amazon Cognito accounts, and a cost budget.
+  Simulation only: no real transaction.
+
+Parameters:
+  BedrockModelId:
+    Type: String
+    Default: anthropic.claude-opus-5-5
+    Description: Bedrock model id or inference profile id used to PLAN and WRITE (confirmed at deploy time for the region).
+  BudgetEmail:
+    Type: String
+    Description: Address that receives the cost alerts (asked to the team at deploy time; never hardcoded).
+  BudgetLimitUsd:
+    Type: Number
+    Default: 50
+  LlmDailyLimitUsd:
+    Type: Number
+    Default: 5
+    Description: Above this estimated daily LLM spend, dossiers are written by the template (no LLM) and the app says so.
+  DemoPassword:
+    Type: String
+    Default: UlysseDemo2026!
+    Description: Password of the three jury demo accounts (fictitious profiles; shown on the sign-in page on purpose).
+  SecUserAgent:
+    Type: String
+    Default: ULYSSE datathon prototype ulysse-demo@example.org
+    Description: User-Agent sent to SEC EDGAR (its fair-access policy asks for a contact).
+
+Globals:
+  Function:
+    Runtime: python3.12
+    Architectures: [arm64]
+    MemorySize: 2048
+    Timeout: 120
+
+Resources:
+  # ------------------------------------------------------------------ storage
+  DataBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration: [{ServerSideEncryptionByDefault: {SSEAlgorithm: AES256}}]
+      PublicAccessBlockConfiguration: {BlockPublicAcls: true, BlockPublicPolicy: true, IgnorePublicAcls: true, RestrictPublicBuckets: true}
+      OwnershipControls: {Rules: [{ObjectOwnership: BucketOwnerEnforced}]}
+
+  UiBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration: [{ServerSideEncryptionByDefault: {SSEAlgorithm: AES256}}]
+      PublicAccessBlockConfiguration: {BlockPublicAcls: true, BlockPublicPolicy: true, IgnorePublicAcls: true, RestrictPublicBuckets: true}
+      OwnershipControls: {Rules: [{ObjectOwnership: BucketOwnerEnforced}]}
+
+  Table:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - {AttributeName: pk, AttributeType: S}
+        - {AttributeName: sk, AttributeType: S}
+      KeySchema:
+        - {AttributeName: pk, KeyType: HASH}
+        - {AttributeName: sk, KeyType: RANGE}
+      SSESpecification: {SSEEnabled: true}
+      PointInTimeRecoverySpecification: {PointInTimeRecoveryEnabled: false}
+
+  # ------------------------------------------------------------------ accounts (Amazon Cognito)
+  # The browser signs in with Cognito directly (public client, no secret); the API validates each access token with
+  # Cognito (GetUser, no IAM permission needed). Datathon demo: accounts are confirmed at once (no e-mail code to wait for).
+  AutoConfirmFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ${AWS::StackName}-confirmation
+      Handler: index.handler
+      MemorySize: 128
+      Timeout: 5
+      Description: Cognito pre-sign-up trigger - confirms demo accounts immediately
+      InlineCode: |
+        def handler(event, context):
+            event["response"]["autoConfirmUser"] = True
+            if (event.get("request", {}).get("userAttributes") or {}).get("email"):
+                event["response"]["autoVerifyEmail"] = True
+            return event
+
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub ${AWS::StackName}-comptes
+      UsernameAttributes: [email]
+      UsernameConfiguration: {CaseSensitive: false}
+      Schema: [{Name: email, AttributeDataType: String, Required: true, Mutable: true}]
+      Policies:
+        PasswordPolicy: {MinimumLength: 8, RequireLowercase: true, RequireUppercase: true, RequireNumbers: true, RequireSymbols: false}
+      AccountRecoverySetting: {RecoveryMechanisms: [{Name: verified_email, Priority: 1}]}
+      LambdaConfig: {PreSignUp: !GetAtt AutoConfirmFunction.Arn}
+
+  AutoConfirmPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref AutoConfirmFunction
+      Action: lambda:InvokeFunction
+      Principal: cognito-idp.amazonaws.com
+      SourceArn: !GetAtt UserPool.Arn
+
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: !Sub ${AWS::StackName}-web
+      UserPoolId: !Ref UserPool
+      GenerateSecret: false
+      ExplicitAuthFlows: [ALLOW_USER_PASSWORD_AUTH, ALLOW_USER_SRP_AUTH, ALLOW_REFRESH_TOKEN_AUTH]
+      PreventUserExistenceErrors: ENABLED
+      EnableTokenRevocation: true
+      AccessTokenValidity: 1
+      IdTokenValidity: 1
+      RefreshTokenValidity: 30
+      TokenValidityUnits: {AccessToken: hours, IdToken: hours, RefreshToken: days}
+
+  # ------------------------------------------------------------------ compute (single function)
+  FunctionLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${AWS::StackName}-ulysse
+      RetentionInDays: 14
+
+  UlysseFunction:
+    Type: AWS::Serverless::Function
+    DependsOn: FunctionLogs
+    Properties:
+      FunctionName: !Sub ${AWS::StackName}-ulysse
+      CodeUri: build/lambda/
+      Handler: ulysse.lambda_handler.handler
+      Description: ULYSSE - signals, tools, rules, verifier, dossier orchestration, Vigie
+      Environment:
+        Variables:
+          ULYSSE_STORE: aws
+          ULYSSE_RUNNER: lambda
+          ULYSSE_LLM: bedrock
+          ULYSSE_BEDROCK_MODEL: !Ref BedrockModelId
+          ULYSSE_TABLE: !Ref Table
+          ULYSSE_DATA_BUCKET: !Ref DataBucket
+          ULYSSE_DATAPACK_S3_PREFIX: datapack/
+          ULYSSE_DATAPACK_DIR: /tmp/datapack
+          ULYSSE_DATA_DIR: /var/task/data
+          ULYSSE_STATE_DIR: /tmp/state
+          ULYSSE_LLM_LIMITE_JOUR_USD: !Ref LlmDailyLimitUsd
+          ULYSSE_AUTH: cognito
+          ULYSSE_COGNITO_REGION: !Ref AWS::Region
+          ULYSSE_COGNITO_CLIENT_ID: !Ref UserPoolClient
+          ULYSSE_COMPTES_DEMO: "1"
+          ULYSSE_DEMO_MOT_DE_PASSE: !Ref DemoPassword
+          ULYSSE_CACHE_RECHERCHE: /tmp/nouvelles
+          ULYSSE_SEC_USER_AGENT: !Ref SecUserAgent
+      FunctionUrlConfig:
+        AuthType: AWS_IAM          # only CloudFront (OAC) may invoke it
+      Policies:
+        - DynamoDBCrudPolicy: {TableName: !Ref Table}
+        - S3CrudPolicy: {BucketName: !Ref DataBucket}
+        - Statement:
+            - Sid: BedrockPlanAndWrite
+              Effect: Allow
+              Action: [bedrock:InvokeModel, bedrock:InvokeModelWithResponseStream]
+              Resource:
+                - !Sub arn:${AWS::Partition}:bedrock:*::foundation-model/*
+                - !Sub arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/*
+            - Sid: AsyncDossiers
+              Effect: Allow
+              Action: lambda:InvokeFunction
+              Resource: !Sub arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${AWS::StackName}-ulysse
+      Events:
+        VigieHoraire:
+          Type: ScheduleV2
+          Properties:
+            ScheduleExpression: rate(1 hour)
+            Input: '{"source": "ulysse.scheduler", "action": "vigie"}'
+            RetryPolicy: {MaximumRetryAttempts: 0}
+
+  # ------------------------------------------------------------------ delivery (CloudFront + OAC)
+  UiOac:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub ${AWS::StackName}-ui-oac
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  ApiOac:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub ${AWS::StackName}-api-oac
+        OriginAccessControlOriginType: lambda
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  Distribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: ULYSSE (simulation, not financial advice)
+        DefaultRootObject: index.html
+        HttpVersion: http2and3
+        PriceClass: PriceClass_100
+        Origins:
+          - Id: ui
+            DomainName: !GetAtt UiBucket.RegionalDomainName
+            OriginAccessControlId: !GetAtt UiOac.Id
+            S3OriginConfig: {OriginAccessIdentity: ""}
+          - Id: api
+            DomainName: !Select [2, !Split ["/", !GetAtt UlysseFunctionUrl.FunctionUrl]]
+            OriginAccessControlId: !GetAtt ApiOac.Id
+            CustomOriginConfig: {OriginProtocolPolicy: https-only, OriginReadTimeout: 60}
+        DefaultCacheBehavior:
+          TargetOriginId: ui
+          ViewerProtocolPolicy: redirect-to-https
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6          # Managed-CachingOptimized
+          Compress: true
+        CacheBehaviors:
+          - PathPattern: /api/*
+            TargetOriginId: api
+            ViewerProtocolPolicy: https-only
+            AllowedMethods: [GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE]
+            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad      # Managed-CachingDisabled
+            OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac # Managed-AllViewerExceptHostHeader
+        CustomErrorResponses:            # SPA routes served by index.html (S3 answers 403 for unknown keys behind OAC)
+          - {ErrorCode: 403, ResponseCode: 200, ResponsePagePath: /index.html, ErrorCachingMinTTL: 0}
+          - {ErrorCode: 404, ResponseCode: 200, ResponsePagePath: /index.html, ErrorCachingMinTTL: 0}
+
+  UiBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref UiBucket
+      PolicyDocument:
+        Statement:
+          - Sid: CloudFrontReadOnly
+            Effect: Allow
+            Principal: {Service: cloudfront.amazonaws.com}
+            Action: s3:GetObject
+            Resource: !Sub ${UiBucket.Arn}/*
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${Distribution}
+
+  CloudFrontInvokeUrl:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref UlysseFunction
+      Action: lambda:InvokeFunctionUrl
+      Principal: cloudfront.amazonaws.com
+      FunctionUrlAuthType: AWS_IAM
+      SourceArn: !Sub arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${Distribution}
+
+  CloudFrontInvoke:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref UlysseFunction
+      Action: lambda:InvokeFunction
+      Principal: cloudfront.amazonaws.com
+      SourceArn: !Sub arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${Distribution}
+
+  # ------------------------------------------------------------------ cost guard
+  CostBudget:
+    Type: AWS::Budgets::Budget
+    Properties:
+      Budget:
+        BudgetName: !Sub ${AWS::StackName}-budget
+        BudgetType: COST
+        TimeUnit: MONTHLY
+        BudgetLimit: {Amount: !Ref BudgetLimitUsd, Unit: USD}
+      NotificationsWithSubscribers:
+        - Notification: {NotificationType: ACTUAL, ComparisonOperator: GREATER_THAN, Threshold: 80, ThresholdType: PERCENTAGE}
+          Subscribers: [{SubscriptionType: EMAIL, Address: !Ref BudgetEmail}]
+        - Notification: {NotificationType: FORECASTED, ComparisonOperator: GREATER_THAN, Threshold: 100, ThresholdType: PERCENTAGE}
+          Subscribers: [{SubscriptionType: EMAIL, Address: !Ref BudgetEmail}]
+
+Outputs:
+  AppUrl:
+    Description: Public URL of the app (CloudFront)
+    Value: !Sub https://${Distribution.DomainName}
+  DistributionId:
+    Value: !Ref Distribution
+  UiBucketName:
+    Value: !Ref UiBucket
+  DataBucketName:
+    Value: !Ref DataBucket
+  TableName:
+    Value: !Ref Table
+  FunctionName:
+    Value: !Ref UlysseFunction
+  UserPoolId:
+    Description: Cognito user pool (scripts/creer_comptes_demo.py creates the jury accounts in it)
+    Value: !Ref UserPool
+  UserPoolClientId:
+    Value: !Ref UserPoolClient

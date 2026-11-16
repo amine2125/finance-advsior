@@ -1,9 +1,8 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
-// Local dev: the FastAPI backend runs on :8000 and is proxied under /api (same-origin, like CloudFront in AWS).
 export default defineConfig({
   plugins: [react()],
-  server: { port: 5173, proxy: { "/api": { target: "http://127.0.0.1:8000", changeOrigin: false } } },
-  build: { outDir: "dist", sourcemap: false, chunkSizeWarningLimit: 1200 },
+  server: { port: 5173, proxy: { "/api": "http://127.0.0.1:8000" } },
+  build: { outDir: "dist", sourcemap: false },
 });

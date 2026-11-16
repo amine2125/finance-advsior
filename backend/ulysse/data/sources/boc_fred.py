@@ -18,7 +18,7 @@ FRED = ["DFF", "DGS2", "DGS10", "CPIAUCSL", "UNRATE"]
 def boc(series_id: str, refresh: bool = False) -> pd.DataFrame:
     url = f"https://www.bankofcanada.ca/valet/observations/{series_id}/json?start_date={EXT_START}&end_date={EXT_OVERLAP_END}"
     path = fetch(url, OUT / f"boc_{series_id}.json", refresh=refresh)
-    data = json.loads(path.read_text())
+    data = json.loads(path.read_text(encoding="utf-8"))
     rows = [(o["d"], o[series_id]["v"]) for o in data["observations"]
             if series_id in o and o[series_id].get("v") not in (None, "")]
     df = pd.DataFrame(rows, columns=["date", "value"])

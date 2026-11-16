@@ -78,5 +78,5 @@ def _log(url: str, dest: Path, body: bytes) -> None:
         "sha256": hashlib.sha256(body).hexdigest(),
         "bytes": len(body),
     }
-    with MANIFEST.open("a") as f:
+    with MANIFEST.open("a", encoding="utf-8") as f:
         f.write(json.dumps(entry) + "\n")

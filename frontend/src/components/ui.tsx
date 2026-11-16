@@ -1,133 +1,125 @@
 import clsx from "clsx";
-import { AlertTriangle, CheckCircle2, ChevronDown, Info, Loader2, XCircle } from "lucide-react";
 import { motion } from "framer-motion";
-import { ReactNode, useState } from "react";
+import { AlertTriangle, CheckCircle2, Info, XCircle } from "lucide-react";
+import type { ReactNode } from "react";
+import { Link } from "react-router-dom";
 import { spring } from "./motion";
-import { ApiError } from "../services/api";
 
-type BtnVariant = "primary" | "gold" | "navy" | "secondary" | "ghost" | "danger" | "onDark";
-/** Tactile button: springs down on press. « gold » is the single accent (cobalt) for the one main action of a screen. */
+/* Visual building blocks taken from AEGIS (buttons, sections, notices, titles), with ULYSSE names kept where pages use them. */
+
+type BtnVariant = "primary" | "accent" | "secondary" | "ghost" | "danger" | "onDark";
+const btn = (variant: BtnVariant, size: "sm" | "md" | "lg", className?: string) => clsx(
+  "inline-flex select-none items-center justify-center gap-2 rounded-full font-medium tracking-[-0.01em] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 focus-visible:ring-offset-canvas disabled:cursor-not-allowed disabled:opacity-40",
+  size === "sm" && "h-8 px-3.5 text-sm", size === "md" && "h-10 px-5 text-sm", size === "lg" && "h-12 px-6 text-[15px]",
+  variant === "primary" && "bg-ink text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] hover:bg-black",
+  variant === "accent" && "bg-primary-500 text-white shadow-glow hover:bg-primary-600",
+  variant === "secondary" && "glass hairline text-ink hover:bg-white",
+  variant === "ghost" && "text-ink-soft hover:bg-ink/[0.04] hover:text-ink",
+  variant === "danger" && "text-loss-700 hover:bg-loss-50",
+  variant === "onDark" && "border border-white/20 text-white hover:bg-white/10",
+  className);
+
+/** Tactile button: springs down on press. « accent » (cobalt) is reserved for the one main action of a screen. */
 export function Button({ children, variant = "primary", size = "md", className, ...p }: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: BtnVariant; size?: "sm" | "md" | "lg" }) {
   return (
-    <motion.button
-      whileTap={p.disabled ? undefined : { scale: 0.97 }}
-      whileHover={p.disabled ? undefined : { y: -1 }}
-      transition={spring}
-      {...(p as any)}
-      className={clsx(
-        "inline-flex select-none items-center justify-center gap-2 rounded-full font-medium tracking-[-0.01em] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 focus-visible:ring-offset-canvas disabled:cursor-not-allowed disabled:opacity-40",
-        size === "sm" && "h-8 px-3.5 text-sm",
-        size === "md" && "h-10 px-5 text-sm",
-        size === "lg" && "h-12 px-6 text-[15px]",
-        (variant === "primary" || variant === "navy") && "bg-ink text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] hover:bg-black",
-        variant === "gold" && "bg-primary-500 text-white shadow-glow hover:bg-primary-600",
-        variant === "secondary" && "glass hairline text-ink hover:bg-white",
-        variant === "ghost" && "text-ink-soft hover:bg-ink/[0.04] hover:text-ink",
-        variant === "danger" && "text-accent-700 hover:bg-accent-50",
-        variant === "onDark" && "border border-white/20 text-white hover:bg-white/10",
-        className,
-      )}
-    >
+    <motion.button whileTap={p.disabled ? undefined : { scale: 0.97 }} whileHover={p.disabled ? undefined : { y: -1 }} transition={spring}
+      type={p.type ?? "button"} {...(p as any)} className={btn(variant, size, className)}>
       {children}
     </motion.button>
   );
 }
 
-/** A section of the page, not a box: a heading, then content on the page itself. */
-export function Card({ title, subtitle, action, children, className, pad = true }: { title?: ReactNode; subtitle?: ReactNode; action?: ReactNode; children?: ReactNode; className?: string; pad?: boolean }) {
+export function LinkButton({ to, children, variant = "secondary", size = "md", className }: { to: string; children: ReactNode; variant?: BtnVariant; size?: "sm" | "md" | "lg"; className?: string }) {
+  return <Link to={to} className={btn(variant, size, className)}>{children}</Link>;
+}
+
+/** Inline text button (secondary actions inside a sentence or a list). */
+export function TextButton({ children, className, ...p }: React.ButtonHTMLAttributes<HTMLButtonElement>) {
+  return <button type="button" {...p} className={clsx("text-sm font-medium text-primary-600 underline-offset-4 hover:underline disabled:opacity-40", className)}>{children}</button>;
+}
+
+/** A section of the page: a heading, then content on the page itself (AEGIS « Card »). */
+export function Section({ title, subtitle, action, children, className, id }: { title?: ReactNode; subtitle?: ReactNode; action?: ReactNode; children?: ReactNode; className?: string; id?: string }) {
   return (
-    <section className={clsx("border-t border-line", className)}>
+    <section className={clsx("border-t border-line", className)} aria-labelledby={title && id ? id : undefined}>
       {(title || action) && (
-        <header className="flex items-start justify-between gap-4 pt-6">
+        <header className="flex flex-wrap items-start justify-between gap-4 pt-6">
           <div>
-            {title && <h2 className="font-display text-xl font-medium text-ink">{title}</h2>}
+            {title && <h2 id={id} className="font-display text-[22px] font-medium tracking-[-0.02em] text-ink">{title}</h2>}
             {subtitle && <p className="mt-1 text-sm text-ink-muted">{subtitle}</p>}
           </div>
           {action}
         </header>
       )}
-      <div className={clsx(pad && "py-5", title && pad && "pt-4")}>{children}</div>
+      <div className={clsx("py-5", title && "pt-4")}>{children}</div>
     </section>
   );
 }
 
-const TONES = {
-  neutral: "bg-canvas text-ink-soft",
-  good: "bg-gain-50 text-gain-700 ring-1 ring-gain-600",
-  warn: "bg-amber-50 text-amber-800 ring-1 ring-amber-200",
-  bad: "bg-accent-50 text-accent-700 ring-1 ring-accent-100",
-  info: "bg-brand-50 text-brand-800 ring-1 ring-brand-100",
-};
-export type Tone = keyof typeof TONES;
-export function Badge({ tone = "neutral", children, className }: { tone?: Tone; children: ReactNode; className?: string }) {
-  return <span className={clsx("inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold", TONES[tone], className)}>{children}</span>;
+/** White card with hairline (used for tiles, rule items, forms). */
+export function Panel({ children, className, ...p }: React.HTMLAttributes<HTMLDivElement>) {
+  return <div {...p} className={clsx("rounded-2xl bg-white p-5 shadow-card", className)}>{children}</div>;
 }
 
-export function Notice({ tone = "info", title, children, className }: { tone?: "info" | "warn" | "bad" | "good"; title?: ReactNode; children?: ReactNode; className?: string }) {
+/** Dark headline card (key message of a screen). */
+export function Hero({ children, className }: { children: ReactNode; className?: string }) {
+  return <section className={clsx("relative overflow-hidden rounded-[28px] bg-ink px-6 py-7 text-white sm:px-9 sm:py-8", className)}>
+    <div aria-hidden className="pointer-events-none absolute -right-20 -top-24 h-72 w-72 rounded-full bg-primary-500/25 blur-3xl" />
+    <div className="relative">{children}</div>
+  </section>;
+}
+
+export function PageTitle({ title, subtitle, action, eyebrow }: { title: ReactNode; subtitle?: ReactNode; action?: ReactNode; eyebrow?: ReactNode }) {
+  return (
+    <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+      <div className="min-w-0">
+        {eyebrow && <p className="mb-1 text-sm text-ink-muted">{eyebrow}</p>}
+        <h1 className="font-display text-[34px] font-medium leading-tight tracking-[-0.03em] text-ink sm:text-[40px]">{title}</h1>
+        {subtitle && <p className="mt-2 max-w-2xl text-[15px] leading-relaxed text-ink-soft">{subtitle}</p>}
+      </div>
+      {action}
+    </div>
+  );
+}
+
+export function Notice({ tone = "info", title, children, className, role }: { tone?: "info" | "warn" | "bad" | "good"; title?: ReactNode; children?: ReactNode; className?: string; role?: string }) {
   const Icon = tone === "warn" ? AlertTriangle : tone === "bad" ? XCircle : tone === "good" ? CheckCircle2 : Info;
   return (
-    <div className={clsx("flex gap-3 rounded-xl p-3.5 text-sm",
-      tone === "info" && "bg-brand-50 text-brand-800", tone === "warn" && "bg-amber-50 text-amber-900",
-      tone === "bad" && "bg-accent-50 text-accent-700", tone === "good" && "bg-gain-50 text-gain-700", className)}>
-      <Icon className="mt-0.5 h-4 w-4 shrink-0" />
-      <div>{title && <div className="font-semibold">{title}</div>}{children && <div className={clsx(title && "mt-0.5", "opacity-90")}>{children}</div>}</div>
+    <div role={role} className={clsx("flex gap-3 rounded-2xl p-4 text-sm",
+      tone === "info" && "bg-primary-50 text-primary-700", tone === "warn" && "bg-warn-50 text-warn-700",
+      tone === "bad" && "bg-loss-50 text-loss-700", tone === "good" && "bg-gain-50 text-gain-700", className)}>
+      <Icon className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+      <div className="min-w-0">{title && <div className="font-semibold">{title}</div>}{children && <div className={clsx(title && "mt-0.5")}>{children}</div>}</div>
     </div>
   );
 }
 
-export function Spinner({ label }: { label?: string }) {
-  return <div className="flex items-center gap-2 py-8 text-sm text-ink-soft"><Loader2 className="h-4 w-4 animate-spin text-brand-500" /> {label || "Chargement…"}</div>;
-}
-
-export function ErrorBox({ error, onRetry }: { error: ApiError | Error | null | undefined; onRetry?: () => void }) {
-  if (!error) return null;
+/** Metric tile: small label, large number, optional period. */
+export function Tile({ label, value, hint }: { label: ReactNode; value: ReactNode; hint?: ReactNode }) {
   return (
-    <Notice tone="bad" title="Un problème est survenu">
-      {error.message}
-      {onRetry && <button onClick={onRetry} className="ml-2 font-semibold underline">Réessayer</button>}
-    </Notice>
-  );
-}
-
-export function Empty({ icon, title, children, action }: { icon?: ReactNode; title: string; children?: ReactNode; action?: ReactNode }) {
-  return (
-    <div className="flex flex-col items-center px-6 py-10 text-center">
-      {icon && <div className="mb-3 grid h-12 w-12 place-items-center rounded-2xl bg-brand-50 text-brand-800">{icon}</div>}
-      <h3 className="font-bold text-brand-800">{title}</h3>
-      {children && <p className="mt-1 max-w-md text-sm text-ink-soft">{children}</p>}
-      {action && <div className="mt-5">{action}</div>}
-    </div>
-  );
-}
-
-export function Stat({ label, value, hint, tone }: { label: string; value: ReactNode; hint?: ReactNode; tone?: Tone }) {
-  return (
-    <div className="rounded-2xl border border-line bg-white p-4 shadow-card">
-      <div className="text-xs font-medium text-ink-soft">{label}</div>
-      <div className={clsx("tabular mt-1 text-2xl font-bold tracking-tight", tone === "bad" ? "text-accent-700" : tone === "warn" ? "text-amber-700" : tone === "good" ? "text-gain-700" : "text-brand-800")}>{value}</div>
+    <div className="rounded-2xl bg-white p-4 shadow-card">
+      <div className="text-xs font-medium text-ink-muted">{label}</div>
+      <div className="tabular mt-1.5 font-display text-2xl font-medium tracking-[-0.02em] text-ink">{value}</div>
       {hint && <div className="mt-1 text-xs text-ink-muted">{hint}</div>}
     </div>
   );
 }
 
-/** Collapsed details: the method behind a number, for those who want it. */
-export function Explain({ label = "Comment c'est calculé ?", children }: { label?: string; children: ReactNode }) {
-  const [open, setOpen] = useState(false);
+export function Field({ label, hint, htmlFor, children, className }: { label: ReactNode; hint?: ReactNode; htmlFor?: string; children: ReactNode; className?: string }) {
   return (
-    <div className="mt-3">
-      <button onClick={() => setOpen(!open)} className="inline-flex items-center gap-1 text-xs font-semibold text-brand-500 hover:text-brand-600">
-        <ChevronDown className={clsx("h-3.5 w-3.5 transition", open && "rotate-180")} /> {label}
-      </button>
-      {open && <div className="mt-2 rounded-xl bg-canvas p-3 text-xs leading-relaxed text-ink-soft">{children}</div>}
+    <div className={className}>
+      <label htmlFor={htmlFor} className="text-sm font-semibold text-ink">{label}</label>
+      <div className="mt-1.5">{children}</div>
+      {hint && <p className="mt-1 text-xs text-ink-muted">{hint}</p>}
     </div>
   );
 }
 
-export const inputCls = "w-full rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-muted focus:border-ink focus:outline-none";
+export const inputCls = "w-full min-h-[44px] rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-muted focus:border-ink focus:outline-none";
 
 export function Choice({ selected, onClick, title, desc, icon }: { selected: boolean; onClick: () => void; title: ReactNode; desc?: ReactNode; icon?: ReactNode }) {
   return (
-    <button type="button" onClick={onClick}
+    <button type="button" onClick={onClick} aria-pressed={selected}
       className={clsx("flex w-full items-center gap-3 rounded-xl border bg-white px-4 py-3.5 text-left transition",
         selected ? "border-ink ring-1 ring-ink" : "border-line hover:border-ink/30")}>
       {icon && <div className="grid h-8 w-8 shrink-0 place-items-center text-ink-soft">{icon}</div>}
@@ -140,22 +132,22 @@ export function Choice({ selected, onClick, title, desc, icon }: { selected: boo
   );
 }
 
-export function Disclaimer({ className }: { className?: string }) {
+/** Data table in the AEGIS style: hairlines, muted header, tabular numbers. */
+export function Table({ children, caption }: { children: ReactNode; caption?: string }) {
   return (
-    <p className={clsx("text-xs leading-relaxed text-ink-muted", className)}>
-      Simulation éducative : aucune transaction réelle n'est exécutée. Ceci n'est pas un conseil financier personnalisé. Le passé ne garantit pas l'avenir.
-    </p>
+    <div className="-mx-1 overflow-x-auto">
+      <table className="w-full min-w-[520px] border-collapse text-sm [&_td]:border-b [&_td]:border-line [&_td]:px-2 [&_td]:py-3 [&_td]:align-top [&_th]:border-b [&_th]:border-line [&_th]:px-2 [&_th]:py-2.5 [&_th]:text-left [&_th]:text-xs [&_th]:font-medium [&_th]:text-ink-muted [&_tbody_th]:text-sm [&_tbody_th]:font-medium [&_tbody_th]:text-ink">
+        {caption && <caption className="visuellement-cache">{caption}</caption>}
+        {children}
+      </table>
+    </div>
   );
 }
 
-export function PageTitle({ title, subtitle, action }: { title: string; subtitle?: ReactNode; action?: ReactNode }) {
+export function Disclaimer({ className }: { className?: string }) {
   return (
-    <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
-      <div>
-        <h1 className="font-display text-4xl font-medium text-ink">{title}</h1>
-        {subtitle && <p className="mt-1 max-w-2xl text-sm text-ink-soft">{subtitle}</p>}
-      </div>
-      {action}
-    </div>
+    <p className={clsx("text-xs leading-relaxed text-ink-muted", className)}>
+      Simulation éducative : aucune transaction réelle n'est exécutée. Ceci n'est pas un conseil financier. Profils et portefeuilles fictifs ; données publiques uniquement. Le passé ne garantit pas l'avenir.
+    </p>
   );
 }
