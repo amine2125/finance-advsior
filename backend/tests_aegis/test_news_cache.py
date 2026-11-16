@@ -99,3 +99,21 @@ def test_late_research_merge_gives_the_same_ledger():
     before.merge(own)
     own.merge_first(research)
     assert [(r.metric_id, r.value) for r in own.records()] == [(r.metric_id, r.value) for r in before.records()]
+
+
+def test_analysis_never_waits_for_the_live_timeline(md, fresh_store):
+    t = FakeTool()
+    a = news_cache.gather(md, "AAA", t, live_timeline=False)
+    assert t.live == 1 and a["articles"] and a["timeline"] is None  # no copy yet: skipped, not read live
+    news_cache.gather(md, "AAA", FakeTool())  # refresh / security page reads it
+    rec = news_cache.load("AAA")
+    rec["parts"]["timeline"]["at"] -= 3 * 86400  # 3 days old: too old for the refresh, fine for an analysis
+    fresh_store.put(news_cache.OWNER, news_cache.KIND, "AAA", rec)
+    t2 = FakeTool()
+    b = news_cache.gather(md, "AAA", t2, live_timeline=False)
+    assert t2.live == 0 and b["timeline"] and {c["tool"]: c["status"] for c in t2.calls}["news_attention_timeline"] == "cache_stale"
+    assert b["read_at"] != _iso_of(rec["parts"]["timeline"]["at"])  # the old timeline does not age the news date
+
+
+def _iso_of(t):
+    return news_cache._iso(t)

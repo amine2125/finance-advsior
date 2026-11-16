@@ -26,6 +26,7 @@ KIND = "NEWS"
 # How long a part is reused by an analysis. Articles slightly over the refresh period, so a refresh always lands first;
 # the 90-day attention timeline and the filings change slowly.
 MAX_AGE_S = {"filings": 3600, "articles": 20 * 60, "timeline": 6 * 3600, "cg_snap": 20 * 60, "cg_trend": 20 * 60}
+TIMELINE_STALE_S = 7 * 86400  # the 90-day attention curve moves slowly: a week-old copy, dated, is fine for an analysis
 STALE_FALLBACK_S = 24 * 3600  # a live source that fails: a dated copy up to a day old beats no source at all
 PROVIDER = {"filings": ("sec_filings", "sec_edgar"), "articles": ("news_search", "gdelt"), "timeline": ("news_attention_timeline", "gdelt"),
             "cg_snap": ("crypto_snapshot", "coingecko"), "cg_trend": ("crypto_trending", "coingecko")}
@@ -61,9 +62,12 @@ def news_query(name: str) -> str:
     return f'"{base}"'
 
 
-def gather(md, asset_id: str, tool, max_age: dict | None = None) -> dict:
+def gather(md, asset_id: str, tool, max_age: dict | None = None, live_timeline: bool = True) -> dict:
     """The raw sources for one security: {part: data or None} plus `read_at` (ISO, oldest read actually used).
-    Parts still fresh come from the cache; the others are read live, in parallel across providers."""
+    Parts still fresh come from the cache; the others are read live, in parallel across providers.
+    `live_timeline=False` (an analysis in progress): the 90-day GDELT attention timeline is never waited for live, because GDELT
+    answers it one request per 5 s with retries (it took > 100 s). A cached copy, even a few days old, is used and dated; the
+    scheduled refresh and the security page (`warm`) are what read it."""
     meta = md.asset(asset_id)
     ages = MAX_AGE_S | (max_age or {})
     query = news_query(meta["name"])
@@ -98,6 +102,11 @@ def gather(md, asset_id: str, tool, max_age: dict | None = None) -> dict:
         if c and now - c["at"] < ages[p]:
             tool.cached(*PROVIDER[p], _iso(c["at"]), len(c["data"]) if isinstance(c["data"], list) else 1)
             return c["data"], c["at"]
+        if p == "timeline" and not live_timeline:
+            if c and now - c["at"] < TIMELINE_STALE_S:
+                tool.cached(*PROVIDER[p], _iso(c["at"]), len(c["data"]), stale=True)
+                return c["data"], c["at"]
+            return None, None
         data = fetch[p]()
         if data is not None:
             t = time.time()
@@ -119,7 +128,7 @@ def gather(md, asset_id: str, tool, max_age: dict | None = None) -> dict:
         for f in futs:
             for p, (data, at) in f.result().items():
                 out[p] = data
-                if data is not None and at:
+                if data is not None and at and p != "timeline":  # the slow-moving timeline (dated in the audit trail) never ages the news date
                     used_at.append(at)
     if fresh_writes:
         _save_part(asset_id, {"parts": fresh_writes})

@@ -76,7 +76,7 @@ def export_all(path, as_of: str | None = None) -> dict:
     dp, v = _view(as_of)
     out = {"as_of": str(v.day), "climat": climat(as_of), "attention": attention(as_of),
            "fiches": {a["ticker"]: fiche(a["ticker"], as_of) for a in dp.assets}}
-    Path(path).write_text(json.dumps(out, ensure_ascii=False, default=str))
+    Path(path).write_text(json.dumps(out, ensure_ascii=False, default=str), encoding="utf-8")
     return out
 
 

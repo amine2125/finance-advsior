@@ -49,7 +49,7 @@ def _engine():
     except Exception as exc:  # noqa: BLE001 - optional engine
         log.info("ULYSSE engine unavailable (%s); trying the pre-computed signals", exc)
     if PRECOMPUTED.is_file():
-        return _Precomputed(json.loads(PRECOMPUTED.read_text()))
+        return _Precomputed(json.loads(PRECOMPUTED.read_text(encoding="utf-8")))
     return None
 
 

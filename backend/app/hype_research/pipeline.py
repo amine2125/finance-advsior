@@ -105,7 +105,10 @@ def refresh(md: MarketData, asset_ids: list[str] | None = None, period_s: int = 
             tool = WebResearchTool()
             if not tool.enabled:
                 return {"refreshed": 0, "disabled": True}
-            news_cache.gather(md, aid, tool, max_age=ages)
+            src = news_cache.gather(md, aid, tool, max_age=ages)
+            missing = [k for k in ("articles", "timeline") if src.get(k) is None]
+            if missing:  # a source that fails returns None instead of raising: say so, the next cycle retries it
+                failed.append(f"{aid}: {'+'.join(missing)} indisponible")
             done += 1
         except Exception as exc:  # noqa: BLE001 - one security failing never stops the others
             failed.append(f"{aid}: {str(exc)[:80]}")
@@ -145,7 +148,7 @@ def run_research(md: MarketData, asset_id: str, question: str, persona: Investor
         if meta["asset_class"] == "crypto" and meta.get("coingecko_id"):
             src["cg_snap"], src["cg_trend"] = tool.crypto_snapshot(meta["coingecko_id"]), tool.crypto_trending()
     else:
-        src = news_cache.gather(md, asset_id, tool)  # fresh shared copy when there is one, live reads otherwise
+        src = news_cache.gather(md, asset_id, tool, live_timeline=False)  # fresh shared copy when there is one, live reads otherwise (never wait for the slow timeline)
     filings, cg_snap, cg_trend, timeline = src["filings"], src["cg_snap"], src["cg_trend"], src["timeline"]
     if filings is not None:  # None = provider failure, [] = no filing
         evidence += filings
