@@ -7,6 +7,7 @@ import { api } from "./api";
 import { seDeconnecter } from "./auth";
 import { AssistantProvider, AvatarAssistant, useAssistant } from "./components/Assistant";
 import { Chargement } from "./components/base";
+import { CommentCaMarche, Visite } from "./components/Guide";
 import { PageIn, Segmented, spring } from "./components/motion";
 import { TiroirPreuve } from "./components/preuve";
 import { Disclaimer, inputCls } from "./components/ui";
@@ -26,6 +27,8 @@ const Journal = lazy(() => import("./pages/Journal").then((m) => ({ default: m.J
 const DossierPage = lazy(() => import("./pages/Dossier").then((m) => ({ default: m.DossierPage })));
 const Fiabilite = lazy(() => import("./pages/Fiabilite").then((m) => ({ default: m.Fiabilite })));
 const Demo = lazy(() => import("./pages/Demo").then((m) => ({ default: m.Demo })));
+const Apprendre = lazy(() => import("./pages/Apprendre").then((m) => ({ default: m.Apprendre })));
+const Lecon = lazy(() => import("./pages/Apprendre").then((m) => ({ default: m.Lecon })));
 const Connexion = lazy(() => import("./pages/Connexion").then((m) => ({ default: m.Connexion })));
 const Placements = lazy(() => import("./pages/Placements").then((m) => ({ default: m.Placements })));
 
@@ -54,7 +57,7 @@ const PRINCIPAL = [
   { to: "/portefeuille", k: "nav.portefeuille", icon: PieChart },
   { to: "/contrat", k: "nav.contrat", icon: FileSignature }, { to: "/journal", k: "nav.journal", icon: BookOpen },
 ] as const;
-const PLUS = [["/tendances", "nav.tendances"], ["/surveillance", "nav.surveillance"], ["/comparer", "nav.comparer"], ["/fiabilite", "nav.fiabilite"], ["/demo", "nav.demo"]] as const;
+const PLUS = [["/apprendre", "nav.apprendre"], ["/tendances", "nav.tendances"], ["/surveillance", "nav.surveillance"], ["/comparer", "nav.comparer"], ["/fiabilite", "nav.fiabilite"], ["/demo", "nav.demo"]] as const;
 
 /** Closes a popover on outside click or Escape. */
 function useFermeture(ouvert: boolean, fermer: () => void) {
@@ -121,6 +124,8 @@ function Coquille() {
               <Route path="/titre/:ticker" element={<Fiche />} />
               <Route path="/portefeuille" element={<Portefeuille />} />
               <Route path="/placements" element={<Placements />} />
+              <Route path="/apprendre" element={<Apprendre />} />
+              <Route path="/apprendre/:id" element={<Lecon />} />
               <Route path="/comparer" element={<Comparer />} />
               <Route path="/surveillance" element={<Surveillance />} />
               <Route path="/contrat" element={<ContratPage />} />
@@ -140,6 +145,8 @@ function Coquille() {
       </footer>
       <NavMobile suffixe={suffixe} />
       <TiroirPreuve />
+      <CommentCaMarche />
+      <Visite />
     </div>
   );
 }
