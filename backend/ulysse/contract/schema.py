@@ -106,6 +106,7 @@ class Profil(BaseModel):
     preferences: Preferences = Field(default_factory=Preferences)
     allocation: Allocation
     fictif: bool = True                            # always true: no real client data (PDF p.14)
+    kyc: dict | None = None                        # « Connaître son client » reasoning, when the questionnaire was answered
 
 
 class Contrat(BaseModel):

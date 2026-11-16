@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
+from ulysse.contract.kyc import Kyc, evaluer
 from ulysse.contract.schema import Allocation, Clause, Contrat, Objectif, Preferences, Profil
 
 DEFAUTS = {  # by risk tolerance (willingness); capacity is checked separately (horizon, perte_max)
@@ -65,11 +66,19 @@ class Reponses(BaseModel):
     limites: dict[str, float] = Field(default_factory=dict)   # values the investor states (=> "dit")
     notifications_min: str = "attention"
     description: str = ""
+    kyc: Kyc | None = None        # « Connaître son client »: when given, the LOWEST of the three measures sets the tolerance
 
 
 def construire(rep: Reponses, profil_id: str) -> tuple[Profil, Contrat]:
-    d = DEFAUTS[rep.tolerance]
     horizon_min = min(o.horizon_annees for o in rep.objectifs)
+    kyc = None
+    if rep.kyc is not None:
+        kyc = evaluer(rep.kyc, rep.tolerance, horizon_min, rep.interet_crypto)
+        rep = rep.model_copy(update={"tolerance": kyc["tolerance_retenue"], "experience": kyc["connaissances"]["experience"],
+                                     "interet_crypto": rep.interet_crypto and kyc["crypto_permise"]})
+    d = DEFAUTS[rep.tolerance]
+    kx = (f", retenue par le questionnaire « Connaître son client » (mesure la plus basse : {kyc['mesure_determinante']})"
+          if kyc else "")
     clauses: list[Clause] = []
 
     def add(type_, cle_param, valeur_defaut, *, importante=False, extra=""):
@@ -77,7 +86,7 @@ def construire(rep: Reponses, profil_id: str) -> tuple[Profil, Contrat]:
         v = rep.limites.get(cle_param_key(type_), valeur_defaut)
         clauses.append(Clause(id=f"C-{type_.upper().replace('_', '-')}", type=type_, parametres={cle_param: v},
                               libelle=LIBELLES[type_].format(v=_n(v)), origine="dit" if dit else "defaut",
-                              justification=None if dit else justification(type_, rep.tolerance, extra), importante=importante))
+                              justification=None if dit else justification(type_, rep.tolerance, extra + kx), importante=importante))
 
     act = d["actions_max"]
     note = ""
@@ -118,7 +127,7 @@ def construire(rep: Reponses, profil_id: str) -> tuple[Profil, Contrat]:
                     description=rep.description,
                     objectifs=[Objectif(id=f"O{i + 1}", libelle=o.libelle, horizon_annees=o.horizon_annees, part_pct=o.part_pct,
                                         montant_cible_cad=o.montant_cible_cad) for i, o in enumerate(rep.objectifs)],
-                    preferences=prefs, allocation=alloc)
+                    preferences=prefs, allocation=alloc, kyc=kyc)
     return profil, Contrat(profil_id=profil_id, clauses=clauses)
 
 

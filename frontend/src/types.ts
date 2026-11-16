@@ -22,7 +22,14 @@ export interface Profil {
   id: string; nom: string; age: number | null; experience: "debutant" | "intermediaire" | "avance"; tolerance: string; description: string;
   objectifs: { id: string; libelle: string; horizon_annees: number; part_pct: number; montant_cible_cad: number | null }[];
   preferences: { esg_important: boolean; interet_crypto: boolean; interet_techno: boolean; notifications_min: string };
-  allocation: { capital_cad: number; poids: Record<string, number>; constitue_le: string }; fictif: boolean;
+  allocation: { capital_cad: number; poids: Record<string, number>; constitue_le: string }; fictif: boolean; kyc?: Kyc | null;
+}
+export interface Kyc {
+  tolerance_retenue: string; niveau: string; mesure_determinante: string; raisons: string[]; ecart: string | null; cadre: string; crypto_permise: boolean;
+  tolerance: { niveau: string; raisons: string[]; contradiction: boolean; note: string | null };
+  capacite: { niveau: string; raisons: string[]; situation: { mois_epargne: number | null; marge_mensuelle: number | null; dettes_cad: number } };
+  connaissances: { niveau: string; quiz_bonnes: number; quiz_total: number };
+  avant_d_investir: { type: string; titre: string; texte: string; montant_cad?: number }[];
 }
 export interface Adaptation {
   vocabulaire: "simple" | "standard" | "detaille"; densite: string; metriques_detaillees_visibles: boolean; glossaire_proactif: boolean;

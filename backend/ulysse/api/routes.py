@@ -154,6 +154,14 @@ def creer_profil(query, body):
             "adaptation": adaptation(prof)}
 
 
+@route("POST", "/api/profils/apercu")
+def apercu_profil(query, body):
+    """« Connaître son client » computed without saving, so the person reviews every rule before creating the profile."""
+    rep = Reponses(**body)
+    prof, con = construire(rep, "apercu")
+    return {"profil": prof.model_dump(), "contrat": con.model_dump()}
+
+
 def _k(v, prof, con):
     return [{k: x for k, x in c.items() if k != "preuves"} | {"preuves": [_ev(p) for p in c.get("preuves", [])]}
             for c in contradictions.detecter(v, prof, con)]

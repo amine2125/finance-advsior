@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { api } from "../api";
 import { Chargement, Erreur, PuceNiveau } from "../components/base";
+import { KycResume } from "../components/Kyc";
 import { Stagger, StaggerItem } from "../components/motion";
 import { Button, Field, Hero, LinkButton, Notice, Section, inputCls } from "../components/ui";
 import * as f from "../format";
@@ -36,6 +37,7 @@ export function ContratPage() {
         <p className="mt-3 max-w-2xl text-sm leading-relaxed text-white/75">Le mât auquel ULYSSE compare chaque intention. Profil fictif · {p.age ? `${p.age} ans · ` : ""}tolérance « {TOLERANCE[p.tolerance] ?? p.tolerance} » · expérience « {EXPERIENCE[p.experience] ?? p.experience} ». {p.description}</p>
         <div className="mt-5"><LinkButton to={`/nouveau-profil?p=${profil}${enPassé ? `&d=${asOf}` : ""}`} variant="onDark">Créer un nouveau profil</LinkButton></div>
       </Hero>
+      {p.kyc && <KycResume kyc={p.kyc} />}
       {data.contradictions.length > 0 && (
         <Notice tone="warn" title="Contradictions relevées entre tes règles">
           <ul className="mt-1 list-disc space-y-1 pl-5">{data.contradictions.map((k) => <li key={k.code}>{k.message}</li>)}</ul></Notice>)}
