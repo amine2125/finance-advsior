@@ -4,13 +4,6 @@
 
 html { color-scheme: light; }
 body { background: #f6f4ef; color: #151413; -webkit-font-smoothing: antialiased; }
-h1, h2, h3 { text-wrap: balance; }
-p { text-wrap: pretty; }
-.tabular { font-variant-numeric: tabular-nums; }
-::selection { background: #dde3ff; }
-:focus-visible { outline: 2px solid #3350ff; outline-offset: 2px; border-radius: 6px; }
-main:focus, main:focus-visible { outline: none; }
-
 /* ambient radial glows behind the page (accent at very low opacity) */
 .ambient { position: fixed; inset: 0; z-index: -1; pointer-events: none;
   background:
@@ -19,33 +12,27 @@ main:focus, main:focus-visible { outline: none; }
     radial-gradient(50rem 30rem at 50% 110%, rgba(51,80,255,0.05), transparent 60%); }
 .glass { background: rgba(251,250,247,0.72); -webkit-backdrop-filter: saturate(160%) blur(18px); backdrop-filter: saturate(160%) blur(18px); }
 .hairline { box-shadow: 0 0 0 1px rgba(21,20,19,0.06), inset 0 1px 0 rgba(255,255,255,0.75); }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; } }
+h1, h2, h3 { text-wrap: balance; }
+.tabular { font-variant-numeric: tabular-nums; }
+::selection { background: #dde3ff; }
+.tabular { font-variant-numeric: tabular-nums; }
+.prose-chat p { margin: 0.35rem 0; }
+.prose-chat p:first-child { margin-top: 0; }
+.prose-chat ul { list-style: disc; padding-left: 1.15rem; margin: 0.35rem 0; }
+.prose-chat ol { list-style: decimal; padding-left: 1.15rem; margin: 0.35rem 0; }
+.prose-chat li { margin: 0.15rem 0; }
+.prose-chat strong { color: #1a1a19; font-weight: 600; }
+.prose-chat h3, .prose-chat h4 { font-weight: 600; margin-top: 0.6rem; color: #1a1a19; }
+@keyframes pop { from { opacity: 0; transform: translateY(12px) scale(.98); } to { opacity: 1; transform: none; } }
+.animate-pop { animation: pop .18s ease-out; }
+@keyframes blink { 0%, 80%, 100% { opacity: .25; } 40% { opacity: 1; } }
+.dot { animation: blink 1.2s infinite both; }
+.dot:nth-child(2) { animation-delay: .2s; } .dot:nth-child(3) { animation-delay: .4s; }
 
+/* accessibility (keyboard only: nothing changes for mouse users) */
+:focus-visible { outline: 2px solid #3350ff; outline-offset: 2px; border-radius: 6px; }
+main:focus, main:focus-visible { outline: none; }
 .visuellement-cache { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .lien-evitement { position: absolute; left: 8px; top: -60px; background: #151413; color: #fff; padding: 8px 12px; border-radius: 10px; z-index: 100; }
 .lien-evitement:focus { top: 8px; }
-
-/* a number backed by an evidence object: dotted cobalt underline, opens the evidence drawer */
-.prouve { color: inherit; font: inherit; background: none; border: 0; padding: 0; cursor: pointer;
-  text-decoration: underline dotted #3350ff; text-decoration-thickness: 2px; text-underline-offset: 4px; }
-.prouve:hover { color: #2440eb; text-decoration-style: solid; }
-
-/* glossary term */
-.terme { text-decoration: underline dashed rgba(21,20,19,0.35); text-underline-offset: 4px; cursor: help; }
-
-/* skeleton */
-@keyframes shimmer { 0% { background-position: -400px 0; } 100% { background-position: 400px 0; } }
-.squelette { border-radius: 10px; background: linear-gradient(90deg, rgba(21,20,19,0.05) 25%, rgba(21,20,19,0.09) 50%, rgba(21,20,19,0.05) 75%); background-size: 800px 100%; animation: shimmer 1.4s infinite linear; }
-
-/* the signal halo: same gesture everywhere */
-.halo[data-niveau="attention"] { box-shadow: 0 0 0 1.5px #e59a00, 0 0 0 7px rgba(229,154,0,0.14); }
-.halo[data-niveau="pause"] { box-shadow: 0 0 0 1.5px #c4372d, 0 0 0 7px rgba(196,55,45,0.12); }
-.halo[data-niveau="ok"] { box-shadow: 0 0 0 1px rgba(15,138,95,0.45); }
-
-/* native dialog (pause de réflexion) */
-dialog.pause::backdrop { background: rgba(21,20,19,0.38); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); }
-
-/* range inputs in the accent */
-input[type="range"] { accent-color: #3350ff; }
-input[type="checkbox"] { accent-color: #151413; }
-
-@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; } }

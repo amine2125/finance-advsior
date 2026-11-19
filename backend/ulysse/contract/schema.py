@@ -107,6 +107,7 @@ class Profil(BaseModel):
     allocation: Allocation
     fictif: bool = True                            # always true: no real client data (PDF p.14)
     kyc: dict | None = None                        # « Connaître son client » reasoning, when the questionnaire was answered
+    questionnaire: dict | None = None              # the interface's raw answers, kept so the person can change one of them later
 
 
 class Contrat(BaseModel):
