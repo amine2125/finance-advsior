@@ -564,7 +564,8 @@ def decision_ordre(query, body):
     if not (execution or {}).get("deja_applique"):
         get_store().append("journal", pid, {"type": "decision", "a": now_iso(), "as_of": as_of, "ticker": body.get("ticker"), "choix": choix,
                                             "montant_cad": body.get("montant_cad"), "niveau": body.get("niveau"), "simulation": True,
-                                            "execute": execution is not None})
+                                            "execute": execution is not None,
+                                            **({"dossier": str(body["dossier"])[:64]} if body.get("dossier") else {})})
     msg = ("Ordre simulé appliqué à ton portefeuille fictif (aucune transaction réelle)." if execution
            else "Décision consignée (simulation : aucune transaction réelle).")
     return {"ok": True, "execute": execution is not None, "message": msg, **({"liquidites_cad": execution["liquidites_cad"]} if execution else {})}
@@ -581,6 +582,43 @@ def _apres_changement(pid: str, as_of: str) -> None:
 def voir_positions(query, body, pid):
     prof, _ = _profil(pid)
     return positions.vue(prof, _asof(query))
+
+
+@route("GET", "/api/profils/{pid}/historique")
+def historique_valeur(query, body, pid):
+    """Day-by-day value of the portfolio over the last `jours` days (home chart)."""
+    prof, _ = _profil(pid)
+    jours = int(query.get("jours") or 365)
+    if not 1 <= jours <= 4000:
+        raise HttpError(400, "jours doit être entre 1 et 4000")
+    return positions.historique(prof, _asof(query), jours)
+
+
+@route("POST", "/api/profils/{pid}/questionnaire")
+def maj_questionnaire(query, body, pid):
+    """« Ma situation a changé » : the SAME profile is rebuilt from the new answers (KYC, objectives, preferences). Holdings,
+    cash, journal and watch list stay; the contract gets a new version, and every rule the person changed by hand is kept."""
+    ancien_p, ancien_c = _profil(pid)
+    rep = Reponses(**body)
+    prof, con = construire(rep, pid)
+    prof = prof.model_copy(update={"allocation": ancien_p.allocation})
+    a_la_main = {h.get("clause") for h in ancien_c.historique}
+    gardees = {c.id: c for c in ancien_c.clauses if c.id in a_la_main and c.origine == "dit"}
+    contexte = "questionnaire « Connaître son client » mis à jour"
+    entree = {"version": ancien_c.version + 1, "le": now_iso(), "clause": "questionnaire", "avant": {"tolerance": ancien_p.tolerance},
+              "apres": {"tolerance": prof.tolerance}, "contexte": contexte}
+    new = Contrat(profil_id=pid, version=ancien_c.version + 1, cree_le=ancien_c.cree_le,
+                  clauses=[gardees.get(c.id, c) for c in con.clauses], historique=ancien_c.historique + [entree])
+    st = get_store()
+    st.put("profils", pid, prof.model_dump())
+    st.put("contrats", pid, new.model_dump())
+    st.put("contrats_versions", f"{pid}-v{new.version}", new.model_dump())
+    as_of = _asof(query)
+    st.append("journal", pid, {"type": "contrat", "a": now_iso(), "as_of": as_of, "version": new.version,
+                               "message": f"Questionnaire mis à jour : tolérance « {prof.tolerance} »."})
+    _apres_changement(pid, as_of)
+    v = get_datapack().asof(as_of)
+    return {"profil": prof.model_dump(), "contrat": new.model_dump(), "contradictions": _k(v, prof, new), "adaptation": adaptation(prof)}
 
 
 @route("POST", "/api/profils/{pid}/depot")

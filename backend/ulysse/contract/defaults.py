@@ -6,7 +6,9 @@ can be drafted into extra clauses by the LLM (planning/writing role), then valid
 """
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+import json
+
+from pydantic import BaseModel, Field, field_validator
 
 from ulysse.contract.kyc import Kyc, evaluer
 from ulysse.contract.schema import Allocation, Clause, Contrat, Objectif, Preferences, Profil
@@ -67,6 +69,14 @@ class Reponses(BaseModel):
     notifications_min: str = "attention"
     description: str = ""
     kyc: Kyc | None = None        # « Connaître son client »: when given, the LOWEST of the three measures sets the tolerance
+    questionnaire: dict | None = None   # raw answers of the interface's questionnaire (shown back, never read by the engine)
+
+    @field_validator("questionnaire")
+    @classmethod
+    def _taille(cls, q: dict | None) -> dict | None:
+        if q is not None and len(json.dumps(q, ensure_ascii=False)) > 20_000:
+            raise ValueError("questionnaire trop volumineux")
+        return q
 
 
 def construire(rep: Reponses, profil_id: str) -> tuple[Profil, Contrat]:
@@ -127,7 +137,7 @@ def construire(rep: Reponses, profil_id: str) -> tuple[Profil, Contrat]:
                     description=rep.description,
                     objectifs=[Objectif(id=f"O{i + 1}", libelle=o.libelle, horizon_annees=o.horizon_annees, part_pct=o.part_pct,
                                         montant_cible_cad=o.montant_cible_cad) for i, o in enumerate(rep.objectifs)],
-                    preferences=prefs, allocation=alloc, kyc=kyc)
+                    preferences=prefs, allocation=alloc, kyc=kyc, questionnaire=rep.questionnaire)
     return profil, Contrat(profil_id=profil_id, clauses=clauses)
 
 

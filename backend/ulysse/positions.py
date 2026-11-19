@@ -111,6 +111,77 @@ def vue(prof: Profil, as_of: str) -> dict:
             "note": "Simulation : placements et liquidités fictifs, évalués aux vrais cours de clôture convertis en CAD."}
 
 
+MAX_POINTS_HISTORIQUE = 400
+
+
+def _jour(dates: np.ndarray, d: str, i0: int) -> int:
+    """Index (from i0) of the first close on or after `d`; a change dated after the last close counts on the last point."""
+    return min(max(0, int(np.searchsorted(dates, np.datetime64(d))) - i0), len(dates) - 1 - i0)
+
+
+def historique(prof: Profil, as_of: str, jours: int) -> dict:
+    """Value of the profile's portfolio day by day over the last `jours` days (quantities and cash as they were each day,
+    closing prices in CAD carried over non-trading days). The period change leaves out money that came from outside
+    (deposits, holdings entered or connected), so a deposit never shows as a gain. Past only: nothing after `as_of`."""
+    dp = get_datapack()
+    v = dp.asof(as_of)
+    rec = record(prof.id)
+    if rec is None:
+        pf = portefeuille(prof, as_of)
+        debut = pf.meta["constitue_le"]
+        lots = [{"ticker": h.ticker, "quantite": h.quantity, "date": debut, "prix_cad": None, "origine": "allocation_initiale"} for h in pf.holdings]
+        mvts = [{"date": debut, "type": "initial", "montant_cad": pf.cash_cad}]
+    else:
+        lots = [lot for lot in rec["lots"] if lot["date"] <= as_of]
+        mvts = [m for m in rec["mouvements"] if m["date"] <= as_of]
+    dates = v.dates
+    debut_pf = min([lot["date"] for lot in lots] + [m["date"] for m in mvts], default=str(v.day))
+    fenetre = max(str(v.day - np.timedelta64(max(1, int(jours)), "D")), debut_pf)
+    keep = np.flatnonzero(dates >= np.datetime64(fenetre))
+    if not len(keep):
+        return {"as_of": str(v.day), "jours": jours, "debut": debut_pf, "serie": [], "variation_cad": None, "variation_pct": None,
+                "veille_cad": None}
+    i0 = int(keep[0])
+    tickers = sorted({lot["ticker"] for lot in lots})
+    n = len(dates)
+    valeur = np.zeros(n - i0)
+    entrees = np.zeros(n - i0)     # money from outside, by day (deposits; holdings entered, connected or allocated)
+    for t in tickers:
+        px = v.series(t, "close", "CAD")
+        ok = ~np.isnan(px)
+        last = np.where(ok, np.arange(n), -1)
+        np.maximum.accumulate(last, out=last)
+        px = np.where(last >= 0, px[np.clip(last, 0, None)], np.nan)[i0:]
+        q = np.zeros(n - i0)
+        for lot in (x for x in lots if x["ticker"] == t):
+            k = _jour(dates, lot["date"], i0)
+            q[k:] += float(lot["quantite"])
+            if lot.get("origine") not in ("ordre", "vente") and lot["date"] >= fenetre:
+                pk = px[k] if not np.isnan(px[k]) else float(lot.get("prix_cad") or 0)
+                entrees[k] += float(lot["quantite"]) * pk
+        valeur += np.nan_to_num(q * px)
+    for m in mvts:
+        k = _jour(dates, m["date"], i0)
+        valeur[k:] += float(m["montant_cad"])
+        if m.get("type") in ("depot", "initial") and m["date"] >= fenetre:
+            entrees[k] += float(m["montant_cad"])
+    entrees[0] = 0.0                 # what is there on the first day is the starting point, not a flow
+    pas = max(1, -(-len(valeur) // MAX_POINTS_HISTORIQUE))
+    idx = list(range(0, len(valeur), pas))
+    if idx[-1] != len(valeur) - 1:
+        idx.append(len(valeur) - 1)
+    serie = [{"date": str(dates[i0 + i]), "valeur_cad": round(float(valeur[i]), 2)} for i in idx]
+    gain = float(valeur[-1] - valeur[0] - entrees.sum())
+    base = float(valeur[0] + entrees.sum())
+    trad = np.flatnonzero(np.diff(valeur) != 0)
+    # last move between two closes, without the money added since
+    veille = float(valeur[-1] - valeur[trad[-1]] - entrees[trad[-1] + 1:].sum()) if len(trad) else 0.0
+    return {"as_of": str(v.day), "jours": jours, "debut": debut_pf, "serie": serie, "variation_cad": round(gain, 2),
+            "variation_pct": round(gain / base * 100, 4) if base > 0 else None, "veille_cad": round(veille, 2),
+            "note": "Valeur quotidienne du portefeuille simulé (cours de clôture en CAD). La variation exclut l'argent ajouté "
+                    "(dépôts, placements saisis ou connectés)."}
+
+
 # ------------------------------------------------------------------------------------------------ changes
 
 def _id() -> str:
