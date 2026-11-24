@@ -3,16 +3,17 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Search, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useApi } from "../hooks/useApi";
-import { friendly, kind } from "../lib/assets";
+import { useMarket } from "../hooks/useMarket";
+import { friendly, group, kind } from "../lib/assets";
 import { softSpring } from "./motion";
 import { TickerLogo, sym } from "./Ticker";
 
 /** Opens the search from anywhere (top bar, home tiles): window.dispatchEvent(new Event(OPEN_SEARCH)). */
-export const OPEN_SEARCH = "aegis:search";
+export const OPEN_SEARCH = "ulysse:recherche";
 export const openSearch = () => window.dispatchEvent(new Event(OPEN_SEARCH));
 
-const RISK: Record<string, [string, string]> = { LOW: ["Risque faible", "text-gain-700"], MEDIUM: ["Risque moyen", "text-primary-600"], HIGH: ["Risque élevé", "text-accent-700"] };
+/** For a reference position (5 % of the portfolio), what the profile's rules say: the Vigie pre-computes it for every security. */
+const RISK: Record<string, [string, string]> = { ok: ["Compatible", "text-gain-700"], attention: ["À regarder", "text-primary-600"], pause: ["Hors de vos règles", "text-accent-700"] };
 const GROUPS: [string, string][] = [["equity", "Actions"], ["etf", "Fonds indiciels (FNB)"], ["crypto", "Cryptoactifs"]];
 const norm = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
@@ -23,7 +24,7 @@ export default function AssetSearch() {
   const [i, setI] = useState(0);
   const nav = useNavigate();
   const input = useRef<HTMLInputElement>(null);
-  const list = useApi<any>(open ? "/assets" : null, [open]);
+  const list = useMarket(open);
   useEffect(() => {
     const show = () => { setQ(""); setI(0); setOpen(true); };
     const key = (e: KeyboardEvent) => {
@@ -37,13 +38,13 @@ export default function AssetSearch() {
   useEffect(() => { if (open) setTimeout(() => input.current?.focus(), 30); }, [open]);
 
   const rows = useMemo(() => {
-    const all: any[] = list.data?.assets || [];
+    const all: any[] = list.data?.actifs || [];
     const n = norm(q.trim());
-    const hit = (a: any) => !n || [a.asset_id, sym(a.asset_id), a.name, friendly(a.asset_id, a.name)].some((s) => norm(String(s)).includes(n));
-    const order = (a: any) => GROUPS.findIndex(([c]) => c === a.asset_class);
+    const hit = (a: any) => !n || [a.ticker, sym(a.ticker), a.name, friendly(a.ticker, a.name)].some((s) => norm(String(s)).includes(n));
+    const order = (a: any) => GROUPS.findIndex(([c]) => c === group(a));
     return all.filter(hit).sort((a, b) => {
-      const exact = (x: any) => (norm(sym(x.asset_id)) === n ? 0 : norm(sym(x.asset_id)).startsWith(n) ? 1 : 2);
-      return (n ? exact(a) - exact(b) : 0) || order(a) - order(b) || sym(a.asset_id).localeCompare(sym(b.asset_id));
+      const exact = (x: any) => (norm(sym(x.ticker)) === n ? 0 : norm(sym(x.ticker)).startsWith(n) ? 1 : 2);
+      return (n ? exact(a) - exact(b) : 0) || order(a) - order(b) || sym(a.ticker).localeCompare(sym(b.ticker));
     });
   }, [list.data, q]);
   const go = (id: string) => { setOpen(false); nav(`/placement/${encodeURIComponent(id)}`); };
@@ -63,7 +64,7 @@ export default function AssetSearch() {
                   if (e.key === "Escape") setOpen(false);
                   else if (e.key === "ArrowDown") { e.preventDefault(); setI((v) => Math.min(rows.length - 1, v + 1)); }
                   else if (e.key === "ArrowUp") { e.preventDefault(); setI((v) => Math.max(0, v - 1)); }
-                  else if (e.key === "Enter" && rows[i]) go(rows[i].asset_id);
+                  else if (e.key === "Enter" && rows[i]) go(rows[i].ticker);
                 }}
                 placeholder="Apple, NVDA, Bitcoin, obligations…" aria-label="Nom ou symbole du titre"
                 className="h-14 min-w-0 flex-1 bg-transparent text-[17px] text-ink outline-none placeholder:text-ink-muted/70" />
@@ -71,19 +72,19 @@ export default function AssetSearch() {
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto p-2">
               {list.loading && !list.data && <p className="px-3 py-6 text-center text-sm text-ink-muted">Chargement…</p>}
-              {list.data && !rows.length && <p className="px-3 py-6 text-center text-sm text-ink-muted">Aucun titre ne correspond. Le simulateur couvre {list.data.assets.length} placements.</p>}
+              {list.data && !rows.length && <p className="px-3 py-6 text-center text-sm text-ink-muted">Aucun titre ne correspond. Le simulateur couvre {list.data.actifs.length} placements.</p>}
               {rows.map((a: any, k: number) => {
-                const head = !q.trim() && (k === 0 || rows[k - 1].asset_class !== a.asset_class);
-                const [risk, tone] = RISK[a.tier] || ["Risque inconnu", "text-ink-muted"];
+                const head = !q.trim() && (k === 0 || group(rows[k - 1]) !== group(a));
+                const [risk, tone] = RISK[a.signal?.niveau] || ["", "text-ink-muted"];
                 return (
-                  <div key={a.asset_id}>
-                    {head && <div className="px-3 pb-1 pt-3 text-xs font-semibold text-ink-muted">{GROUPS.find(([c]) => c === a.asset_class)?.[1]}</div>}
-                    <button onMouseEnter={() => setI(k)} onClick={() => go(a.asset_id)} data-testid="asset-search-row"
+                  <div key={a.ticker}>
+                    {head && <div className="px-3 pb-1 pt-3 text-xs font-semibold text-ink-muted">{GROUPS.find(([c]) => c === group(a))?.[1]}</div>}
+                    <button onMouseEnter={() => setI(k)} onClick={() => go(a.ticker)} data-testid="asset-search-row"
                       className={clsx("flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left", k === i ? "bg-ink/[0.05]" : "")}>
-                      <TickerLogo id={a.asset_id} size={32} />
+                      <TickerLogo id={a.ticker} size={32} />
                       <span className="min-w-0 flex-1">
-                        <span className="block text-sm font-semibold text-ink">{sym(a.asset_id)}</span>
-                        <span className="block truncate text-xs text-ink-muted">{friendly(a.asset_id, a.name)} · {kind(a)}</span>
+                        <span className="block text-sm font-semibold text-ink">{sym(a.ticker)}</span>
+                        <span className="block truncate text-xs text-ink-muted">{friendly(a.ticker, a.name)} · {kind(a)}</span>
                       </span>
                       <span className={clsx("shrink-0 text-xs font-medium", tone)}>{risk}</span>
                     </button>
@@ -91,7 +92,7 @@ export default function AssetSearch() {
                 );
               })}
             </div>
-            <p className="border-t border-line px-5 py-3 text-xs text-ink-muted">Ouvrez un titre pour voir son risque et demander aux agents s'il convient à votre profil.</p>
+            <p className="border-t border-line px-5 py-3 text-xs text-ink-muted">À droite : ce que disent vos règles pour une position de 5 % de votre portefeuille. Ouvrez un titre pour voir son risque et demander aux agents.</p>
           </motion.div>
         </motion.div>
       )}

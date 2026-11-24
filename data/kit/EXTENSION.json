@@ -1,0 +1,209 @@
+{
+  "official_window": [
+    "2021-11-12",
+    "2026-11-12"
+  ],
+  "extended_to": "2026-11-14",
+  "added_from": "2026-11-13",
+  "retrieved_on": "2026-11-15",
+  "source_script": "build_dataset.py (official kit, START/END changed)",
+  "rows_added": {
+    "prices": 33,
+    "corporate_actions": 1,
+    "fx": 1,
+    "macro": 3
+  },
+  "overlap_check": {
+    "calendar_days": 30,
+    "close_tolerance": 0.005,
+    "per_ticker": {
+      "AAPL": {
+        "common_days": 23,
+        "max_close_gap": 0.0,
+        "added_days": 1,
+        "last_day": "2026-11-13"
+      },
+      "AGG": {
+        "common_days": 23,
+        "max_close_gap": 0.0,
+        "added_days": 1,
+        "last_day": "2026-11-13"
+      },
+      "AMZN": {
+        "common_days": 23,
+        "max_close_gap": 0.0,
+        "added_days": 1,
+        "last_day": "2026-11-13"
+      },
+      "ATD.TO": {
+        "common_days": 23,
+        "max_close_gap": 0.0,
+        "added_days": 1,
+        "last_day": "2026-11-13"
+      },
+      "BTC-USD": {
+        "common_days": 31,
+        "max_close_gap": 0.0,
+        "added_days": 2,
+        "last_day": "2026-11-14"
+      },
+      "CNQ.TO": {
+        "common_days": 23,
+        "max_close_gap": 0.0,
+        "added_days": 1,
+        "last_day": "2026-11-13"
+      },
+      "CNR.TO": {
+        "common_days": 23,
+        "max_close_gap": 0.0,
+        "added_days": 1,
+        "last_day": "2026-11-13"
+      },
+      "CSU.TO": {
+        "common_days": 23,
+        "max_close_gap": 0.0,
+        "added_days": 1,
+        "last_day": "2026-11-13"
+      },
+      "ENB.TO": {
+        "common_days": 23,
+        "max_close_gap": 0.0,
+        "added_days": 1,
+        "last_day": "2026-11-13"
+      },
+      "ESGV": {
+        "common_days": 23,
+        "max_close_gap": 0.0,
+        "added_days": 1,
+        "last_day": "2026-11-13"
+      },
+      "ETH-USD": {
+        "common_days": 31,
+        "max_close_gap": 0.0,
+        "added_days": 2,
+        "last_day": "2026-11-14"
+      },
+      "FTS.TO": {
+        "common_days": 23,
+        "max_close_gap": 0.0,
+        "added_days": 1,
+        "last_day": "2026-11-13"
+      },
+      "GLD": {
+        "common_days": 23,
+        "max_close_gap": 0.0,
+        "added_days": 1,
+        "last_day": "2026-11-13"
+      },
+      "GOOGL": {
+        "common_days": 23,
+        "max_close_gap": 0.0,
+        "added_days": 1,
+        "last_day": "2026-11-13"
+      },
+      "JNJ": {
+        "common_days": 23,
+        "max_close_gap": 0.0,
+        "added_days": 1,
+        "last_day": "2026-11-13"
+      },
+      "JPM": {
+        "common_days": 23,
+        "max_close_gap": 0.0,
+        "added_days": 1,
+        "last_day": "2026-11-13"
+      },
+      "MFC.TO": {
+        "common_days": 23,
+        "max_close_gap": 0.0,
+        "added_days": 1,
+        "last_day": "2026-11-13"
+      },
+      "MSFT": {
+        "common_days": 23,
+        "max_close_gap": 0.0,
+        "added_days": 1,
+        "last_day": "2026-11-13"
+      },
+      "NVDA": {
+        "common_days": 23,
+        "max_close_gap": 0.0,
+        "added_days": 1,
+        "last_day": "2026-11-13"
+      },
+      "PG": {
+        "common_days": 23,
+        "max_close_gap": 0.0,
+        "added_days": 1,
+        "last_day": "2026-11-13"
+      },
+      "QQQ": {
+        "common_days": 23,
+        "max_close_gap": 0.0,
+        "added_days": 1,
+        "last_day": "2026-11-13"
+      },
+      "RY.TO": {
+        "common_days": 23,
+        "max_close_gap": 0.0,
+        "added_days": 1,
+        "last_day": "2026-11-13"
+      },
+      "SHOP.TO": {
+        "common_days": 23,
+        "max_close_gap": 0.0,
+        "added_days": 1,
+        "last_day": "2026-11-13"
+      },
+      "SPY": {
+        "common_days": 23,
+        "max_close_gap": 0.0,
+        "added_days": 1,
+        "last_day": "2026-11-13"
+      },
+      "TD.TO": {
+        "common_days": 23,
+        "max_close_gap": 0.0,
+        "added_days": 1,
+        "last_day": "2026-11-13"
+      },
+      "TLT": {
+        "common_days": 23,
+        "max_close_gap": 0.0,
+        "added_days": 1,
+        "last_day": "2026-11-13"
+      },
+      "TSLA": {
+        "common_days": 23,
+        "max_close_gap": 0.0,
+        "added_days": 1,
+        "last_day": "2026-11-13"
+      },
+      "XBB.TO": {
+        "common_days": 23,
+        "max_close_gap": 0.0,
+        "added_days": 1,
+        "last_day": "2026-11-13"
+      },
+      "XIU.TO": {
+        "common_days": 23,
+        "max_close_gap": 0.0,
+        "added_days": 1,
+        "last_day": "2026-11-13"
+      },
+      "XOM": {
+        "common_days": 23,
+        "max_close_gap": 0.0,
+        "added_days": 1,
+        "last_day": "2026-11-13"
+      },
+      "ZST.TO": {
+        "common_days": 23,
+        "max_close_gap": 0.0,
+        "added_days": 1,
+        "last_day": "2026-11-13"
+      }
+    }
+  },
+  "warnings": []
+}

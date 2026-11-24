@@ -54,7 +54,7 @@ export function LessonPage() {
   const idx = LESSONS.findIndex((x) => x.id === id);
   const next = LESSONS[idx + 1];
   useEffect(() => {
-    if (l && !(me?.guide?.lessons || []).includes(l.id)) api.put("/guide", { lesson_done: l.id }).then(() => reload()).catch(() => undefined);
+    if (l && !(me?.guide?.lessons || []).includes(l.id)) api.post("/guide", { lecon_lue: l.id }).then(() => reload()).catch(() => undefined);
     window.scrollTo({ top: 0 });
   }, [id]); // eslint-disable-line
   if (!l) return <div className="mx-auto max-w-2xl px-5 py-10"><Link to="/apprendre" className="text-ink-muted">← Apprendre</Link></div>;
@@ -238,7 +238,7 @@ function Fees() {
 }
 
 function Agents() {
-  const steps = ["Profil", "Compréhension", "Données", "Proposition", "Vérification", "Test 2022", "Pour et contre", "Explication"];
+  const steps = ["Votre profil", "Plan d'analyse", "Calculs", "Vos règles", "Niveau du signal", "Pour et contre", "Explication", "Vérification"];
   const ids = useMemo(() => steps.map((_, i) => i), []); // eslint-disable-line
   return (
     <div>

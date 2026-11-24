@@ -1,8 +1,8 @@
 import clsx from "clsx";
 import { AnimatePresence, motion } from "framer-motion";
 import {
-  ArrowLeft, ArrowRight, BadgeCheck, Calculator, Check, ChevronDown, CloudLightning, Database, ExternalLink, Gauge, Info, LucideIcon, Minus,
-  Newspaper, PenLine, PieChart, Plus, Repeat, ScanSearch, ShieldCheck, TrendingDown, TrendingUp, TriangleAlert, UserRound, X,
+  ArrowLeft, ArrowRight, BadgeCheck, Calculator, Check, ChevronDown, ExternalLink, Gauge, Info, LucideIcon, Minus, PenLine, Plus,
+  ScanSearch, Scale, Send, ShieldCheck, SlidersHorizontal, TriangleAlert, UserRound, X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
@@ -11,56 +11,57 @@ import { sym, TickerLogo } from "../components/Ticker";
 import HowItWorks from "../components/HowItWorks";
 import { Button, ErrorBox, Spinner } from "../components/ui";
 import { useApi } from "../hooks/useApi";
-import { useApp } from "../hooks/useApp";
+import { useApp, useProfilePath } from "../hooks/useApp";
 import { friendly } from "../lib/assets";
 import { cad, date, pct } from "../lib/format";
-import { api, ApiError, Job, JobStep } from "../services/api";
-import { launchMandate } from "./Home";
+import { describe, REVIEW, requestOf, useLaunch } from "../lib/launch";
+import { clauseShort, levelLabel, NIVEAU, Niveau, Preuve, Signal, StatutClause, vous } from "../lib/ulysse";
+import { api, ApiError } from "../services/api";
 
 // ================================================================================================ live run
-/** One short sentence per agent step, in the client's words. */
+/** One short sentence per agent step, in the client's words (steps of the ULYSSE orchestrator). */
 const STEP_UI: Record<string, [string, LucideIcon]> = {
-  "profile.read": ["Lecture de votre profil", UserRound],
-  "supervisor.understand": ["Compréhension de votre demande", ScanSearch],
-  "data.collect": ["Lecture des prix du marché", Database],
-  "market_intelligence.research": ["Lecture des nouvelles", Newspaper],
-  "quant.proposal": ["Construction de la proposition", Calculator],
-  "governance.orders": ["Vérification de vos limites", ShieldCheck],
-  "scenario.stress": ["Test face à la crise de 2022", CloudLightning],
-  "opportunity.r1": ["Recherche des avantages", TrendingUp],
-  "risk.r1": ["Recherche des risques", TrendingDown],
-  "audit.claims": ["Vérification de chaque chiffre", BadgeCheck],
-  "supervisor.explain": ["Rédaction de la réponse", PenLine],
+  contexte: ["Lecture de votre profil", UserRound],
+  planification: ["Choix des analyses utiles", ScanSearch],
+  outils: ["Calcul des chiffres et lecture des sources", Calculator],
+  gouvernance: ["Vérification de vos règles", ShieldCheck],
+  signal: ["Décision du niveau du signal", Gauge],
+  debat: ["Le pour et le contre", Scale],
+  redaction: ["Rédaction de la réponse", PenLine],
+  verification: ["Vérification de chaque chiffre", BadgeCheck],
+  publication: ["Publication du dossier", Send],
 };
 const STEP_MIN_MS = 650; // each sentence stays long enough to be read, even when a step is instant
 const STALL_MS = 150_000;
+
+type Etape = { etape: string; statut: string; details?: any; preuves?: string[]; duree_ms?: number };
 
 /** The agents at work: one animated mark and one sentence at a time, then straight to the answer. */
 export function MandateRun() {
   const { jobId = "" } = useParams();
   const [params] = useSearchParams();
   const nav = useNavigate();
-  const [job, setJob] = useState<Job | null>(null);
+  const launch = useLaunch();
+  const [d, setD] = useState<any>(null);
   const [error, setError] = useState<ApiError | null>(null);
-  const { portfolio } = useApp();
   const [shown, setShown] = useState(0);
   const [stalled, setStalled] = useState(false);
-  const sig = (job?.steps || []).map((s) => s.status).join(",");
+  const sig = (d?.etapes || []).map((s: Etape) => s.statut).join(",");
   useEffect(() => {  // a worker that dies (restart, timeout) never reports: no step change for 2,5 min = interrupted
-    if (!job || job.status === "done" || job.status === "failed") return;
+    if (!d || d.etat !== "en_cours") return;
     setStalled(false);
     const t = setTimeout(() => setStalled(true), STALL_MS);
     return () => clearTimeout(t);
-  }, [sig, job?.status]); // eslint-disable-line
+  }, [sig, d?.etat]); // eslint-disable-line
   useEffect(() => {
     let alive = true;
     (async () => {
       try {
         for (;;) {
-          const j = await api.get<Job>(`/jobs/${jobId}`);
+          const x = await api.get<any>(`/dossiers/${encodeURIComponent(jobId)}`);
           if (!alive) return;
-          setJob(j);
-          if (j.status === "done" || j.status === "failed") return;
+          setD(x);
+          if (x.etat !== "en_cours") return;
           await new Promise((r) => setTimeout(r, 600));
         }
       } catch (e) { if (alive) setError(e as ApiError); }
@@ -68,28 +69,28 @@ export function MandateRun() {
     return () => { alive = false; };
   }, [jobId]);
 
-  const steps = (job?.steps || []).filter((s) => s.status !== "skipped");
-  const firstOpen = steps.findIndex((s) => s.status === "pending" || s.status === "running");
-  const reached = job?.status === "done" ? steps.length : firstOpen < 0 ? steps.length : firstOpen;
+  const steps: Etape[] = d?.etapes || [];
+  const firstOpen = steps.findIndex((s) => s.statut === "a_faire" || s.statut === "en_cours");
+  const reached = d?.etat === "termine" ? steps.length : firstOpen < 0 ? steps.length : firstOpen;
   useEffect(() => {
     if (shown >= reached) return;
     // Once the answer is ready, the remaining sentences go by quickly: the person is not kept waiting for the animation.
-    const t = setTimeout(() => setShown((v) => v + 1), job?.status === "done" ? 220 : STEP_MIN_MS);
+    const t = setTimeout(() => setShown((v) => v + 1), d?.etat === "termine" ? 220 : STEP_MIN_MS);
     return () => clearTimeout(t);
-  }, [shown, reached, job?.status]);
-  const failed = job?.status === "failed" || !!error || stalled;
+  }, [shown, reached, d?.etat]);
+  const failed = d?.etat === "echec" || !!error || stalled;
   const [relaunching, setRelaunching] = useState(false);
-  const ready = job?.status === "done" && !!job.result_ref && steps.length > 0 && shown >= steps.length;
+  const ready = d?.etat === "termine" && steps.length > 0 && shown >= steps.length;
   useEffect(() => {
     if (!ready) return;
-    const t = setTimeout(() => nav(`/mandats/${job!.result_ref}`, { replace: true }), 750);
+    const t = setTimeout(() => nav(`/mandats/${jobId}`, { replace: true }), 750);
     return () => clearTimeout(t);
   }, [ready]); // eslint-disable-line
 
   const q = params.get("q") || "";
   const cur = steps[Math.min(shown, Math.max(0, steps.length - 1))];
   const [phrase, Icon] = ready ? ["C'est prêt", Check] as [string, LucideIcon] : failed ? ["Analyse interrompue", X] as [string, LucideIcon]
-    : cur ? STEP_UI[cur.step_id] || [cur.label.split(" : ")[0], Calculator] : ["Les agents se préparent", ScanSearch] as [string, LucideIcon];
+    : cur ? STEP_UI[cur.etape] || [cur.etape, Calculator] : ["Les agents se préparent", ScanSearch] as [string, LucideIcon];
   const progress = steps.length ? Math.min(1, shown / steps.length) : 0.04;
 
   return (
@@ -110,9 +111,9 @@ export function MandateRun() {
       </div>
       {failed && (
         <div className="mt-8">
-          <p className="text-sm text-ink-soft">{stalled ? "Les agents ne répondent plus. Relancez l'analyse : elle reprend depuis le début." : job?.error || error?.message}</p>
+          <p className="text-sm text-ink-soft">{stalled ? "Les agents ne répondent plus. Relancez l'analyse : elle reprend depuis le début." : d?.erreur || error?.message}</p>
           <div className="mt-4 flex justify-center gap-2">
-            <Button disabled={relaunching} onClick={async () => { setRelaunching(true); try { await launchMandate(nav, q, portfolio?.portfolio_id); } catch { setRelaunching(false); } }}>{relaunching ? "Relance…" : "Relancer"}</Button>
+            <Button disabled={relaunching} onClick={async () => { setRelaunching(true); try { await launch(q || describe(d?.intention), d?.intention); } catch { setRelaunching(false); } }}>{relaunching ? "Relance…" : "Relancer"}</Button>
             <Link to={`/?demande=${encodeURIComponent(q)}`}><Button variant="ghost">Reformuler</Button></Link>
           </div>
         </div>
@@ -145,35 +146,63 @@ function Orb({ Icon, iconKey, state }: { Icon: LucideIcon; iconKey: string; stat
   );
 }
 
-/** Full step list with durations: shown only in the « Trace » tab of the detailed analysis. */
-/** What did the work in each step: deterministic Python, a language model, or both (the jury sees agents are not decoration). */
+/** What did the work in each step: deterministic Python, a language model, or both (agents are not decoration). */
+const ENGINE: Record<string, "calcul" | "ia" | "mixte"> = {
+  contexte: "calcul", planification: "mixte", outils: "calcul", gouvernance: "calcul", signal: "calcul", debat: "mixte", redaction: "ia", verification: "calcul", publication: "calcul",
+};
 const ENGINE_FR: Record<string, string> = { calcul: "Calcul Python", ia: "IA (Bedrock)", mixte: "Calcul + IA" };
 const ENGINE_TIP: Record<string, string> = {
   calcul: "Règles et formules testées, sans modèle de langage",
-  ia: "Un modèle de langage rédige ; chaque chiffre cité est vérifié contre les calculs",
-  mixte: "Règles d'abord ; le modèle de langage sert seulement à reconnaître un nom ou à extraire des affirmations",
+  ia: "Un modèle de langage rédige ; chaque chiffre cité est vérifié contre les calculs, sinon un gabarit écrit en code prend le relais",
+  mixte: "Un modèle de langage propose ; le code valide chaque choix et chaque phrase",
+};
+const AGENT: Record<string, [string, string]> = {
+  contexte: ["Agent Contexte", "profil, règles et données à la date simulée"], planification: ["Agent Planificateur", "choisit les analyses utiles"],
+  outils: ["Outils d'analyse", "calculs et sources officielles"], gouvernance: ["Agent Gouvernance", "chaque règle et ses contradictions"],
+  signal: ["Politique de signal", "niveau décidé par des règles écrites"], debat: ["Agents Opportunités et Risques", "le pour et le contre"],
+  redaction: ["Agent Explication", "rédige à partir des seules preuves"], verification: ["Vérificateur", "chaque chiffre de chaque phrase"],
+  publication: ["Publication", "dossier vérifié, inscrit au journal"],
 };
 
-export function Pipeline({ steps }: { steps: JobStep[] }) {
+function stepDetail(e: Etape): string | null {
+  const det = e.details ?? {};
+  if (e.etape === "contexte" && det.contrat_version) return `Règles version ${det.contrat_version}, données jusqu'au ${date(det.donnees_jusqu_au)}`;
+  if (e.etape === "planification" && det.modules_de_base) return `${det.modules_de_base.length + (det.modules_ajoutes?.length ?? 0)} analyses retenues (planifié par ${det.planifie_par === "repli_code" ? "le code" : det.planifie_par})`;
+  if (e.etape === "outils" && det.appels) return det.appels.map((a: any) => `${a.libelle}${a.statut === "echec" ? " ✕" : ""}`).join(" · ");
+  if (e.etape === "gouvernance" && det.statuts) return `${det.statuts.length} règles évaluées${det.conflits?.length ? `, ${det.conflits.length} contradiction(s)` : ""}`;
+  if (e.etape === "signal" && det.niveau) return `${NIVEAU[det.niveau as Niveau]?.label ?? det.niveau} (règles ${(det.regles || []).join(", ")})`;
+  if (e.etape === "debat" && det.pour) return `${det.pour.phrases} phrase(s) pour, ${det.contre?.phrases ?? 0} contre`;
+  if (e.etape === "redaction" && det.redige_par) return det.redige_par === "gabarit" ? "Gabarit écrit en code" : `Rédigé par ${det.redige_par}`;
+  if (e.etape === "verification" && det.essais?.length) return `${det.essais.length} essai(s)${det.repli ? ", repli sur le gabarit" : ""}`;
+  if (e.etape === "publication" && det.preuves != null) return `${det.preuves} preuves liées`;
+  return null;
+}
+
+/** Full step list with durations: shown in the « Trace des agents » tab. */
+export function Pipeline({ steps }: { steps: Etape[] }) {
   if (!steps.length) return <Spinner label="Démarrage des agents…" />;
   return (
     <ol>
       {steps.map((s) => {
-        const [agent, task] = s.label.split(" : ");
+        const [agent, task] = AGENT[s.etape] || [s.etape, ""];
+        const engine = ENGINE[s.etape];
+        const ok = s.statut === "termine";
+        const bad = s.statut === "echec" || s.statut === "rejet";
+        const detail = stepDetail(s);
         return (
-          <li key={s.step_id} className="flex gap-3.5 py-3">
+          <li key={s.etape} className="flex gap-3.5 py-3">
             <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center">
-              {s.status === "done" ? <span className="grid h-5 w-5 place-items-center rounded-full bg-ink"><Check className="h-3 w-3 text-white" strokeWidth={3} /></span>
-                : s.status === "failed" ? <span className="grid h-5 w-5 place-items-center rounded-full bg-accent-50"><X className="h-3 w-3 text-accent-700" strokeWidth={3} /></span>
+              {ok ? <span className="grid h-5 w-5 place-items-center rounded-full bg-ink"><Check className="h-3 w-3 text-white" strokeWidth={3} /></span>
+                : bad ? <span className="grid h-5 w-5 place-items-center rounded-full bg-accent-50"><X className="h-3 w-3 text-accent-700" strokeWidth={3} /></span>
                   : <span className="grid h-5 w-5 place-items-center rounded-full bg-ink/[0.05]"><Minus className="h-3 w-3 text-ink-muted" strokeWidth={3} /></span>}
             </span>
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-baseline justify-between gap-x-3">
                 <span className="text-sm text-ink"><span className="font-semibold">{agent}</span>{task ? <span className="text-ink-muted"> · {task}</span> : null}
-                  {s.engine && <span className="ml-2 rounded-full bg-ink/[0.05] px-2 py-0.5 text-[11px] font-medium text-ink-muted" title={ENGINE_TIP[s.engine]}>{ENGINE_FR[s.engine]}</span>}</span>
-                {s.latency_ms > 0 && <span className="tabular-nums text-[11px] text-ink-muted">{(s.latency_ms / 1000).toFixed(1).replace(".", ",")} s{s.model_id ? ` · ${s.model_id.split(".").slice(-1)[0].split("-v")[0]}` : ""}</span>}
+                  {engine && <span className="ml-2 rounded-full bg-ink/[0.05] px-2 py-0.5 text-[11px] font-medium text-ink-muted" title={ENGINE_TIP[engine]}>{ENGINE_FR[engine]}</span>}</span>
+                {(s.duree_ms ?? 0) > 0 && <span className="tabular-nums text-[11px] text-ink-muted">{s.duree_ms! >= 1000 ? `${(s.duree_ms! / 1000).toFixed(1).replace(".", ",")} s` : `${Math.round(s.duree_ms!)} ms`}</span>}
               </div>
-              {s.detail && <p className="mt-0.5 text-sm leading-snug text-ink-muted">{s.detail}</p>}
+              {detail && <p className="mt-0.5 text-sm leading-snug text-ink-muted">{detail}</p>}
             </div>
           </li>
         );
@@ -182,68 +211,104 @@ export function Pipeline({ steps }: { steps: JobStep[] }) {
   );
 }
 
-// ================================================================================================ proposal
+// ================================================================================================ the answer
 type Tab = "why" | "checks" | "stress" | "debate" | "trace";
 const TABS: [Tab, string][] = [["why", "Pourquoi"], ["checks", "Contrôles"], ["stress", "Scénarios"], ["debate", "Pour et contre"], ["trace", "Trace des agents"]];
-const TIER: Record<string, string> = { LOW: "Faible", MEDIUM: "Moyen", HIGH: "Élevé" };
-const TIER_I: Record<string, number> = { LOW: 0, MEDIUM: 1, HIGH: 2 };
 type Tone = "good" | "mid" | "bad";
+const TONE: Record<Niveau, Tone> = { ok: "good", attention: "mid", pause: "bad", aucun: "good" };
 
 /** The answer in a few words, and how it looks (green yes, cobalt « yes, but », red no). */
-function verdict(m: any): { title: string; tone: Tone } {
-  const R = m.requested;
-  const kind = m.intent?.kind;
-  if (kind === "buy_asset" && R) {
-    const n = sym(R.asset_id);
-    if (R.verdict === "suitable" && R.tier === "HIGH") return { title: `${n} : possible, mais risqué`, tone: "mid" };
-    return R.verdict === "suitable" ? { title: `${n} : bonne idée pour vous`, tone: "good" }
-      : R.verdict === "partial" ? { title: `${n} : oui, jusqu'à ${cad(R.max_amount_cad)}`, tone: "mid" }
-        : { title: `${n} : pas pour vous`, tone: "bad" };
+function verdict(d: any): { title: string; tone: Tone } {
+  const it = d.intention || {};
+  const s: Signal = d.signal;
+  const tone = TONE[s.niveau] || "mid";
+  if (it.type === "ordre" || it.type === "titre") {
+    const n = sym(it.ticker);
+    return { title: s.niveau === "ok" ? `${n} : compatible avec vos règles` : s.niveau === "attention" ? `${n} : possible, mais à regarder` : `${n} : hors de vos règles`, tone };
   }
-  if (kind === "invest") return { title: `Investir ${cad(m.intent.amount_cad)}`, tone: "good" };
-  const P = m.diagnosis?.problems || [];
-  if (m.diagnosis && !m.diagnosis.fits) {
-    const risky = P.some((p: any) => p.rule_id === "tier" || p.rule_id === "budget.drawdown_review" || (p.rule_id === "budget.growth_band" && p.value > p.limit_value));
-    return { title: risky ? `Trop risqué pour un profil ${m.profile_level.toLowerCase()}` : `${P.length} point${P.length > 1 ? "s" : ""} à corriger`, tone: "bad" };
-  }
-  return { title: m.orders.length ? "Quelques ajustements" : "Rien à changer", tone: "good" };
+  const over = s.clauses.filter((c) => c.statut === "depassee").length;
+  if (s.niveau === "ok" || !over) return { title: s.niveau === "ok" ? "Votre portefeuille respecte vos règles" : "Une règle à surveiller", tone: s.niveau === "ok" ? "good" : "mid" };
+  return { title: `${over} règle${over > 1 ? "s" : ""} dépassée${over > 1 ? "s" : ""}`, tone: "bad" };
 }
 
-/** The decision first, as pictures: verdict → what the agents found → the plan → before/after. Full analysis folded below. */
+/** One plain sentence under the verdict, built from the engine's measured statuses (no number is invented). */
+function headline(d: any, total: number | null): string {
+  const it = d.intention || {};
+  const s: Signal = d.signal;
+  const caused = s.clauses.filter((c) => c.statut === "depassee" && c.cause_par_intention);
+  const before = s.clauses.filter((c) => c.statut === "depassee" && !c.cause_par_intention);
+  const share = total && it.montant_cad ? ` (${pct(it.montant_cad / total, 1)} de votre portefeuille)` : "";
+  if (it.type === "ordre") {
+    const head = `Un achat simulé de ${cad(it.montant_cad)} de ${sym(it.ticker)}${share}`;
+    if (!caused.length && !before.length) return `${head} respecterait toutes vos règles évaluées.`;
+    if (!caused.length) return `${head} ne dépasserait aucune nouvelle règle, mais ${before.length} de vos règles ${before.length > 1 ? "sont" : "est"} déjà dépassée${before.length > 1 ? "s" : ""} par votre portefeuille.`;
+    return `${head} dépasserait ${caused.length > 1 ? `${caused.length} de vos règles` : "une de vos règles"} : ${caused.slice(0, 2).map((c) => clauseShort(c).toLowerCase()).join(", ")}.`;
+  }
+  if (it.type === "titre") {
+    return `Pour une position de référence (5 % de votre portefeuille), ${s.niveau === "ok" ? "toutes vos règles évaluées seraient respectées" : `${caused.length || before.length} de vos règles ser${(caused.length || before.length) > 1 ? "aient" : "ait"} en jeu`}. Choisissez un montant pour une vérification précise.`;
+  }
+  const over = s.clauses.filter((c) => c.statut === "depassee");
+  if (!over.length) return "Les agents ont vérifié chacune de vos règles sur vos placements actuels : aucune n'est dépassée.";
+  return `Vos placements actuels dépassent ${over.length > 1 ? `${over.length} de vos règles` : "une de vos règles"}. Le détail ci-dessous dit de combien, et pourquoi.`;
+}
+
+type Decision = { choix: string; execute: boolean; a: string } | null;
+
+/** The decision first, as pictures: verdict → what the agents found → the plan → what it changes. Full analysis folded below. */
 export function MandateResult() {
   const { id = "" } = useParams();
   const nav = useNavigate();
-  const { me, reload, setPortfolioId } = useApp();
-  const { data: m, error, loading, reload: refetch, setData } = useApi<any>(`/mandates/${id}`, [id]);
+  const launch = useLaunch();
+  const { me, reload, asOf } = useApp();
+  const path = useProfilePath();
+  const { data: d, error, loading, reload: refetch } = useApi<any>(`/dossiers/${encodeURIComponent(id)}`, [id]);
+  const journal = useApi<{ entrees: any[] }>(path("/journal", { as_of: null }), [id]);
+  const pos = useApi<any>(path("/positions"));
+  const [local, setLocal] = useState<Decision>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<ApiError | null>(null);
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<Tab>("why");
-  const decide = async (what: "approve" | "reject") => {
+  useEffect(() => { if (d?.etat === "en_cours") nav(`/mandats/en-cours/${id}`, { replace: true }); }, [d?.etat]); // eslint-disable-line
+  const decision: Decision = local || (journal.data?.entrees || []).find((e) => e.type === "decision" && e.dossier === id) || null;
+  const preuves: Record<string, Preuve> = useMemo(() => d?.preuves || {}, [d]);
+  const byMesure = useMemo(() => {
+    const out: Record<string, Preuve> = {};
+    for (const p of Object.values(preuves)) if (!out[p.mesure] || p.sujet === d?.intention?.ticker) out[p.mesure] = p;
+    return out;
+  }, [preuves, d]);
+
+  const decide = async (choix: "confirmer" | "continuer" | "renoncer") => {
+    const it = d.intention;
     setBusy(true); setErr(null);
     try {
-      const r = await api.post<any>(`/mandates/${id}/${what}`);
-      setData({ ...m, ...r });
-      if (what === "approve") { if (r.portfolio_id) setPortfolioId(r.portfolio_id); await reload(); }
+      const r = await api.post<any>("/ordres/decision", { profil: d.profil_id, ticker: it.ticker, montant_cad: it.montant_cad, as_of: d.as_of, choix,
+        niveau: d.signal.niveau, ordre_id: `${id}-achat`, dossier: id });
+      setLocal({ choix, execute: !!r.execute, a: new Date().toISOString() });
+      if (r.execute) await reload();
     } catch (e) { setErr(e as ApiError); } finally { setBusy(false); }
   };
-  if (loading && !m) return <div className="mx-auto max-w-2xl px-5 py-10"><Spinner /></div>;
+  if (loading && !d) return <div className="mx-auto max-w-2xl px-5 py-10"><Spinner /></div>;
   if (error) return <div className="mx-auto max-w-2xl px-5 py-10"><ErrorBox error={error} onRetry={refetch} /></div>;
-  if (!m) return null;
+  if (!d || d.etat === "en_cours") return null;
+  if (d.etat === "echec") return <div className="mx-auto max-w-2xl px-5 py-10"><ErrorBox error={new Error(`Le dossier n'a pas pu être produit : ${d.erreur}`)} /></div>;
 
-  const kind = m.intent?.kind;
-  const v = verdict(m);
-  const R = m.requested;
-  const B = m.before, A = m.after;
-  const buys = m.orders.filter((o: any) => o.side === "buy").reduce((s: number, o: any) => s + o.amount_cad, 0);
-  const sells = m.orders.filter((o: any) => o.side === "sell").reduce((s: number, o: any) => s + o.amount_cad, 0);
-  const replay = m.stress.find((r: any) => r.key === "replay_2022");
-  const problems: any[] = m.diagnosis?.problems || [];
-  const notes = m.governance.filter((g: any) => g.status === "warn" && !/qualité des données/i.test(g.label)).slice(0, 2);
+  const it = d.intention || {};
+  const kind: "ordre" | "titre" | "portefeuille" = it.type === "ordre" ? "ordre" : it.type === "titre" ? "titre" : "portefeuille";
+  const s: Signal = d.signal;
+  const v = verdict(d);
+  const total = pos.data?.total_cad ?? null;
+  const request = requestOf(id, it);
+  const problems = s.clauses.filter((c) => c.statut === "depassee" || c.statut === "approchee");
+  const smaller = s.options.find((o) => o.code === "position_plus_petite" && (o.details?.montant_max_cad ?? 0) > 0);
+  const viaFund = s.options.filter((o) => o.code === "meme_exposition_via_fnb");
+  const notes = [...(d.gouvernance?.conflits || []).map((c: any) => vous(c.message)), ...(d.gouvernance?.informations_manquantes || []).map((m: any) => vous(m.message))].slice(0, 3);
+  const hype = byMesure["engouement"];
   const kyc = me?.profile?.kyc;
-  const profileWhy = kyc?.gap_note || kyc?.capacity?.reasons?.[0];
-  const showProfile = !!profileWhy && ((kind === "review" && problems.length > 0) || (kind === "buy_asset" && R?.verdict !== "suitable"));
-  const band = me?.profile?.budget;
+  const profileWhy = kyc?.ecart || kyc?.capacite?.raisons?.[0];
+  const showProfile = !!profileWhy && v.tone === "bad";
+  const actions = s.clauses.find((c) => c.type === "actions_max");
+  const decided = decision?.choix;
 
   return (
     <PageIn className="mx-auto max-w-2xl px-5 pb-44 pt-8" testid="proposal">
@@ -254,85 +319,110 @@ export function MandateResult() {
 
       {/* 1. verdict */}
       <Glass className="mt-6 p-6 sm:p-8" glow>
-        <p className="truncate text-sm text-ink-muted">« {m.request} »</p>
+        <p className="truncate text-sm text-ink-muted">« {request} »</p>
         <div className="mt-5 flex items-start gap-4">
           <VerdictMark tone={v.tone} />
           <h1 className="min-w-0 font-display text-[30px] font-semibold leading-[1.05] tracking-tightest text-ink sm:text-[40px]" data-testid="headline-short">{v.title}</h1>
         </div>
-        <p className="mt-4 text-[17px] leading-relaxed text-ink-soft" data-testid="headline">{m.headline}</p>
-        {(m.intent?.assumptions || []).map((a: string) => (
-          <p key={a} className="mt-3 flex gap-2.5 rounded-2xl bg-ink/[0.04] px-3.5 py-2.5 text-sm text-ink-soft"><Info className="mt-0.5 h-4 w-4 shrink-0 text-primary-600" />{a}</p>
-        ))}
+        <p className="mt-4 text-[17px] leading-relaxed text-ink-soft" data-testid="headline">{headline(d, total)}</p>
+        {d.as_of !== asOf && <p className="mt-3 flex gap-2.5 rounded-2xl bg-ink/[0.04] px-3.5 py-2.5 text-sm text-ink-soft"><Info className="mt-0.5 h-4 w-4 shrink-0 text-primary-600" />Analyse faite à la date simulée du {date(d.as_of)}.</p>}
 
-        {kind === "review" && B && A && band && (
-          <div className="mt-7"><ZoneBar label="Part en actions et cryptos" min={band.growth_min} max={band.growth_max} before={B.growth_share} after={A.growth_share} /></div>
+        {kind === "portefeuille" && actions?.valeur_apres != null && actions.limite != null && (
+          <div className="mt-7"><ZoneBar label="Part en actions (FNB compris)" max={actions.limite / 100} before={(actions.valeur_avant ?? actions.valeur_apres) / 100} after={actions.valeur_apres / 100} /></div>
         )}
-        {kind === "buy_asset" && R && <div className="mt-7"><RiskScale asset={sym(R.asset_id)} assetTier={R.tier} allowed={R.allowed_tier} vol={R.volatility} mdd={R.max_drawdown} /></div>}
-        {kind === "invest" && buys > 0 && !sells && <div className="mt-7"><Split orders={m.orders} total={buys} /></div>}
+        {kind !== "portefeuille" && (
+          <div className="mt-7"><SignalScale asset={sym(it.ticker)} niveau={s.niveau}
+            vol={byMesure["volatilite_annualisee"]?.statut === "ok" ? Number(byMesure["volatilite_annualisee"].valeur) / 100 : undefined}
+            mdd={byMesure["pire_baisse"]?.statut === "ok" ? Number(byMesure["pire_baisse"].valeur?.baisse_pct) / 100 : undefined} /></div>
+        )}
       </Glass>
 
       {/* 2. what the agents found */}
-      {kind === "review" && problems.length > 0 && (
+      {kind === "portefeuille" && problems.length > 0 && (
         <Section title="Ce que les agents ont trouvé" testid="proposal-diagnosis">
           <Stagger as="div" className="grid gap-3 sm:grid-cols-2">
-            {problems.map((p) => <ProblemTile key={p.rule_id} p={p} />)}
+            {problems.map((c) => <ProblemTile key={c.clause_id} c={c} />)}
           </Stagger>
         </Section>
       )}
-      {kind === "buy_asset" && R?.points?.length > 0 && (
+      {kind !== "portefeuille" && (
         <Section title="Pourquoi">
           <Stagger className="space-y-2.5">
-            {orderPoints(R.points).map((p: any, i: number) => (
+            {orderPoints(s, hype).map((p, i) => (
               <StaggerItem key={i} className="flex gap-3 text-[15px] leading-snug"><PointIcon tone={p.tone} /><span className="text-ink-soft">{p.text}</span></StaggerItem>
             ))}
           </Stagger>
         </Section>
       )}
-
-      {kind === "review" && problems.length === 0 && B?.checks?.length > 0 && (
+      {kind === "portefeuille" && problems.length === 0 && (
         <Section title="Ce que les agents ont vérifié" testid="proposal-diagnosis">
           <Stagger as="div" className="grid gap-2.5 sm:grid-cols-2">
-            {B.checks.filter((c: any) => c.status === "OK").map((c: any) => (
-              <StaggerItem as="div" key={c.rule_id} className="flex items-center gap-3 rounded-[18px] bg-surface/80 p-3.5 hairline">
+            {s.clauses.filter((c) => c.statut === "respectee").map((c) => (
+              <StaggerItem as="div" key={c.clause_id} className="flex items-center gap-3 rounded-[18px] bg-surface/80 p-3.5 hairline">
                 <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-gain-50 text-gain-700"><Check className="h-4 w-4" strokeWidth={3} /></span>
-                <span className="min-w-0 flex-1"><span className="block text-sm font-medium text-ink">{CHECK_FR[c.rule_id] || c.label}</span>
-                  <span className="tabular-nums block truncate text-xs text-ink-muted">{c.measured} · limite {c.limit}</span></span>
+                <span className="min-w-0 flex-1"><span className="block text-sm font-medium text-ink">{clauseShort(c)}</span>
+                  <span className="tabular-nums block truncate text-xs text-ink-muted">{measured(c)}</span></span>
               </StaggerItem>
             ))}
           </Stagger>
         </Section>
       )}
-      {m.ideas?.length > 0 && (
+
+      {/* 3. the plan */}
+      {kind === "ordre" && (
+        <Section title="Le plan" aside={<span className="tabular-nums" data-testid="orders">{cad(it.montant_cad)}</span>}>
+          <div className="overflow-hidden rounded-[20px] bg-surface/80 hairline">
+            <div className="flex w-full items-center gap-3 p-4 sm:gap-4">
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary-50 text-primary-600"><Plus className="h-4 w-4" strokeWidth={2.5} /></span>
+              <span className="min-w-0 flex-1"><span className="block font-medium text-ink">Acheter</span><span className="block truncate text-sm text-ink-muted">{friendly(it.ticker)} · au cours de clôture du {date(byMesure["prix_cloture"]?.date_de_calcul || d.as_of)}</span></span>
+              <span className="rounded-full ring-2 ring-surface"><TickerLogo id={it.ticker} size={26} /></span>
+              <span className="tabular-nums shrink-0 text-[15px] font-semibold text-ink">+{cad(it.montant_cad)}</span>
+            </div>
+          </div>
+          <p className="mt-3 text-xs text-ink-muted">Payé avec votre solde fictif ({cad(me?.cash)} disponibles). Rien n'est acheté sans votre accord.</p>
+        </Section>
+      )}
+      {(smaller || viaFund.length > 0 || (kind === "portefeuille" && problems.length > 0)) && (
         <Section title="Ce que vous pourriez essayer">
-          <Stagger as="div" className="space-y-2.5">{m.ideas.map((x: any) => <IdeaCard key={x.kind} x={x} portfolioId={m.portfolio_id} />)}</Stagger>
+          <Stagger as="div" className="space-y-2.5">
+            {smaller && kind === "ordre" && (
+              <IdeaCard icon={SlidersHorizontal} title={`Un montant plus petit : jusqu'à ${cad(smaller.details.montant_max_cad)}`}
+                text={`Selon vos règles, une position d'au plus ${cad(smaller.details.montant_max_cad)} (${pct((smaller.details.pct_du_portefeuille ?? 0) / 100, 1)} du portefeuille) ne créerait aucun dépassement chiffré.`}
+                cta={`Analyser ${cad(smaller.details.montant_max_cad)}`} onClick={() => launch(`Je veux ${cad(smaller.details.montant_max_cad)} de ${sym(it.ticker)}`, { type: "ordre", ticker: it.ticker, montant_cad: smaller.details.montant_max_cad })} />
+            )}
+            {viaFund.map((o) => (
+              <IdeaCard key={o.details.fonds} icon={Scale} title={`La même exposition via ${sym(o.details.fonds)}`} text={o.libelle}
+                cta={`Voir ${sym(o.details.fonds)}`} onClick={async () => nav(`/placement/${encodeURIComponent(o.details.fonds)}`)} />
+            ))}
+            {kind === "portefeuille" && problems.length > 0 && (
+              <>
+                <IdeaCard icon={SlidersHorizontal} title="Ajuster vos placements" text="Vendez une partie d'un placement trop lourd, ou entrez vos placements réels : les agents revérifieront tout de suite."
+                  cta="Mes placements" onClick={async () => nav("/placements")} />
+                <IdeaCard icon={ShieldCheck} title="Revoir une règle" text="Une règle ne vous ressemble plus ? Changez-la : l'effet est montré avant d'enregistrer, et le changement est daté."
+                  cta="Mes règles" onClick={async () => nav("/profil")} />
+              </>
+            )}
+          </Stagger>
         </Section>
       )}
 
-      {/* 3. the plan */}
-      {(m.orders.length > 0 || kind !== "review") && <Section title={kind === "buy_asset" && R?.verdict === "not_suitable" ? "À la place, je propose" : kind === "review" ? "Le plan pour corriger" : "Le plan"}
-        aside={m.orders.length > 0 ? <span className="tabular-nums" data-testid="orders">{sells ? `${cad(sells)} déplacés` : cad(buys)}</span> : undefined}>
-        {m.orders.length === 0 ? <p className="text-ink-muted">Rien à changer.</p> : (
-          <>
-            {sells > 0 && <p className="-mt-1 mb-4 text-sm text-ink-muted">Vous vendez {cad(sells)} et rachetez {cad(buys)} : le montant investi ne change pas.</p>}
-            <Stagger as="div" className="space-y-2.5">{groups(m.orders).map((g) => <OrderGroup key={g.key} g={g} />)}</Stagger>
-          </>
-        )}
-      </Section>}
-
       {/* 4. what the decision changes */}
-      {m.orders.length > 0 && A && <Impact B={B} A={A} replay={replay} band={band} />}
+      {kind === "ordre" && <Impact clauses={s.clauses} />}
 
       {/* 5. good to know + the profile behind the verdict */}
-      {notes.length > 0 && (
+      {(notes.length > 0 || hype?.valeur?.engouement) && (
         <Section title="À savoir">
-          <ul className="space-y-2.5">{notes.map((g: any, i: number) => <li key={i} className="flex gap-3 text-[15px] leading-snug"><PointIcon tone="warn" /><span><span className="font-medium text-ink">{g.label}.</span> <span className="text-ink-muted">{g.detail}</span></span></li>)}</ul>
+          <ul className="space-y-2.5">
+            {kind === "portefeuille" && hype?.valeur?.engouement && <li className="flex gap-3 text-[15px] leading-snug"><PointIcon tone="warn" /><span className="text-ink-muted">Attention inhabituelle sur un titre : une description du présent, pas une raison d'agir.</span></li>}
+            {notes.map((g: string, i: number) => <li key={i} className="flex gap-3 text-[15px] leading-snug"><PointIcon tone="warn" /><span className="text-ink-muted">{g}</span></li>)}
+          </ul>
         </Section>
       )}
       {showProfile && (
         <div className="mt-8 rounded-[24px] bg-ink/[0.035] p-5 sm:p-6">
-          <div className="flex items-center gap-2 text-sm font-semibold text-ink"><UserRound className="h-4 w-4" /> Pourquoi « {m.profile_level.toLowerCase()} » ?</div>
-          <p className="mt-2 text-[15px] leading-relaxed text-ink-soft">{profileWhy}</p>
-          <p className="mt-2 text-sm text-ink-muted">Si votre situation a changé, mettez votre profil à jour : les agents referont l'analyse.</p>
+          <div className="flex items-center gap-2 text-sm font-semibold text-ink"><UserRound className="h-4 w-4" /> Pourquoi « {levelLabel(me?.profile?.tolerance).toLowerCase()} » ?</div>
+          <p className="mt-2 text-[15px] leading-relaxed text-ink-soft">{profileWhy?.replace(/\s*→\s*(au plus )?« [^»]+ »/, "").replace("Tu es prêt", "Vous êtes prêt").replace("ta situation", "votre situation")}</p>
+          <p className="mt-2 text-sm text-ink-muted">Si votre situation a changé, mettez votre profil à jour : vos règles seront recalculées.</p>
           <Button variant="secondary" size="sm" className="mt-4" onClick={() => nav("/profil")}>Revoir mon profil</Button>
         </div>
       )}
@@ -348,11 +438,11 @@ export function MandateResult() {
             <div className="pt-4">
               <Tabs value={tab} onChange={setTab} options={TABS} />
               <div className="mt-5">
-                {tab === "why" && <Why m={m} metrics={m.metrics || {}} />}
-                {tab === "checks" && <Checks m={m} />}
-                {tab === "stress" && <Stress m={m} />}
-                {tab === "debate" && <Debate m={m} metrics={m.metrics || {}} />}
-                {tab === "trace" && <div><Pipeline steps={m.trace || []} /><p className="pb-3 text-xs text-ink-muted">Données au {date(m.data_as_of)} · {m.llm_usage.calls} appel(s) Amazon Bedrock</p></div>}
+                {tab === "why" && <Why d={d} preuves={preuves} />}
+                {tab === "checks" && <Checks d={d} />}
+                {tab === "stress" && <Stress preuves={preuves} />}
+                {tab === "debate" && <Debate d={d} preuves={preuves} />}
+                {tab === "trace" && <div><Pipeline steps={d.etapes || []} /><p className="pb-3 text-xs text-ink-muted">Données au {date(d.etapes?.[0]?.details?.donnees_jusqu_au || d.as_of)} · durée totale {((d.duree_totale_ms || 0) / 1000).toFixed(1).replace(".", ",")} s · {(d.usage_llm || []).length} appel(s) au modèle de langage{d.cout_estime_usd > 0 ? ` · ≈ ${d.cout_estime_usd.toFixed(4).replace(".", ",")} $ US` : ""}</p></div>}
               </div>
             </div>
           </motion.div>
@@ -364,33 +454,34 @@ export function MandateResult() {
         {err && <div className="mx-auto mb-2 max-w-2xl"><ErrorBox error={err} /></div>}
         <motion.div initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ ...softSpring, delay: 0.25 }}
           className="mx-auto flex max-w-2xl flex-nowrap items-center gap-0.5 rounded-[22px] glass hairline p-1.5 shadow-lift sm:gap-2 sm:p-2">
-          
-          {m.status === "proposed" ? (
+          {kind === "ordre" && !decided ? (
             <>
-              <Button size="lg" className="min-w-0 flex-1 sm:flex-none" onClick={() => decide("approve")} disabled={busy || !m.orders.length} data-testid="approve">
-                Approuver<span className="hidden sm:inline">{sells ? " le plan" : buys ? ` ${cad(buys)}` : ""}</span>
+              <Button size="lg" className="min-w-0 flex-1 sm:flex-none" onClick={() => decide(s.niveau === "pause" ? "continuer" : "confirmer")} disabled={busy} data-testid="approve">
+                {s.niveau === "pause" ? <>Continuer quand même<span className="hidden sm:inline"> · {cad(it.montant_cad)}</span></> : <>Approuver<span className="hidden sm:inline"> {cad(it.montant_cad)}</span></>}
               </Button>
-              <Button variant="ghost" size="sm" onClick={() => nav(`/?demande=${encodeURIComponent(m.request)}`)}>Modifier</Button>
-              <Button variant="ghost" size="sm" onClick={() => decide("reject")} disabled={busy}>Refuser</Button>
+              <Button variant="ghost" size="sm" onClick={() => nav(`/placement/${encodeURIComponent(it.ticker)}`)}>Modifier</Button>
+              <Button variant="ghost" size="sm" onClick={() => decide("renoncer")} disabled={busy} data-testid="reject">Refuser</Button>
             </>
-          ) : m.status === "reviewed" ? (
-            <>
-              <span className="flex items-center gap-2 px-3 text-sm font-medium text-ink">
-                <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} transition={spring} className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-gain-600"><Check className="h-3.5 w-3.5 text-white" strokeWidth={3} /></motion.span>
-                Tout est en ordre
-              </span>
-              <Button className="ml-auto" variant="secondary" onClick={() => nav("/")}>Accueil</Button>
-            </>
-          ) : m.status === "approved" ? (
+          ) : kind === "ordre" && decision?.execute ? (
             <>
               <span className="flex items-center gap-2 px-3 text-sm font-medium text-ink" data-testid="approved">
-                <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} transition={spring} className="grid h-6 w-6 place-items-center rounded-full bg-gain-600"><Check className="h-3.5 w-3.5 text-white" strokeWidth={3} /></motion.span>
+                <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} transition={spring} className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-gain-600"><Check className="h-3.5 w-3.5 text-white" strokeWidth={3} /></motion.span>
                 Approuvé · portefeuille simulé à jour
               </span>
               <Button className="ml-auto" variant="secondary" onClick={() => nav("/placements")}>Mes placements <ArrowRight className="h-4 w-4" /></Button>
             </>
+          ) : kind === "ordre" ? (
+            <><span className="px-3 text-sm text-ink-muted">Proposition refusée · rien n'a changé</span><Button className="ml-auto" variant="secondary" onClick={() => nav(`/?demande=${encodeURIComponent(request)}`)}>Reformuler</Button></>
           ) : (
-            <><span className="px-3 text-sm text-ink-muted">Proposition refusée</span><Button className="ml-auto" variant="secondary" onClick={() => nav(`/?demande=${encodeURIComponent(m.request)}`)}>Reformuler</Button></>
+            <>
+              <span className="flex items-center gap-2 px-3 text-sm font-medium text-ink">
+                <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} transition={spring} className={clsx("grid h-6 w-6 shrink-0 place-items-center rounded-full", v.tone === "good" ? "bg-gain-600" : "bg-primary-500")}>{v.tone === "good" ? <Check className="h-3.5 w-3.5 text-white" strokeWidth={3} /> : <Info className="h-3.5 w-3.5 text-white" strokeWidth={3} />}</motion.span>
+                {kind === "titre" ? "Analyse terminée" : v.tone === "good" ? "Tout est en ordre" : "Analyse terminée"}
+              </span>
+              {kind === "titre"
+                ? <Button className="ml-auto" variant="secondary" onClick={() => nav(`/placement/${encodeURIComponent(it.ticker)}`)}>Choisir un montant <ArrowRight className="h-4 w-4" /></Button>
+                : <Button className="ml-auto" variant="secondary" onClick={() => nav("/")}>Accueil</Button>}
+            </>
           )}
         </motion.div>
       </div>
@@ -398,38 +489,29 @@ export function MandateResult() {
   );
 }
 
-const CHECK_FR: Record<string, string> = {
-  "budget.growth_band": "Part en actions", "budget.single_issuer": "Une seule entreprise", "budget.single_sector": "Un seul secteur",
-  "budget.theme_exposure": "Un seul thème", "budget.speculative": "Cryptoactifs", "budget.drawdown_review": "Pire baisse passée",
-};
-const IDEA_ICON: Record<string, LucideIcon> = { monthly: Repeat, growth_room: TrendingUp, near_limit: Gauge, concentration: PieChart, few: PieChart };
-
-/** An optional idea when nothing needs fixing: what, why, and — when concrete — one tap to let the agents prepare it. */
-function IdeaCard({ x, portfolioId }: { x: any; portfolioId?: string }) {
-  const nav = useNavigate();
-  const [busy, setBusy] = useState(false);
-  const I = IDEA_ICON[x.kind] || Info;
-  return (
-    <StaggerItem as="div" className="flex gap-4 rounded-[20px] bg-surface/80 p-4 hairline sm:p-5">
-      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-primary-50 text-primary-600"><I className="h-5 w-5" /></span>
-      <div className="min-w-0 flex-1">
-        <div className="font-medium text-ink">{x.title}</div>
-        <p className="mt-1 text-sm leading-relaxed text-ink-muted">{x.text}</p>
-        {x.request && (
-          <Button size="sm" variant="secondary" className="mt-3" disabled={busy}
-            onClick={async () => { setBusy(true); try { await launchMandate(nav, x.request, portfolioId); } catch { setBusy(false); } }}>
-            {busy ? "Les agents démarrent…" : "Essayer"} <ArrowRight className="h-3.5 w-3.5" />
-          </Button>
-        )}
-      </div>
-    </StaggerItem>
-  );
+/** « 54,8 % · limite 50 % », from a clause status (the engine's values are in percent). */
+function measured(c: StatutClause): string {
+  const val = c.valeur_apres ?? c.valeur_avant;
+  if (val == null || c.limite == null) return c.statut === "donnees_insuffisantes" ? "données insuffisantes" : "";
+  const unit = c.unite === "%" ? " %" : ` ${c.unite}`;
+  const f = (x: number) => `${x.toLocaleString("fr-CA", { maximumFractionDigits: 1 })}${unit}`;
+  return `${f(val)} · ${c.type === "liquidites_min" ? "minimum" : "limite"} ${f(c.limite)}`;
 }
 
-/** At most 3 blocking reasons, then warnings (e.g. unusual attention), then the rest: 5 lines, the most useful first. */
-function orderPoints(points: any[]): any[] {
-  const by = (t: string) => points.filter((p) => p.tone === t);
-  return [...by("bad").slice(0, 3), ...by("warn"), ...by("good"), ...by("info")].slice(0, 5);
+/** At most 3 broken rules caused by this idea, then what was already exceeded, the unusual attention, and what is respected: 5 lines. */
+function orderPoints(s: Signal, hype?: Preuve): { tone: string; text: string }[] {
+  const caused = s.clauses.filter((c) => c.statut === "depassee" && c.cause_par_intention);
+  const before = s.clauses.filter((c) => c.statut === "depassee" && !c.cause_par_intention);
+  const near = s.clauses.filter((c) => c.statut === "approchee" || c.statut === "donnees_insuffisantes");
+  const ok = s.clauses.filter((c) => c.statut === "respectee");
+  const pts = [
+    ...caused.slice(0, 3).map((c) => ({ tone: "bad", text: vous(c.explication) })),
+    ...(hype?.statut === "ok" && hype.valeur?.engouement ? [{ tone: "warn", text: `Attention inhabituelle sur ce titre (pages vues et volume bien au-dessus de leur niveau habituel) : décidez à froid.` }] : []),
+    ...before.slice(0, 2).map((c) => ({ tone: "warn", text: `Déjà le cas avant cette idée : ${vous(c.explication)}` })),
+    ...near.slice(0, 1).map((c) => ({ tone: "warn", text: vous(c.explication) })),
+    ...ok.slice(0, 2).map((c) => ({ tone: "good", text: vous(c.explication) })),
+  ];
+  return pts.slice(0, 5);
 }
 
 function Section({ title, aside, children, testid }: { title: string; aside?: React.ReactNode; children: React.ReactNode; testid?: string }) {
@@ -460,16 +542,16 @@ function PointIcon({ tone }: { tone: string }) {
   return <span className={clsx("mt-px grid h-5 w-5 shrink-0 place-items-center rounded-full", c)}><I className="h-3 w-3" strokeWidth={3} /></span>;
 }
 
-/** The profile's zone on a 0–100 % line; the marker slides from today to after the plan. */
-function ZoneBar({ label, min, max, before, after }: { label: string; min: number; max: number; before: number; after: number }) {
+/** The profile's room on a 0–100 % line (up to its limit); the marker slides from today to after. */
+function ZoneBar({ label, max, before, after }: { label: string; max: number; before: number; after: number }) {
   const at = (x: number) => `${Math.min(100, Math.max(0, x * 100))}%`;
-  const inside = (x: number) => x >= min - 1e-6 && x <= max + 1e-6;
+  const inside = (x: number) => x <= max + 1e-6;
   const same = Math.abs(before - after) < 0.005;
   return (
     <div>
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 text-sm">
         <span className="font-medium text-ink">{label}</span>
-        {same ? <span className="tabular-nums font-semibold text-gain-700">{pct(after, 0)} · dans votre zone</span> : (
+        {same ? <span className={clsx("tabular-nums font-semibold", inside(after) ? "text-gain-700" : "text-accent-700")}>{pct(after, 0)} · {inside(after) ? "dans votre limite" : "au-delà de votre limite"}</span> : (
           <span className="tabular-nums text-ink-muted">
             <span className={inside(before) ? "text-ink" : "text-accent-700"}>{pct(before, 0)}</span>
             <ArrowRight className="mx-1.5 inline h-3.5 w-3.5" />
@@ -479,45 +561,45 @@ function ZoneBar({ label, min, max, before, after }: { label: string; min: numbe
       </div>
       <div className="relative mt-3 h-10">
         <div className="absolute inset-x-0 top-4 h-2 rounded-full bg-ink/[0.06]" />
-        <div className="absolute top-4 h-2 rounded-full bg-gain-600/25 ring-1 ring-gain-600/40" style={{ left: at(min), width: `${(max - min) * 100}%` }} />
+        <div className="absolute top-4 h-2 rounded-full bg-gain-600/25 ring-1 ring-gain-600/40" style={{ left: 0, width: at(max) }} />
         {!same && <div className="absolute top-0 h-10 w-px bg-accent-600/50" style={{ left: at(before) }}>
           <span className={clsx("tabular-nums absolute -top-0.5 whitespace-nowrap text-[11px] text-accent-700", before > 0.75 ? "right-1.5" : "left-1.5")}>aujourd'hui</span>
         </div>}
-        <motion.div className={clsx("absolute top-2.5 h-5 w-5 -translate-x-1/2 rounded-full border-[3px] border-white shadow-glow", same ? "bg-gain-600" : "bg-primary-500")}
+        <motion.div className={clsx("absolute top-2.5 h-5 w-5 -translate-x-1/2 rounded-full border-[3px] border-white shadow-glow", inside(after) ? "bg-gain-600" : "bg-accent-600")}
           initial={{ left: at(before) }} animate={{ left: at(after) }} transition={{ type: "spring", stiffness: 60, damping: 16, delay: 0.5 }} />
       </div>
       <div className="relative h-4 text-[11px] text-ink-muted">
         <span className="absolute left-0 hidden sm:inline">0 %</span>
-        <span className="absolute -translate-x-1/2 whitespace-nowrap font-medium text-gain-700" style={{ left: at((min + max) / 2) }}>votre zone {pct(min, 0)}–{pct(max, 0)}</span>
+        <span className="absolute -translate-x-1/2 whitespace-nowrap font-medium text-gain-700" style={{ left: at(max / 2) }}>votre limite : {pct(max, 0)}</span>
         <span className="absolute right-0 hidden sm:inline">100 %</span>
       </div>
     </div>
   );
 }
 
-/** Three-step risk ladder: where the security sits, and how far the profile goes. */
-function RiskScale({ asset, assetTier, allowed, vol, mdd }: { asset: string; assetTier: string; allowed: string; vol?: number; mdd?: number }) {
-  const ai = TIER_I[assetTier] ?? 1, pi = TIER_I[allowed] ?? 1;
-  const over = ai > pi;
+/** Three-step ladder of the signal: where this idea sits for the profile's rules. */
+function SignalScale({ asset, niveau, vol, mdd }: { asset: string; niveau: Niveau; vol?: number; mdd?: number }) {
+  const steps: Niveau[] = ["ok", "attention", "pause"];
+  const ai = Math.max(0, steps.indexOf(niveau));
   return (
     <div>
       <div className="grid grid-cols-3 gap-1.5">
-        {["LOW", "MEDIUM", "HIGH"].map((t, i) => (
+        {steps.map((t, i) => (
           <div key={t}>
             <div className="h-6 text-center">
               {i === ai && <motion.span initial={{ y: -8, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ ...spring, delay: 0.35 }}
-                className={clsx("inline-block max-w-full truncate rounded-full px-2.5 py-0.5 text-xs font-semibold text-white", over ? "bg-accent-600" : "bg-gain-600")}>{asset}</motion.span>}
+                className={clsx("inline-block max-w-full truncate rounded-full px-2.5 py-0.5 text-xs font-semibold text-white", i === 0 ? "bg-gain-600" : i === 1 ? "bg-primary-500" : "bg-accent-600")}>{asset}</motion.span>}
             </div>
-            <motion.div className={clsx("mt-1.5 h-2.5 rounded-full", i <= pi ? "bg-gain-600/70" : "bg-ink/[0.08]")}
+            <motion.div className={clsx("mt-1.5 h-2.5 rounded-full", i === 0 ? "bg-gain-600/70" : i === 1 ? "bg-primary-500/60" : "bg-accent-600/60")}
               initial={{ scaleX: 0 }} animate={{ scaleX: 1 }} style={{ originX: 0 }} transition={{ ...softSpring, delay: 0.1 + i * 0.08 }} />
-            <div className={clsx("mt-1.5 text-center text-xs", i === pi ? "font-semibold text-gain-700" : "text-ink-muted")}>{TIER[t]}{i === pi ? " · votre limite" : ""}</div>
+            <div className={clsx("mt-1.5 text-center text-xs", i === ai ? "font-semibold text-ink" : "text-ink-muted")}>{NIVEAU[t].short}</div>
           </div>
         ))}
       </div>
       {(vol != null || mdd != null) && (
         <div className="mt-5 grid grid-cols-2 gap-3">
           {vol != null && <Stat label="Variation typique par année" value={`± ${pct(vol, 0)}`} />}
-          {mdd != null && <Stat label="Pire baisse en 5 ans" value={pct(mdd, 0)} bad={mdd < -0.25} />}
+          {mdd != null && <Stat label="Pire baisse passée" value={pct(mdd, 0)} bad={mdd < -0.25} />}
         </div>
       )}
     </div>
@@ -528,344 +610,314 @@ function Stat({ label, value, bad }: { label: string; value: string; bad?: boole
   return <div className="rounded-2xl bg-ink/[0.035] px-4 py-3"><div className="text-xs text-ink-muted">{label}</div><div className={clsx("tabular-nums mt-0.5 font-display text-2xl font-semibold tracking-tight", bad ? "text-accent-700" : "text-ink")}>{value}</div></div>;
 }
 
-/** Stability vs growth of the money being invested. */
-function Split({ orders, total }: { orders: any[]; total: number }) {
-  const stable = orders.filter((o) => o.side === "buy" && o.sleeve === "Stabilité").reduce((s, o) => s + o.amount_cad, 0);
-  const g = total - stable;
-  return (
-    <div>
-      <div className="flex h-3 gap-[2px] overflow-hidden rounded-full">
-        <motion.div className="h-full rounded-l-full bg-primary-500" initial={{ width: 0 }} animate={{ width: `${(stable / total) * 100}%` }} transition={softSpring} />
-        <motion.div className="h-full rounded-r-full bg-ink" initial={{ width: 0 }} animate={{ width: `${(g / total) * 100}%` }} transition={{ ...softSpring, delay: 0.08 }} />
-      </div>
-      <div className="tabular-nums mt-2.5 flex justify-between text-sm">
-        <span className="text-ink"><span className="mr-1.5 inline-block h-2 w-2 rounded-full bg-primary-500" />Stabilité · {cad(stable)}</span>
-        <span className="text-ink">Croissance · {cad(g)}<span className="ml-1.5 inline-block h-2 w-2 rounded-full bg-ink" /></span>
-      </div>
-    </div>
-  );
-}
-
-/** One broken limit: the measure, its limit, and a bar with the limit marked. Tap for the plain-language detail. */
-function ProblemTile({ p }: { p: any }) {
+/** One broken (or approached) rule: the measure, its limit, and a bar with the limit marked. Tap for the plain-language detail. */
+function ProblemTile({ c }: { c: StatutClause }) {
   const [open, setOpen] = useState(false);
-  const tier = p.rule_id === "tier", esg = p.rule_id === "esg.screen";
-  const val = tier || esg ? null : Math.abs(p.value ?? 0), lim = tier || esg ? null : Math.abs(p.limit_value ?? 0);
-  const scale = val != null && lim != null ? Math.max(val, lim) * 1.15 || 1 : 1;
-  const shown = esg ? "Exclu" : tier ? TIER[p.tiers?.[0]] : p.value != null ? pct(p.value, 1) : "—";
-  const limitText = esg ? "filtre ESG public, par secteur" : tier ? `permis : ${TIER[p.tiers?.[1]]?.toLowerCase()}` : p.limit_min != null ? `zone ${pct(p.limit_min, 0)}–${pct(p.limit_value, 0)}` : `max ${pct(p.limit_value, 0)}`;
+  const val = c.valeur_apres ?? c.valeur_avant;
+  const has = val != null && c.limite != null && c.unite === "%";
+  const scale = has ? Math.max(Math.abs(val!), Math.abs(c.limite!)) * 1.15 || 1 : 1;
+  const shown = c.type === "esg_controverses" || c.type === "esg_exclusion_secteurs" ? "Exclu" : val != null ? `${val.toLocaleString("fr-CA", { maximumFractionDigits: 1 })}${c.unite === "%" ? " %" : ` ${c.unite}`}` : "—";
+  const limitText = c.limite == null ? (c.origine === "dit" ? "votre règle" : "règle par défaut") : `${c.type === "liquidites_min" ? "min" : "max"} ${c.limite.toLocaleString("fr-CA", { maximumFractionDigits: 1 })}${c.unite === "%" ? " %" : ` ${c.unite}`}`;
   return (
     <StaggerItem as="div">
       <motion.button layout type="button" onClick={() => setOpen(!open)} whileTap={{ scale: 0.98 }}
         className="w-full rounded-[20px] bg-surface/80 p-4 text-left hairline transition-colors hover:bg-white">
         <div className="flex items-center justify-between gap-2 text-sm">
-          <span className="truncate font-medium text-ink-soft">{p.short}{p.subject ? ` · ${p.subject}` : ""}</span>
+          <span className="truncate font-medium text-ink-soft">{clauseShort(c)}{c.statut === "approchee" ? " · approchée" : ""}</span>
           <ChevronDown className={clsx("h-4 w-4 shrink-0 text-ink-muted transition", open && "rotate-180")} />
         </div>
         <div className="mt-1 flex items-baseline gap-2">
-          <span className="tabular-nums font-display text-[28px] font-semibold tracking-tight text-accent-700">{shown}</span>
+          <span className={clsx("tabular-nums font-display text-[28px] font-semibold tracking-tight", c.statut === "depassee" ? "text-accent-700" : "text-primary-600")}>{shown}</span>
           <span className="tabular-nums text-sm text-ink-muted">{limitText}</span>
         </div>
-        {val != null && lim != null && (
+        {has && (
           <div className="relative mt-2 h-1.5 rounded-full bg-ink/[0.06]">
-            <motion.div className="absolute inset-y-0 left-0 rounded-full bg-accent-600" initial={{ width: 0 }} animate={{ width: `${(val / scale) * 100}%` }} transition={{ ...softSpring, delay: 0.2 }} />
-            <div className="absolute -top-1 h-3.5 w-0.5 rounded-full bg-ink" style={{ left: `${(lim / scale) * 100}%` }} title="Limite" />
+            <motion.div className={clsx("absolute inset-y-0 left-0 rounded-full", c.statut === "depassee" ? "bg-accent-600" : "bg-primary-500")} initial={{ width: 0 }} animate={{ width: `${(Math.abs(val!) / scale) * 100}%` }} transition={{ ...softSpring, delay: 0.2 }} />
+            <div className="absolute -top-1 h-3.5 w-0.5 rounded-full bg-ink" style={{ left: `${(Math.abs(c.limite!) / scale) * 100}%` }} title="Limite" />
           </div>
         )}
         <AnimatePresence initial={false}>
-          {open && <motion.p initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden text-sm leading-relaxed text-ink-muted"><span className="block pt-3"><span className="font-medium text-ink">{p.title}.</span> {p.detail}</span></motion.p>}
+          {open && <motion.p initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden text-sm leading-relaxed text-ink-muted"><span className="block pt-3"><span className="font-medium text-ink">{c.libelle}</span> {vous(c.explication)}</span></motion.p>}
         </AnimatePresence>
       </motion.button>
     </StaggerItem>
   );
 }
 
-type Group = { key: string; title: string; sub: string; side: "buy" | "sell"; orders: any[] };
-/** Orders as three moves a person understands: sell entirely, trim, buy — or, for new money, by purpose. */
-function groups(orders: any[]): Group[] {
-  const sells = orders.filter((o) => o.side === "sell");
-  const buys = orders.filter((o) => o.side === "buy");
-  const n = (k: number, w: string) => `${k} ${w}${k > 1 ? "s" : ""}`;
-  if (sells.length) {
-    const all = sells.filter((o) => o.keep_cad != null && o.keep_cad < 1);
-    const trim = sells.filter((o) => !(o.keep_cad != null && o.keep_cad < 1));
-    return [
-      { key: "all", title: "Vendre entièrement", sub: n(all.length, "placement"), side: "sell" as const, orders: all },
-      { key: "trim", title: "Alléger", sub: `${n(trim.length, "placement")} · vous en gardez une partie`, side: "sell" as const, orders: trim },
-      { key: "buy", title: "Acheter", sub: `${n(buys.length, "placement")} plus stable${buys.length > 1 ? "s" : ""}`, side: "buy" as const, orders: buys },
-    ].filter((g) => g.orders.length);
-  }
-  const by: Record<string, any[]> = {};
-  buys.forEach((o) => { (by[o.sleeve || "Achats"] ||= []).push(o); });
-  const order = ["Votre demande", "Stabilité", "Croissance"];
-  return Object.keys(by).sort((a, b) => (order.indexOf(a) + 9) % 12 - (order.indexOf(b) + 9) % 12).map((k) => ({
-    key: k, side: "buy" as const, orders: by[k],
-    title: k === "Stabilité" ? "Pour la stabilité" : k === "Croissance" ? "Pour la croissance" : k,
-    sub: k === "Stabilité" ? "Obligations : bougent peu" : k === "Croissance" ? "Fonds indiciels diversifiés" : n(by[k].length, "placement"),
-  }));
-}
-
-function OrderGroup({ g }: { g: Group }) {
-  const [open, setOpen] = useState(false);
-  const total = g.orders.reduce((s, o) => s + o.amount_cad, 0);
-  const sorted = useMemo(() => [...g.orders].sort((a, b) => b.amount_cad - a.amount_cad), [g.orders]);
-  const common = useMemo(() => {  // the reason most rows share is said once, not repeated on every line
-    const c: Record<string, number> = {};
-    g.orders.forEach((o) => { const w = cleanWhy(o.why); c[w] = (c[w] || 0) + 1; });
-    const [w, n] = Object.entries(c).sort((x, y) => y[1] - x[1])[0] || ["", 0];
-    return n >= 2 ? w : "";
-  }, [g.orders]);
+/** An idea to try next: what, why, and one tap. */
+function IdeaCard({ icon: I, title, text, cta, onClick }: { icon: LucideIcon; title: string; text: string; cta: string; onClick: () => Promise<void> | void }) {
+  const [busy, setBusy] = useState(false);
   return (
-    <StaggerItem as="div" className="overflow-hidden rounded-[20px] bg-surface/80 hairline">
-      <motion.button type="button" whileTap={{ scale: 0.99 }} onClick={() => setOpen(!open)} className="flex w-full items-center gap-3 p-4 text-left sm:gap-4">
-        <span className={clsx("grid h-9 w-9 shrink-0 place-items-center rounded-full", g.side === "sell" ? "bg-ink/[0.06] text-ink" : "bg-primary-50 text-primary-600")}>
-          {g.side === "sell" ? <Minus className="h-4 w-4" strokeWidth={2.5} /> : <Plus className="h-4 w-4" strokeWidth={2.5} />}
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block font-medium text-ink">{g.title}</span>
-          <span className="block truncate text-sm text-ink-muted">{g.sub}</span>
-        </span>
-        <span className="hidden -space-x-2 sm:flex">
-          {sorted.slice(0, 4).map((o) => <span key={o.asset_id} className="rounded-full ring-2 ring-surface"><TickerLogo id={o.asset_id} size={26} /></span>)}
-          {sorted.length > 4 && <span className="grid h-[26px] w-[26px] place-items-center rounded-full bg-ink/[0.06] text-[10px] font-semibold text-ink-soft ring-2 ring-surface">+{sorted.length - 4}</span>}
-        </span>
-        <span className="tabular-nums shrink-0 text-[15px] font-semibold text-ink">{g.side === "sell" ? "−" : "+"}{cad(total)}</span>
-        <ChevronDown className={clsx("h-4 w-4 shrink-0 text-ink-muted transition", open && "rotate-180")} />
-      </motion.button>
-      <AnimatePresence initial={false}>
-        {open && (
-          <motion.ul initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={softSpring} className="overflow-hidden border-t border-line">
-            {common && <li className="px-4 pt-3 text-sm text-ink-soft">{common}</li>}
-            {sorted.map((o) => (
-              <li key={o.side + o.asset_id} className="flex items-start gap-3 px-4 py-3">
-                <TickerLogo id={o.asset_id} size={30} />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-baseline justify-between gap-3">
-                    <span className="truncate text-[15px] text-ink">{friendly(o.asset_id, o.label)}</span>
-                    <span className="tabular-nums shrink-0 text-[15px] font-medium text-ink">{o.side === "sell" ? "−" : "+"}{cad(o.amount_cad)}</span>
-                  </div>
-                  {o.side === "sell" && o.held_cad != null && <div className="tabular-nums text-xs text-ink-muted">{cad(o.held_cad)} <ArrowRight className="inline h-3 w-3" /> {cad(o.keep_cad)}</div>}
-                  {cleanWhy(o.why) !== common && <p className="mt-0.5 text-xs leading-snug text-ink-muted">{cleanWhy(o.why)}</p>}
-                </div>
-              </li>
-            ))}
-          </motion.ul>
-        )}
-      </AnimatePresence>
+    <StaggerItem as="div" className="flex gap-4 rounded-[20px] bg-surface/80 p-4 hairline sm:p-5">
+      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-primary-50 text-primary-600"><I className="h-5 w-5" /></span>
+      <div className="min-w-0 flex-1">
+        <div className="font-medium text-ink">{title}</div>
+        <p className="mt-1 text-sm leading-relaxed text-ink-muted">{text}</p>
+        <Button size="sm" variant="secondary" className="mt-3" disabled={busy} onClick={async () => { setBusy(true); try { await onClick(); } catch { setBusy(false); } }}>
+          {busy ? "Les agents démarrent…" : cta} <ArrowRight className="h-3.5 w-3.5" />
+        </Button>
+      </div>
     </StaggerItem>
   );
 }
 
-const cleanWhy = (w: string) => (w || "").replace(/^(Avec le produit des ventes|À la place du montant refusé)\s*:\s*/, "").replace(/\s*\(complète ce qui manque dans votre portefeuille\)/, "");
-
-/** What the decision changes. Negligible effect → one sentence; otherwise one line per measure on a FIXED scale
- *  (0–100 % with the profile's zone for the growth share, 0 to −30 % for losses) so a small loss looks small. */
-function Impact({ B, A, replay, band }: { B: any; A: any; replay?: any; band?: any }) {
-  const rows = [
-    { key: "g", label: "Part en actions", before: B?.growth_share, after: A.growth_share, kind: "share" as const, digits: 0 },
-    { key: "d", label: "Pire baisse passée", before: B?.max_drawdown, after: A.max_drawdown, kind: "loss" as const, digits: 1 },
-    ...(replay ? [{ key: "r", label: "Si 2022 se répétait", before: replay.before, after: replay.after, kind: "loss" as const, digits: 1 }] : []),
-  ].filter((r) => r.after != null);
-  const moved = (r: any) => r.before != null && Math.abs(r.after - r.before) >= (r.kind === "share" ? 0.01 : 0.005);
-  const inZone = band && A.growth_share != null && A.growth_share >= band.growth_min - 1e-6 && A.growth_share <= band.growth_max + 1e-6;
-  if (B && !rows.some(moved)) {
+/** What the decision changes: one line per measured rule, before → after, on a fixed scale with the limit marked. */
+function Impact({ clauses }: { clauses: StatutClause[] }) {
+  const rows = clauses.filter((c) => c.unite === "%" && c.valeur_apres != null && c.limite != null && ["perte_max", "actions_max", "concentration_titre", "liquidites_min", "speculatif_max", "crypto_max", "techno_max"].includes(c.type));
+  const moved = (c: StatutClause) => c.valeur_avant != null && Math.abs(c.valeur_apres! - c.valeur_avant) >= 0.5;
+  if (!rows.length) return null;
+  if (!rows.some(moved)) {
     return (
       <Section title="Effet sur votre risque">
         <div className="flex gap-4 rounded-[20px] bg-ink/[0.03] p-4 sm:p-5">
-          <span className={clsx("grid h-10 w-10 shrink-0 place-items-center rounded-full", inZone ? "bg-gain-50 text-gain-700" : "bg-ink/[0.06] text-ink")}><Minus className="h-5 w-5" strokeWidth={2.5} /></span>
-          <p className="text-[15px] leading-relaxed text-ink-soft">
-            <span className="font-medium text-ink">Presque aucun changement.</span> Ce montant est petit par rapport à votre portefeuille :
-            vos actions restent à <b className="tabular-nums font-semibold text-ink">{pct(A.growth_share, 0)}</b>{inZone ? ", dans votre zone" : ""}, et votre pire baisse passée reste autour de <b className="tabular-nums font-semibold text-ink">{pct(A.max_drawdown, 1)}</b>.
-          </p>
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-ink/[0.06] text-ink"><Minus className="h-5 w-5" strokeWidth={2.5} /></span>
+          <p className="text-[15px] leading-relaxed text-ink-soft"><span className="font-medium text-ink">Presque aucun changement.</span> Ce montant est petit par rapport à votre portefeuille : chacune de vos mesures bouge de moins d'un demi-point.</p>
         </div>
       </Section>
     );
   }
   return (
-    <Section title={B ? "Ce que ça change" : "Votre portefeuille après"}>
-      <div className="space-y-6">{rows.map((r) => <ImpactRow key={r.key} r={r} band={band} />)}</div>
-      <p className="mt-5 text-xs text-ink-muted">Calculé sur les vrais prix des 5 dernières années. Le passé ne garantit pas l'avenir.</p>
+    <Section title="Ce que ça change">
+      <div className="space-y-6">{rows.map((c) => <ImpactRow key={c.clause_id} c={c} />)}</div>
+      <p className="mt-5 text-xs text-ink-muted">Calculé sur les vrais prix passés et la composition publiée des FNB. Le passé ne garantit pas l'avenir.</p>
     </Section>
   );
 }
 
-function ImpactRow({ r, band }: { r: any; band?: any }) {
-  const loss = r.kind === "loss";
-  const scale = loss ? Math.max(0.3, Math.abs(r.after), Math.abs(r.before ?? 0)) : 1;
+function ImpactRow({ c }: { c: StatutClause }) {
+  const before = c.valeur_avant, after = c.valeur_apres!, lim = c.limite!;
+  const scale = Math.max(Math.abs(after), Math.abs(before ?? 0), Math.abs(lim)) * 1.2 || 1;
   const w = (v: number) => `${Math.min(100, (Math.abs(v) / scale) * 100)}%`;
-  const has = r.before != null && Math.abs(r.after - r.before) >= (loss ? 0.005 : 0.01);
-  const d = has ? r.after - r.before : 0;
-  // better = smaller loss; for the growth share, better = closer to the profile's zone
-  const dist = (v: number) => (band ? Math.max(0, band.growth_min - v, v - band.growth_max) : 0);
-  const better = loss ? Math.abs(r.after) < Math.abs(r.before ?? 0) : dist(r.after) < dist(r.before ?? r.after);
-  const worse = loss ? Math.abs(r.after) > Math.abs(r.before ?? 0) : dist(r.after) > dist(r.before ?? r.after);
+  const has = before != null && Math.abs(after - before) >= 0.5;
+  const min = c.type === "liquidites_min";
+  const outside = (x: number) => (min ? x < lim - 1e-6 : x > lim + 1e-6);
+  const worse = has && (min ? after < before! : after > before!);
+  const f = (x: number) => `${x.toLocaleString("fr-CA", { maximumFractionDigits: 1 })} %`;
   return (
     <div>
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-        <span className="text-[15px] font-medium text-ink">{r.label}</span>
+        <span className="text-[15px] font-medium text-ink">{clauseShort(c)}</span>
         <span className="tabular-nums flex items-center gap-2 text-[15px]">
-          {has && <><span className="text-ink-muted">{pct(r.before, r.digits)}</span><ArrowRight className="h-3.5 w-3.5 text-ink-muted" /></>}
-          <span className="font-semibold text-ink">{pct(r.after, r.digits)}</span>
-          {has && (
-            <span className={clsx("rounded-full px-2 py-0.5 text-xs font-semibold", better ? "bg-gain-50 text-gain-700" : worse ? "bg-accent-50 text-accent-700" : "bg-ink/[0.05] text-ink-soft")}>
-              {loss ? (better ? "moins de risque" : "plus de risque") : `${d > 0 ? "+" : "−"}${Math.abs(Math.round(d * 100))} pts`}
-            </span>
-          )}
+          {has && <><span className="text-ink-muted">{f(before!)}</span><ArrowRight className="h-3.5 w-3.5 text-ink-muted" /></>}
+          <span className={clsx("font-semibold", outside(after) ? "text-accent-700" : "text-ink")}>{f(after)}</span>
+          {has && <span className={clsx("rounded-full px-2 py-0.5 text-xs font-semibold", worse ? "bg-accent-50 text-accent-700" : "bg-gain-50 text-gain-700")}>{worse ? "plus de risque" : "moins de risque"}</span>}
         </span>
       </div>
       <div className="relative mt-3 h-2.5 rounded-full bg-ink/[0.05]">
-        {has && <div className={clsx("absolute inset-y-0 left-0 rounded-full", loss ? "bg-accent-600/25" : "bg-ink/20")} style={{ width: w(r.before) }} />}
-        <motion.div className={clsx("absolute inset-y-0 left-0 rounded-full", loss ? "bg-accent-600" : "bg-primary-500")}
-          initial={{ width: has ? w(r.before) : 0 }} animate={{ width: w(r.after) }} transition={{ type: "spring", stiffness: 70, damping: 18, delay: 0.3 }} />
-        {!loss && band && <div className="absolute -inset-y-1 rounded-full border-2 border-gain-600" style={{ left: `${band.growth_min * 100}%`, width: `${(band.growth_max - band.growth_min) * 100}%` }} title="Votre zone" />}
+        {has && <div className="absolute inset-y-0 left-0 rounded-full bg-ink/20" style={{ width: w(before!) }} />}
+        <motion.div className={clsx("absolute inset-y-0 left-0 rounded-full", outside(after) ? "bg-accent-600" : "bg-primary-500")}
+          initial={{ width: has ? w(before!) : 0 }} animate={{ width: w(after) }} transition={{ type: "spring", stiffness: 70, damping: 18, delay: 0.3 }} />
+        <div className="absolute -top-1 h-[18px] w-0.5 rounded-full bg-gain-700" style={{ left: w(lim) }} title="Votre limite" />
       </div>
       <div className="mt-1.5 flex justify-between text-[11px] text-ink-muted">
-        <span>0 %</span>
-        {!loss && band && <span className="text-gain-700">votre zone {pct(band.growth_min, 0)}–{pct(band.growth_max, 0)}</span>}
-        <span>{loss ? `−${Math.round(scale * 100)} %` : "100 %"}</span>
+        <span>0 %</span><span className="text-gain-700">{min ? "minimum" : "limite"} {f(lim)}</span>
       </div>
     </div>
   );
 }
 
-function Why({ m, metrics }: { m: any; metrics: any }) {
-  const e = m.explanation;
+const SECTION_FR: Record<string, string> = { donnees: "Les données", constats: "Les constats", analyse: "Vos règles", options: "Les options", explication: "En bref" };
+const LABEL_FR: Record<string, string> = { MESURE: "Mesuré", DOCUMENTE: "Documenté", HYPOTHESE: "Hypothèse", INCERTAIN: "Incertain" };
+
+function Why({ d, preuves }: { d: any; preuves: Record<string, Preuve> }) {
   return (
     <div className="space-y-6" data-testid="explanation">
-      <List title="Les raisons" items={e.why} metrics={metrics} />
-      <List title="À surveiller" items={e.watch} metrics={metrics} />
-      {m.research && (
-        <div>
-          <h3 className="text-sm font-semibold text-ink">Ce que l'agent Recherche a trouvé</h3>
-          {(m.research.dates?.gap_days > 0 || m.research.dates?.read_at) && (
-            <p className="mt-1 text-xs text-ink-muted" data-testid="research-dates">
-              Prix au {date(m.research.dates.prices_as_of)} · nouvelles lues le {date(m.research.dates.read_at || m.research.dates.researched_on)}
-              {m.research.dates.read_at && ` à ${new Date(m.research.dates.read_at).toLocaleTimeString("fr-CA", { hour: "2-digit", minute: "2-digit" })}`}
-            </p>
-          )}
-          <ul className="mt-2 divide-y divide-line border-t border-line">
-            {m.research.events.map((ev: any, i: number) => (
-              <li key={i} className="flex items-start justify-between gap-3 py-3 text-sm">
-                <div><div className="text-ink">{ev.title}</div><div className="text-xs text-ink-muted">{ev.provider} · {date(ev.published_at)}</div></div>
-                {ev.url && <a href={ev.url} target="_blank" rel="noreferrer" className="shrink-0 text-ink-muted hover:text-ink" aria-label="Source"><ExternalLink className="h-4 w-4" /></a>}
-              </li>
-            ))}
-            {!m.research.events.length && <li className="py-3 text-sm text-ink-muted">Aucun fait récent vérifié dans les sources officielles.</li>}
-            {m.research.unverified.map((u: string, i: number) => <li key={"u" + i} className="py-3 text-sm text-ink-muted"><span className="font-medium text-gold-600">Non confirmé · </span>{u}</li>)}
-          </ul>
+      {(d.redaction?.sections || []).map((sct: any) => (
+        <div key={sct.etape}>
+          <h3 className="text-sm font-semibold text-ink">{SECTION_FR[sct.etape] || sct.etape}</h3>
+          <ul className="mt-2 space-y-2">{sct.phrases.map((ph: any, i: number) => <Phrase key={i} ph={ph} preuves={preuves} />)}</ul>
         </div>
-      )}
-      <List title="Limites" items={[...e.limits, ...m.assumptions]} metrics={metrics} muted />
-      <p className="text-xs text-ink-muted">Les chiffres soulignés viennent d'un calcul vérifié : touchez-les pour voir la méthode.</p>
-    </div>
-  );
-}
-
-function List({ title, items, metrics, muted }: { title: string; items: string[]; metrics: any; muted?: boolean }) {
-  if (!items?.length) return null;
-  return (
-    <div>
-      <h3 className="text-sm font-semibold text-ink">{title}</h3>
-      <ul className="mt-2 space-y-2">{items.map((x, i) => <li key={i} className={clsx("flex gap-3 leading-relaxed", muted ? "text-sm text-ink-muted" : "text-[15px] text-ink")}><span className="mt-[11px] h-1 w-1 shrink-0 rounded-full bg-ink-muted" /><span><Rich text={x} metrics={metrics} /></span></li>)}</ul>
-    </div>
-  );
-}
-
-function Checks({ m }: { m: any }) {
-  const label: Record<string, [string, string]> = { ok: ["Respecté", "text-gain-700"], adjusted: ["Ajusté", "text-gold-600"], blocked: ["Bloqué", "text-accent-700"], breach: ["Dépassé", "text-accent-700"], warn: ["Attention", "text-gold-600"] };
-  return (
-    <ul className="divide-y divide-line border-t border-line" data-testid="governance">
-      {m.governance.map((g: any, i: number) => (
-        <li key={i} className="flex gap-4 py-3.5">
-          <span className={clsx("w-20 shrink-0 pt-0.5 text-xs font-semibold uppercase tracking-wide", label[g.status]?.[1])}>{label[g.status]?.[0]}</span>
-          <div className="min-w-0"><div className="text-sm font-medium text-ink">{g.label}</div><div className="text-sm text-ink-muted">{g.detail}</div></div>
-        </li>
       ))}
-    </ul>
-  );
-}
-
-function Stress({ m }: { m: any }) {
-  return (
-    <div className="border-t border-line">
-      <table className="w-full text-sm">
-        <thead><tr className="text-left text-xs text-ink-muted"><th className="pb-2 pt-4 font-medium">Scénario</th>{m.before && <th className="px-3 pb-2 pt-4 text-right font-medium">Avant</th>}<th className="pb-2 pt-4 text-right font-medium">Après</th></tr></thead>
-        <tbody>
-          {m.stress.map((r: any) => (
-            <tr key={r.key} className="border-t border-line">
-              <td className="py-3 text-ink">{r.name}</td>
-              {m.before && <td className="tabular whitespace-nowrap px-3 py-3 text-right text-ink-muted">{r.before != null ? pct(r.before) : "—"}</td>}
-              <td className={clsx("tabular whitespace-nowrap py-3 text-right font-semibold", (r.after ?? 0) < 0 ? "text-accent-700" : "text-gain-700")}>{pct(r.after)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <p className="pb-4 pt-2 text-xs text-ink-muted">Rejeu de 2022 et chocs hypothétiques : décrivent le passé ou une hypothèse, pas l'avenir.</p>
+      <News preuves={preuves} />
+      <p className="text-xs text-ink-muted">Rédigé par : {d.redaction?.redige_par === "gabarit" ? "gabarit écrit en code (sans modèle de langage)" : d.redaction?.redige_par}. Chaque phrase a été vérifiée contre ses preuves ; touchez « preuve » pour voir la méthode.</p>
     </div>
   );
 }
 
-function Debate({ m, metrics }: { m: any; metrics: any }) {
+function Phrase({ ph, preuves, muted }: { ph: any; preuves: Record<string, Preuve>; muted?: boolean }) {
   return (
-    <div className="grid gap-4 md:grid-cols-2">
-      {([["Agent Opportunités", m.debate.opportunity], ["Agent Risques", m.debate.risk]] as const).map(([t, a]) => (
-        <section key={t} className="border-t border-line py-6">
-          <h3 className="text-sm font-semibold text-ink">{t}</h3>
-          {!a ? <p className="mt-2 text-sm text-ink-muted">Indisponible (IA générative non connectée).</p> : (
-            <>
-              <p className="mt-2 text-sm text-ink-soft">{a.position}</p>
-              <ul className="mt-3 space-y-3">
-                {a.claims.map((c: any, i: number) => (
-                  <li key={i} className="flex gap-2.5 text-sm">
-                    {c.accepted === false ? <X className="mt-0.5 h-4 w-4 shrink-0 text-accent-600" /> : <Check className="mt-0.5 h-4 w-4 shrink-0 text-gain-600" />}
-                    <div className={clsx(c.accepted === false ? "text-ink-muted" : "text-ink")}>
-                      <Rich text={c.text} metrics={metrics} />
-                      {c.accepted === false && <div className="mt-0.5 text-xs text-accent-700">Rejetée par l'audit : {c.reasons.join(" · ")}</div>}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
-        </section>
-      ))}
-    </div>
+    <li className={clsx("flex gap-3 leading-relaxed", muted || ph.etiquette === "INCERTAIN" || ph.etiquette === "HYPOTHESE" ? "text-sm text-ink-muted" : "text-[15px] text-ink")}>
+      <span className="mt-[11px] h-1 w-1 shrink-0 rounded-full bg-ink-muted" />
+      <span>{vous(ph.texte)} {ph.etiquette && <span className="whitespace-nowrap text-[11px] font-medium uppercase tracking-wide text-ink-muted">· {LABEL_FR[ph.etiquette] || ph.etiquette}</span>}
+        {(ph.preuves || []).slice(0, 2).map((id: string) => preuves[id] && <ProofChip key={id} p={preuves[id]} />)}</span>
+    </li>
   );
 }
 
-/** [metric.id] → verified value, clickable to its method. Unknown ids are dropped. */
-export function Rich({ text, metrics }: { text: string; metrics: any }) {
-  const parts = useMemo(() => text.split(/(\[[a-z]+\.[A-Za-z0-9_.\-]+\])/g), [text]);
-  return <>{parts.map((p, i) => {
-    const mm = p.match(/^\[([a-z]+\.[A-Za-z0-9_.\-]+)\]$/);
-    if (!mm) return <span key={i}>{p}</span>;
-    const rec = metrics[mm[1]];
-    return rec ? <MetricChip key={i} m={rec} /> : null;
-  })}</>;
-}
-
-function MetricChip({ m }: { m: any }) {
+/** The evidence behind a sentence: what was measured, how, on which period and from which sources. */
+function ProofChip({ p }: { p: Preuve }) {
   const [open, setOpen] = useState(false);
+  const per = Array.isArray(p.periode) ? p.periode : p.periode ? [p.periode.debut, p.periode.fin] : null;
   return (
-    <span className="relative inline-block">
-      <button type="button" onClick={() => setOpen(!open)} title={`${m.label} · ${m.method}`} className="tabular font-semibold text-ink underline decoration-gold-500 decoration-2 underline-offset-[3px] hover:bg-gold-50">{m.display}</button>
+    <span className="relative ml-1 inline-block">
+      <button type="button" onClick={() => setOpen(!open)} title={p.libelle} className="rounded-full bg-primary-50 px-1.5 py-px text-[11px] font-semibold text-primary-600 hover:bg-primary-100">preuve</button>
       {open && (
         <span className="absolute left-0 top-full z-30 mt-1.5 block w-72 rounded-xl border border-line bg-white p-3 text-left text-xs font-normal leading-relaxed text-ink-soft shadow-lift">
-          <b className="block font-semibold text-ink">{m.label} : {m.display}</b>
-          <span className="mt-1 block">Méthode : {m.method}</span>
-          {m.window_start && <span className="block">Période : {m.window_start} → {m.window_end}</span>}
-          <span className="block">{m.info_class === "HYPOTHETICAL" ? "Hypothèse / proposition" : "Résultat calculé"}</span>
-          <span className="mt-1 block text-[10px] text-ink-muted">{m.metric_id}</span>
+          <b className="block font-semibold text-ink">{p.libelle}</b>
+          <span className="mt-1 block">Méthode : {p.methode.replaceAll("_", " ")}</span>
+          {per && <span className="block">Période : {per[0]} → {per[1]}</span>}
+          <span className="block">Calculé au {p.date_de_calcul}</span>
+          {p.donnees_source?.length > 0 && <span className="block">Sources : {p.donnees_source.join(", ")}</span>}
+          {p.reference && <span className="mt-1 block text-ink-muted">{p.reference}</span>}
+          <span className="mt-1 block text-[10px] text-ink-muted">{p.id}</span>
         </span>
       )}
     </span>
   );
 }
 
+/** Official filings and press read by the research tools (only what was published by the simulated date). */
+function News({ preuves }: { preuves: Record<string, Preuve> }) {
+  const dep = Object.values(preuves).find((p) => p.mesure === "depots_officiels");
+  const art = Object.values(preuves).find((p) => p.mesure === "couverture_mediatique");
+  const filings: any[] = dep?.statut === "ok" ? dep.valeur?.depots || [] : [];
+  const articles: any[] = art?.statut === "ok" ? art.valeur?.articles || [] : [];
+  if (!dep && !art) return null;
+  return (
+    <div>
+      <h3 className="text-sm font-semibold text-ink">Ce que l'agent Recherche a trouvé</h3>
+      {(dep?.valeur?.lu_le || art?.valeur?.lu_le) && <p className="mt-1 text-xs text-ink-muted" data-testid="research-dates">Lu à la source le {date(dep?.valeur?.lu_le || art?.valeur?.lu_le)} · seulement ce qui était publié au {date(dep?.as_of || art?.as_of)}</p>}
+      <ul className="mt-2 divide-y divide-line border-t border-line">
+        {filings.slice(0, 3).map((x: any) => (
+          <li key={x.url} className="flex items-start justify-between gap-3 py-3 text-sm">
+            <div><div className="text-ink">{x.forme}{x.objet ? ` · ${x.objet}` : ""}</div><div className="text-xs text-ink-muted">SEC EDGAR · {date(x.date)}</div></div>
+            <a href={x.url} target="_blank" rel="noreferrer" className="shrink-0 text-ink-muted hover:text-ink" aria-label="Source"><ExternalLink className="h-4 w-4" /></a>
+          </li>
+        ))}
+        {articles.slice(0, 3).map((x: any) => (
+          <li key={x.url} className="flex items-start justify-between gap-3 py-3 text-sm">
+            <div><div className="text-ink">{x.titre}</div><div className="text-xs text-ink-muted">{x.source} · {date(x.date)} · presse (GDELT), non confirmé</div></div>
+            <a href={x.url} target="_blank" rel="noreferrer" className="shrink-0 text-ink-muted hover:text-ink" aria-label="Source"><ExternalLink className="h-4 w-4" /></a>
+          </li>
+        ))}
+        {!filings.length && !articles.length && <li className="py-3 text-sm text-ink-muted">{dep?.note || art?.note || "Aucun fait récent dans les sources officielles."}</li>}
+      </ul>
+    </div>
+  );
+}
+
+function Checks({ d }: { d: any }) {
+  const label: Record<string, [string, string]> = {
+    respectee: ["Respecté", "text-gain-700"], approchee: ["Approché", "text-primary-600"], depassee: ["Dépassé", "text-accent-700"],
+    donnees_insuffisantes: ["Incertain", "text-primary-600"], non_applicable: ["N/A", "text-ink-muted"],
+  };
+  const s: Signal = d.signal;
+  return (
+    <div data-testid="governance">
+      <ul className="divide-y divide-line border-t border-line">
+        {s.clauses.map((c) => (
+          <li key={c.clause_id} className="flex gap-4 py-3.5">
+            <span className={clsx("w-20 shrink-0 pt-0.5 text-xs font-semibold uppercase tracking-wide", label[c.statut]?.[1])}>{label[c.statut]?.[0]}</span>
+            <div className="min-w-0"><div className="text-sm font-medium text-ink">{c.libelle}</div><div className="text-sm text-ink-muted">{vous(c.explication)}</div></div>
+          </li>
+        ))}
+        {(d.gouvernance?.controles || []).map((g: any) => (
+          <li key={g.code} className="flex gap-4 py-3.5">
+            <span className="w-20 shrink-0 pt-0.5 text-xs font-semibold uppercase tracking-wide text-gain-700">Contrôle</span>
+            <div className="text-sm text-ink-muted">{g.libelle}</div>
+          </li>
+        ))}
+      </ul>
+      <p className="pt-3 text-xs text-ink-muted">Niveau décidé par la politique écrite (règles {s.regles_declenchees.join(", ") || "—"}), jamais par le modèle de langage.</p>
+    </div>
+  );
+}
+
+function Stress({ preuves }: { preuves: Record<string, Preuve> }) {
+  const { config } = useApp();
+  const rows = Object.values(preuves).filter((p) => (p.mesure === "rejeu_historique" || p.mesure === "choc_hypothetique") && p.statut === "ok");
+  /** Replay of a past crisis: the worst fall of the portfolio during it; hypothetical shock: the portfolio's change. */
+  const val = (p: Preuve): number | null => {
+    const x = p.mesure === "rejeu_historique" ? p.valeur?.pire_baisse_pct : p.valeur?.variation_pct;
+    return typeof x === "number" ? x / 100 : null;
+  };
+  const name = (p: Preuve) => {
+    const k = String((p.parametres as any)?.episode ?? (p.parametres as any)?.scenario ?? "");
+    return p.mesure === "rejeu_historique" ? `Si « ${config?.episodes?.[k]?.libelle ?? k} » se répétait (pire baisse)` : `Choc hypothétique : ${config?.chocs?.[k]?.libelle ?? k}`;
+  };
+  if (!rows.length) return <p className="border-t border-line py-4 text-sm text-ink-muted">Les agents n'ont pas eu besoin de scénarios pour cette demande.</p>;
+  return (
+    <div className="border-t border-line">
+      <table className="w-full text-sm">
+        <thead><tr className="text-left text-xs text-ink-muted"><th className="pb-2 pt-4 font-medium">Scénario</th><th className="pb-2 pt-4 text-right font-medium">Votre portefeuille</th></tr></thead>
+        <tbody>
+          {rows.map((p) => {
+            const x = val(p);
+            return (
+              <tr key={p.id} className="border-t border-line">
+                <td className="py-3 text-ink">{name(p)}</td>
+                <td className={clsx("tabular whitespace-nowrap py-3 text-right font-semibold", (x ?? 0) < 0 ? "text-accent-700" : "text-gain-700")}>{x == null ? "n/d" : pct(x)}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      <p className="pb-4 pt-2 text-xs text-ink-muted">Rejeu de crises passées et chocs hypothétiques : décrivent le passé ou une hypothèse, pas l'avenir.</p>
+    </div>
+  );
+}
+
+function Debate({ d, preuves }: { d: any; preuves: Record<string, Preuve> }) {
+  const sides: [string, any][] = [["pour", d.debat?.pour], ["contre", d.debat?.contre]];
+  return (
+    <div className="grid gap-4 md:grid-cols-2">
+      {sides.map(([k, a]) => (
+        <section key={k} className="border-t border-line py-6">
+          <h3 className="text-sm font-semibold text-ink">{a?.agent || (k === "pour" ? "Agent Opportunités" : "Agent Risques")}</h3>
+          <p className="mt-1 text-xs text-ink-muted">{k === "pour" ? "Ce qui joue en faveur" : "Ce qui appelle à la prudence"} · rédigé par {a?.redige_par === "gabarit" ? "un gabarit écrit en code" : a?.redige_par}</p>
+          {!a?.phrases?.length ? <p className="mt-2 text-sm text-ink-muted">Rien à signaler.</p> : (
+            <ul className="mt-3 space-y-3">
+              {a.phrases.map((ph: any, i: number) => (
+                <li key={i} className="flex gap-2.5 text-sm">
+                  {k === "pour" ? <Check className="mt-0.5 h-4 w-4 shrink-0 text-gain-600" /> : <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-accent-600" />}
+                  <div className="text-ink">{vous(ph.texte)}{(ph.preuves || []).slice(0, 1).map((id: string) => preuves[id] && <ProofChip key={id} p={preuves[id]} />)}</div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      ))}
+      <p className="text-xs text-ink-muted md:col-span-2">Deux agents, les mêmes preuves : chacun défend un point de vue, aucun ne décide. Chaque phrase est vérifiée comme le reste du dossier.</p>
+    </div>
+  );
+}
+
 // ================================================================================================ history
+type Entry = { type: string; a: string; as_of?: string; id?: string; intention?: any; niveau?: string; dossier?: string; execute?: boolean; choix?: string; [k: string]: any };
+
+export function statusOf(e: Entry, entries: Entry[]): "approved" | "rejected" | "proposed" | "reviewed" {
+  if (e.intention?.type !== "ordre") return "reviewed";
+  const dec = entries.find((x) => x.type === "decision" && x.dossier === e.id);
+  return dec ? (dec.execute ? "approved" : "rejected") : "proposed";
+}
+
+const JOURNAL_FR: Record<string, string> = { dossier: "Analyse des agents", signal: "Signal affiché", decision: "Votre décision", regle_modifiee: "Règle modifiée",
+  notification: "Notification de la Vigie", contrat: "Profil et règles", surveillance: "Liste de suivi", assistant: "Question posée", positions: "Placements modifiés",
+  depot: "Ajout de fonds (simulation)", vente: "Vente simulée" };
+
+export function journalText(e: Entry): string {
+  return vous(journalRaw(e));
+}
+function journalRaw(e: Entry): string {
+  if (e.type === "dossier") return describe(e.intention);
+  if (e.type === "decision") return `${e.execute ? (e.choix === "continuer" ? "Continuer quand même" : "Approuvé") : "Refusé"} · ${e.ticker ? sym(e.ticker) : ""} ${e.montant_cad ? cad(e.montant_cad) : ""}`.trim();
+  if (e.type === "regle_modifiee") return `${e.clause} → version ${e.version}${e.contexte ? ` · « ${e.contexte} »` : ""}`;
+  if (e.type === "signal") return `${e.ticker ? sym(e.ticker) : ""} ${e.montant_cad ? cad(e.montant_cad) : ""} · ${NIVEAU[e.niveau as Niveau]?.short ?? ""}`;
+  if (e.type === "assistant") return `« ${e.question} »`;
+  if (e.type === "depot") return cad(e.montant_cad);
+  if (e.type === "vente") return `${sym(e.ticker)} · ${cad(e.montant_cad)}`;
+  if (e.type === "positions") return e.origine === "allocation_initiale" ? "Retour au portefeuille de départ" : e.origine === "import_csv" ? "Importés d'un fichier" : String(e.origine || "").startsWith("connexion") ? "Compte connecté (simulation)" : "Saisis à la main";
+  if (e.type === "surveillance") return `${e.ticker ? sym(e.ticker) : ""} ajouté à la liste de suivi`;
+  return e.titre || e.message || "";
+}
+
+/** Every request made to the agents (with its status), and the full journal of what happened. */
 export function Decisions() {
-  const { data, loading } = useApi<any>("/mandates");
-  const list: any[] = data?.mandates || [];
+  const path = useProfilePath();
+  const { data, loading } = useApi<{ entrees: Entry[] }>(path("/journal", { as_of: null }));
+  const [tab, setTab] = useState<"decisions" | "journal">("decisions");
+  const entries = data?.entrees || [];
+  const list = entries.filter((e) => e.type === "dossier" && e.id);
   return (
     <PageIn className="mx-auto max-w-3xl px-5 pb-16 pt-10">
       <div className="flex items-end justify-between gap-4">
@@ -873,26 +925,47 @@ export function Decisions() {
         <h1 className="font-display text-[40px] font-semibold leading-none tracking-tightest text-ink">Décisions</h1></div>
         <Link to="/"><Button variant="gold">Nouvelle décision</Button></Link>
       </div>
+      <div className="mt-8"><Tabs value={tab} onChange={setTab} options={[["decisions", "Décisions"], ["journal", "Journal complet"]]} /></div>
       {loading && !data && <Spinner />}
-      {data && !list.length && <div className="mt-8 border-t border-line py-12 text-center text-sm text-ink-muted">Aucune décision pour l'instant.</div>}
-      {list.length > 0 && (
-        <Stagger className="mt-8 divide-y divide-line border-t border-line">
-          {list.map((m) => (
-            <StaggerItem key={m.mandate_id}>
-              <Link to={`/mandats/${m.mandate_id}`} className="flex items-center gap-4 py-4 transition-opacity hover:opacity-70">
-                <div className="min-w-0 flex-1">
-                  <div className="truncate font-medium text-ink">{m.request}</div>
-                  <div className="truncate text-sm text-ink-muted">{m.headline}</div>
-                </div>
-                <div className="text-right">
-                  <div className={clsx("text-xs font-semibold", m.status === "approved" || m.status === "reviewed" ? "text-gain-700" : m.status === "rejected" ? "text-ink-muted" : "text-primary-600")}>{m.status === "approved" ? "Approuvée" : m.status === "rejected" ? "Refusée" : m.status === "reviewed" ? "Analysée" : "En attente"}</div>
-                  <div className="text-xs text-ink-muted">{date(m.created_at)}</div>
-                </div>
-              </Link>
-            </StaggerItem>
-          ))}
+      {tab === "decisions" && data && !list.length && <div className="mt-6 py-12 text-center text-sm text-ink-muted">Aucune décision pour l'instant.</div>}
+      {tab === "decisions" && list.length > 0 && (
+        <Stagger className="mt-2 divide-y divide-line">
+          {list.map((m) => {
+            const st = statusOf(m, entries);
+            return (
+              <StaggerItem key={m.id}>
+                <Link to={`/mandats/${m.id}`} className="flex items-center gap-4 py-4 transition-opacity hover:opacity-70">
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate font-medium text-ink">{requestOf(m.id!, m.intention)}</div>
+                    <div className="truncate text-sm text-ink-muted">{NIVEAU[m.niveau as Niveau]?.label ?? ""}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className={clsx("text-xs font-semibold", st === "approved" || st === "reviewed" ? "text-gain-700" : st === "rejected" ? "text-ink-muted" : "text-primary-600")}>{st === "approved" ? "Approuvée" : st === "rejected" ? "Refusée" : st === "reviewed" ? "Analysée" : "En attente"}</div>
+                    <div className="text-xs text-ink-muted">{date(m.a)}</div>
+                  </div>
+                </Link>
+              </StaggerItem>
+            );
+          })}
         </Stagger>
+      )}
+      {tab === "journal" && data && (
+        entries.length === 0 ? <div className="mt-6 py-12 text-center text-sm text-ink-muted">Aucune entrée pour l'instant.</div> : (
+          <Stagger className="mt-2 divide-y divide-line" key="journal">
+            {entries.map((e, i) => (
+              <StaggerItem key={i} className="grid gap-1 py-3.5 sm:grid-cols-[150px_minmax(0,1fr)] sm:gap-4">
+                <div className="tabular-nums text-xs text-ink-muted">{date(e.a)}{e.as_of && e.as_of !== String(e.a).slice(0, 10) ? <div>date simulée : {date(e.as_of)}</div> : null}</div>
+                <div className="min-w-0 text-sm">
+                  <div className="font-medium text-ink">{JOURNAL_FR[e.type] ?? e.type}</div>
+                  <div className="mt-0.5 text-ink-soft">{e.type === "dossier" && e.id ? <Link to={`/mandats/${e.id}`} className="hover:underline">{journalText(e)}</Link> : journalText(e)}</div>
+                </div>
+              </StaggerItem>
+            ))}
+          </Stagger>
+        )
       )}
     </PageIn>
   );
 }
+
+export { REVIEW };

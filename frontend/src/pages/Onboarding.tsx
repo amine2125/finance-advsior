@@ -1,17 +1,19 @@
 import clsx from "clsx";
 import { ArrowLeft, ArrowRight, Brain, Check, CheckCircle2, Heart, Leaf, Minus, Plus, Rocket, Scale, Shield, Sprout, UserRound, Wallet, XCircle } from "lucide-react";
 import { ReactNode, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { AdvisorAvatar, ADVISOR_NAME } from "../components/Advisor";
 import { Logo } from "../components/Layout";
 import { Button, Choice, ErrorBox, Explain, inputCls, Spinner } from "../components/ui";
 import { useApp } from "../hooks/useApp";
 import { motion } from "framer-motion";
 import { Glass, softSpring, Stagger, StaggerItem } from "../components/motion";
-import { cad, pct } from "../lib/format";
-import { api, ApiError } from "../services/api";
+import { cad } from "../lib/format";
+import { clauseLimit, Contrat, levelIndexFromName, LEVEL_LABEL, LEVELS, Profil, toReponses } from "../lib/ulysse";
+import { api, ApiError, qs } from "../services/api";
 
-// « Connaître son client » : the interview a bank advisor would do, one question at a time.
+// « Connaître son client » : the interview a bank advisor would do, one question at a time. The engine (ULYSSE) computes the
+// profile from these answers: the lowest of three measures (what you are willing to risk, what your situation allows, what you know).
 export type A = Record<string, any>;
 export const EMPTY: A = {
   display_name: "", age: null, household: null, dependants_count: 0, employment: null, income_outlook: null,
@@ -68,9 +70,11 @@ const QUIZ: Record<string, { q: string; options: [string, string][]; good: strin
 
 export default function Onboarding() {
   const nav = useNavigate();
-  const { me, reload } = useApp();
-  const editing = !!me?.onboarded;
-  const [a, setA] = useState<A>(() => ({ ...EMPTY, ...(me?.answers || {}) }));
+  const [params] = useSearchParams();
+  const { me, reload, setProfileId, asOf } = useApp();
+  // Already registered: the questionnaire updates the SAME profile (holdings and history kept), unless a new profile is asked for.
+  const editing = !!me?.onboarded && params.get("nouveau") !== "1";
+  const [a, setA] = useState<A>(() => ({ ...EMPTY, ...(editing ? me?.profile?.questionnaire || {} : {}) }));
   const [i, setI] = useState(0);
   const [preview, setPreview] = useState<any>(null);
   const [busy, setBusy] = useState(false);
@@ -83,19 +87,25 @@ export default function Onboarding() {
     if (step.id !== "result") return;
     setPreview(null);
     setError(null);
-    api.post("/onboarding/preview", payload(a)).then(setPreview).catch(setError);
+    api.post("/profils/apercu", payload(a)).then(setPreview).catch(setError);
   }, [step.id]); // eslint-disable-line
 
   const confirm = async () => {
     setBusy(true); setError(null);
     try {
-      await api.post("/onboarding", payload(a));
-      await reload();
-      nav(editing ? "/profil" : "/");
+      if (editing && me?.pid) {
+        await api.post(`/profils/${encodeURIComponent(me.pid)}/questionnaire${qs({ as_of: asOf })}`, payload(a));
+        await reload();
+        nav("/profil");
+      } else {
+        const r = await api.post<{ profil: Profil }>(`/profils${qs({ as_of: asOf })}`, payload(a));
+        setProfileId(r.profil.id);
+        nav("/");
+      }
     } catch (e) { setError(e as ApiError); } finally { setBusy(false); }
   };
   const next = () => { setI(Math.min(STEPS.length - 1, i + 1)); window.scrollTo({ top: 0 }); };
-  const back = () => (i === 0 ? nav(editing ? "/profil" : "/") : setI(i - 1));
+  const back = () => (i === 0 ? nav(me?.onboarded ? "/profil" : "/") : setI(i - 1));
 
   return (
     <div className="flex min-h-screen flex-col bg-white">
@@ -134,15 +144,8 @@ export default function Onboarding() {
   );
 }
 
-export function payload(a: A) {
-  const n = (v: any) => (v === null || v === "" || v === undefined ? null : +v);
-  return {
-    ...a, age: n(a.age), dependants_count: n(a.dependants_count) ?? 0, income_net_monthly: n(a.income_net_monthly), expenses_monthly: n(a.expenses_monthly),
-    savings_cad: n(a.savings_cad), investments_cad: n(a.investments_cad), credit_card_debt_cad: n(a.credit_card_debt_cad) ?? 0,
-    other_debt_cad: n(a.other_debt_cad) ?? 0, capital_cad: n(a.capital_cad), horizon_years: n(a.horizon_years),
-    stable_income: null, emergency_reserve: null, dependants: null, experience: null,
-  };
-}
+/** The answers as the engine's questionnaire (see lib/ulysse.ts for every correspondence). */
+export const payload = (a: A) => toReponses(a);
 
 // ------------------------------------------------------------------------------------------------ one question per screen
 export function StepView({ id, a, set, preview, error }: { id: string; a: A; set: (p: A) => void; preview: any; error: ApiError | null }) {
@@ -215,7 +218,7 @@ export function StepView({ id, a, set, preview, error }: { id: string; a: A; set
       );
     case "assets":
       return (
-        <Q title="Avez-vous déjà des placements ?" why="Pour savoir quelle part de votre argent nous parlons, et éviter de tout mettre au même endroit.">
+        <Q title="Avez-vous déjà des placements ?" why="Pour savoir quelle part de votre argent nous parlons. Le montant que vous pensez investir devient votre solde de départ (argent fictif, 10 000 $ si vous n'en indiquez pas).">
           <div className="grid gap-4 sm:grid-cols-2">
             <L label="Valeur de vos placements actuels (REER, CELI, fonds, actions…)"><Money value={a.investments_cad} onChange={(v) => set({ investments_cad: v })} testid="investments" /></L>
             <L label="Montant que vous pensez investir bientôt (facultatif)"><Money value={a.capital_cad} onChange={(v) => set({ capital_cad: v })} /></L>
@@ -362,31 +365,46 @@ export function StepView({ id, a, set, preview, error }: { id: string; a: A; set
 
 // ------------------------------------------------------------------------------------------------ « voici ce que je retiens de vous »
 const MEANING: Record<string, string> = {
-  Prudent: "Vous protégez votre argent avant tout. Vos placements bougeront peu, et rapporteront moins.",
-  "Faible à modéré": "Surtout de la stabilité, avec une petite part qui peut croître.",
-  Modéré: "Un équilibre entre stabilité et croissance, avec des hauts et des bas modérés.",
-  Élevé: "La croissance à long terme, en acceptant de fortes baisses temporaires.",
+  faible: "Vous protégez votre argent avant tout. Vos placements bougeront peu, et rapporteront moins.",
+  faible_modere: "Surtout de la stabilité, avec une petite part qui peut croître.",
+  modere: "Un équilibre entre stabilité et croissance, avec des hauts et des bas modérés.",
+  eleve: "La croissance à long terme, en acceptant de fortes baisses temporaires.",
 };
-const LEVEL_SCALE = ["Prudent", "Faible à modéré", "Modéré", "Élevé"];
+const LEVEL_SCALE = LEVELS.map((l) => LEVEL_LABEL[l]);
 const KNOW_SCALE = ["Débutant", "Débutant", "Intermédiaire", "Avancé"];
+const KNOW_VALUE: Record<string, number> = { Débutant: 1, Intermédiaire: 2, Avancé: 3 };
+
+/** The engine writes « tu »; these few fixed phrasings of the profile's reasoning are shown with « vous ». Facts and numbers unchanged. */
+export const vousKyc = (t: string) => t
+  .replace("Ce que tu ferais vraiment", "Ce que vous feriez vraiment").replace("ce que tu dis", "ce que vous dites")
+  .replace("Tu débutes", "Vous débutez").replace("tu débutes", "vous débutez").replace("Tes réponses se contredisent : tu dis", "Vos réponses se contredisent : vous dites")
+  .replace("Tu es prêt", "Vous êtes prêt").replace("ta situation", "votre situation").replaceAll("« Faible »", "« Prudent »");
 
 /** The profile as pictures: the level on its scale, the three measures (the lowest decides), the situation, what it means for the money. */
-export function Result({ p, error, name, action }: { p: any; error?: ApiError | null; name?: string; action?: ReactNode }) {
+export function Result({ p, error, name, action }: { p: { profil: Profil; contrat: Contrat } | null; error?: ApiError | null; name?: string; action?: ReactNode }) {
   if (error) return <ErrorBox error={error} />;
   if (!p) return <Spinner label="J'analyse vos réponses…" />;
-  const k = p.kyc;
-  const s = k?.snapshot || {};
-  const level = Math.max(0, LEVEL_SCALE.indexOf(p.risk_profile_label));
-  const b = p.budget;
+  const k = p.profil.kyc;
+  const s = k?.capacite?.situation;
+  const level = Math.max(0, LEVELS.indexOf(p.profil.tolerance as (typeof LEVELS)[number]));
+  const rule = (type: string) => p.contrat.clauses.find((c) => c.type === type);
+  const crypto = rule("crypto_max");
   const lowered = (r: string) => r.includes("→");
+  const binding = k?.mesure_determinante || "";
   const measures = k ? [
-    { key: "tol", label: "Ce que vous êtes prêt à risquer", value: k.tolerance.index, text: k.tolerance.level, binding: k.binding.includes("tolérance"),
-      reasons: (k.tolerance.reasons || []).filter((r: string) => r.includes("compte plus")) },
-    { key: "cap", label: "Ce que votre situation permet", value: k.capacity.index, text: k.capacity.level, binding: k.binding.includes("capacité"),
-      reasons: (k.capacity.reasons || []).filter(lowered) },
-    ...(k.knowledge.level ? [{ key: "know", label: "Ce que vous connaissez", value: k.knowledge.index === 0 ? 1 : k.knowledge.index === 1 ? 2 : 3, text: k.knowledge.level,
-      binding: k.binding === "connaissances", reasons: [], scale: KNOW_SCALE, hint: `quiz ${k.knowledge.quiz_correct}/${k.knowledge.quiz_total}` }] : []),
+    { key: "tol", label: "Ce que vous êtes prêt à risquer", value: levelIndexFromName(k.tolerance.niveau), text: LEVEL_SCALE[levelIndexFromName(k.tolerance.niveau)], binding: binding.includes("tolérance"),
+      reasons: (k.tolerance.raisons || []).filter((r: string) => r.includes("compte plus")) },
+    { key: "cap", label: "Ce que votre situation permet", value: levelIndexFromName(k.capacite.niveau), text: LEVEL_SCALE[levelIndexFromName(k.capacite.niveau)], binding: binding.includes("capacité"),
+      reasons: (k.capacite.raisons || []).filter(lowered) },
+    ...(k.connaissances?.niveau ? [{ key: "know", label: "Ce que vous connaissez", value: KNOW_VALUE[k.connaissances.niveau] ?? 1, text: k.connaissances.niveau,
+      binding: binding === "connaissances", reasons: [] as string[], scale: KNOW_SCALE, hint: `quiz ${k.connaissances.quiz_bonnes}/${k.connaissances.quiz_total}` }] : []),
   ] : [];
+  const others = k ? (k.raisons || []).filter((r: string) => !(k.tolerance.raisons || []).includes(r) && !(k.capacite.raisons || []).includes(r)) : [];
+  const figs = s ? [
+    s.marge_mensuelle != null && <Fig key="m" label="Marge par mois" value={cad(s.marge_mensuelle)} bad={s.marge_mensuelle <= 0} />,
+    s.mois_epargne != null && <Fig key="e" label="Coussin de sécurité" value={`${Math.round(s.mois_epargne)} mois`} bad={s.mois_epargne < 3} />,
+    <Fig key="d" label="Dettes" value={cad(s.dettes_cad)} bad={s.dettes_cad > 0} />,
+  ].filter(Boolean) : [];
   return (
     <div className="space-y-10" data-testid="kyc-result">
       {/* 1. the level */}
@@ -395,8 +413,8 @@ export function Result({ p, error, name, action }: { p: any; error?: ApiError | 
           <div className="flex items-center gap-3"><AdvisorAvatar size={36} /><p className="text-sm text-ink-muted">Voici ce que je retiens de vous{name ? `, ${name}` : ""}</p></div>
           {action}
         </div>
-        <h1 className="mt-6 font-display text-[40px] font-semibold leading-none tracking-tightest text-ink sm:text-[52px]">Profil <span className="text-primary-600">{p.risk_profile_label.toLowerCase()}</span></h1>
-        <p className="mt-3 max-w-xl text-[17px] leading-relaxed text-ink-soft">{MEANING[p.risk_profile_label]}</p>
+        <h1 className="mt-6 font-display text-[40px] font-semibold leading-none tracking-tightest text-ink sm:text-[52px]">Profil <span className="text-primary-600">{LEVEL_SCALE[level].toLowerCase()}</span></h1>
+        <p className="mt-3 max-w-xl text-[17px] leading-relaxed text-ink-soft">{MEANING[p.profil.tolerance]}</p>
         <div className="mt-7 grid grid-cols-4 gap-1.5">
           {LEVEL_SCALE.map((l, i) => (
             <div key={l}>
@@ -407,9 +425,9 @@ export function Result({ p, error, name, action }: { p: any; error?: ApiError | 
           ))}
         </div>
         <div className="mt-7 grid grid-cols-3 gap-2 sm:gap-3">
-          <Rule label="En actions" value={`${Math.round(b.growth_min * 100)}–${pct(b.growth_max, 0)}`} />
-          <Rule label="1 entreprise" value={`max ${pct(b.max_single_issuer, 0)}`} />
-          <Rule label="Cryptoactifs" value={b.max_speculative > 0 ? `max ${pct(b.max_speculative, 0)}` : "aucun"} />
+          <Rule label="En actions" value={rule("actions_max") ? clauseLimit(rule("actions_max")!) : "n/d"} />
+          <Rule label="1 entreprise" value={rule("concentration_titre") ? clauseLimit(rule("concentration_titre")!) : "n/d"} />
+          <Rule label="Cryptoactifs" value={crypto && Number(crypto.parametres.max_pct) > 0 ? clauseLimit(crypto) : "aucun"} />
         </div>
       </Glass>
 
@@ -430,28 +448,28 @@ export function Result({ p, error, name, action }: { p: any; error?: ApiError | 
                 </div>
                 <Dots value={m.value} active={m.binding} />
                 {m.reasons.map((r: string) => (
-                  <p key={r} className="mt-3 flex gap-2.5 text-sm leading-snug text-ink-soft"><span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-primary-500" />{shortReason(r)}</p>
+                  <p key={r} className="mt-3 flex gap-2.5 text-sm leading-snug text-ink-soft"><span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-primary-500" />{vousKyc(shortReason(r))}</p>
                 ))}
               </StaggerItem>
             ))}
-            {(k.other_caps || []).map((r: string) => <p key={r} className="flex gap-2.5 px-1 text-sm text-ink-soft"><span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-primary-500" />{r}</p>)}
+            {others.map((r: string) => <p key={r} className="flex gap-2.5 px-1 text-sm text-ink-soft"><span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-primary-500" />{vousKyc(r)}</p>)}
           </Stagger>
-          {k.tolerance.note && <p className="mt-4 text-sm leading-relaxed text-ink-muted">{k.tolerance.note}</p>}
-          {k.tolerance.index > k.capacity.index && (
+          {k.tolerance.note && <p className="mt-4 text-sm leading-relaxed text-ink-muted">{vousKyc(k.tolerance.note)}</p>}
+          {levelIndexFromName(k.tolerance.niveau) > levelIndexFromName(k.capacite.niveau) && (
             <p className="mt-4 text-sm leading-relaxed text-ink-muted">Vous êtes prêt à risquer plus. Si votre situation change (par exemple un horizon plus long), votre profil peut monter.</p>
           )}
         </section>
       )}
 
       {/* 3. before investing */}
-      {k?.before_investing?.length > 0 && (
+      {(k?.avant_d_investir?.length ?? 0) > 0 && (
         <section>
           <h2 className="font-display text-[22px] font-semibold tracking-tight text-ink">Avant d'investir</h2>
           <Stagger as="ol" className="mt-4 space-y-2.5">
-            {k.before_investing.map((st: any, n: number) => (
-              <StaggerItem key={st.kind} className="flex gap-4 rounded-[20px] bg-ink/[0.03] p-4">
+            {k!.avant_d_investir.map((st, n) => (
+              <StaggerItem key={st.type} className="flex gap-4 rounded-[20px] bg-ink/[0.03] p-4">
                 <span className="tabular-nums grid h-7 w-7 shrink-0 place-items-center rounded-full bg-ink text-xs font-semibold text-white">{n + 1}</span>
-                <div><div className="font-medium text-ink">{st.title}</div><div className="mt-0.5 text-sm leading-snug text-ink-muted">{st.text}</div></div>
+                <div><div className="font-medium text-ink">{st.titre}</div><div className="mt-0.5 text-sm leading-snug text-ink-muted">{st.texte}</div></div>
               </StaggerItem>
             ))}
           </Stagger>
@@ -459,17 +477,13 @@ export function Result({ p, error, name, action }: { p: any; error?: ApiError | 
       )}
 
       {/* 4. situation */}
-      {k && Object.keys(s).length > 1 && (
+      {k && s && (
         <section>
           <h2 className="font-display text-[22px] font-semibold tracking-tight text-ink">Votre situation</h2>
-          <div className="mt-4 grid grid-cols-2 overflow-hidden rounded-[20px] hairline sm:grid-cols-4">
-            {s.monthly_margin !== undefined && <Fig label="Marge par mois" value={cad(s.monthly_margin)} bad={s.monthly_margin <= 0} />}
-            {s.emergency_months !== undefined && <Fig label="Coussin de sécurité" value={`${Math.round(s.emergency_months)} mois`} bad={s.emergency_months < 3} />}
-            <Fig label="Dettes" value={cad(s.debts_cad)} bad={s.debts_cad > 0} />
-            {s.net_worth_excl_home !== undefined && <Fig label="Avoir net (hors maison)" value={cad(s.net_worth_excl_home)} />}
-          </div>
+          <div className={clsx("mt-4 grid overflow-hidden rounded-[20px] hairline", figs.length >= 3 ? "grid-cols-3" : "grid-cols-2")}>{figs}</div>
           <Explain label="Le détail de mon raisonnement">
-            <ol className="list-decimal space-y-1 pl-4">{(p.derivation || []).map((d: string, n: number) => <li key={n}>{d}</li>)}</ol>
+            <ol className="list-decimal space-y-1 pl-4">{(k.raisons || []).map((d: string, n: number) => <li key={n}>{vousKyc(d)}</li>)}</ol>
+            <p className="mt-2">{k.cadre}</p>
           </Explain>
         </section>
       )}

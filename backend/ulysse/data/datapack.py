@@ -31,7 +31,7 @@ class Datapack:
         self.path = Path(path)
         if not (self.path / "meta.json").exists():
             raise FileNotFoundError(f"datapack not found in {self.path} — run `make data`")
-        self.meta = json.loads((self.path / "meta.json").read_text())
+        self.meta = json.loads((self.path / "meta.json").read_text(encoding="utf-8"))
         import hashlib
         from ulysse.evidence import set_datapack_tag
         tag = hashlib.sha1(json.dumps([self.meta.get("built_at"), self.meta.get("inputs")], sort_keys=True).encode()).hexdigest()[:8]
@@ -55,15 +55,15 @@ class Datapack:
 
     @cached_property
     def macro(self) -> dict:
-        return json.loads((self.path / "macro.json").read_text())
+        return json.loads((self.path / "macro.json").read_text(encoding="utf-8"))
 
     @cached_property
     def etf(self) -> dict:
-        return json.loads((self.path / "etf_holdings.json").read_text())
+        return json.loads((self.path / "etf_holdings.json").read_text(encoding="utf-8"))
 
     @cached_property
     def actions(self) -> list[dict]:
-        return json.loads((self.path / "corporate_actions.json").read_text())
+        return json.loads((self.path / "corporate_actions.json").read_text(encoding="utf-8"))
 
     @property
     def last_day(self) -> np.datetime64:

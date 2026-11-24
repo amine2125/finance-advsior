@@ -30,12 +30,11 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { err
 function Shell() {
   const { me, error, reload, auth } = useApp();
   if (auth === "loading") return <div className="grid min-h-screen place-items-center"><Spinner label="Chargement…" /></div>;
-  if (auth === "signedOut") return <Login />;
-  if (error && !me) return <div className="mx-auto max-w-lg p-8"><ErrorBox error={error} onRetry={reload} /></div>;
-  // Old links (assistant page, per-asset invest page) land on the new screens.
+  if (auth === "signedOut" && !error) return <Login />;
+  if (error && !me) return <div className="mx-auto max-w-lg p-8"><ErrorBox error={error} onRetry={() => (auth === "signedOut" ? window.location.reload() : reload())} /></div>;
   if (!me) return <div className="grid min-h-screen place-items-center"><Spinner label="Chargement…" /></div>;
   if (!me.onboarded) {
-    // Not registered yet: only the welcome screen and the onboarding are reachable.
+    // No profile yet: only the welcome screen and the questionnaire are reachable.
     return (
       <Routes>
         <Route path="/" element={<Welcome />} />
@@ -63,7 +62,6 @@ function Shell() {
               <Route path="/profil" element={<Profile />} />
               <Route path="/apprendre" element={<Learn />} />
               <Route path="/apprendre/:id" element={<LessonPage />} />
-              <Route path="/assistant" element={<Navigate to="/" replace />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </ErrorBoundary>

@@ -1,30 +1,7 @@
-// API client. Same-origin "/api" (Vite proxy locally, CloudFront behaviour on AWS).
-// Cognito mode: each call carries the account's short-lived access token. Sandbox mode: a random id (tests, offline demo).
+// API client. Same-origin "/api" (Vite proxy locally, CloudFront in AWS, which signs the request to the Lambda function URL).
+// Cognito mode: each call carries the account's short-lived access token in « x-ulysse-jeton » (not « Authorization »: CloudFront
+// uses that header to sign the request, OAC), and every POST carries the SHA-256 of its body (required by OAC for a Lambda URL).
 import { accessToken, authMode, signOut } from "./auth";
-
-const BASE = (import.meta as any).env?.VITE_API_BASE || "";
-
-export function userId(): string {
-  let id = localStorage.getItem("aegis.user");
-  if (!id) {
-    const rnd = Array.from(crypto.getRandomValues(new Uint8Array(8)))
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("");
-    id = `u-${rnd}`;
-    localStorage.setItem("aegis.user", id);
-  }
-  return id;
-}
-
-/** "Recommencer": a fresh sandbox id, so the next visit starts the onboarding from scratch. */
-export function resetUser(): void {
-  localStorage.removeItem("aegis.user");
-}
-
-/** Tells the app the session ended (expired or revoked): it shows the sign-in screen. */
-function signedOutEverywhere() {
-  window.dispatchEvent(new Event("aegis:signedout"));
-}
 
 export class ApiError extends Error {
   status: number;
@@ -38,37 +15,42 @@ export class ApiError extends Error {
   }
 }
 
+async function sha256Hex(text: string): Promise<string> {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/** Tells the app the session ended (expired or revoked): it shows the sign-in screen. */
+function signedOutEverywhere() {
+  window.dispatchEvent(new Event("ulysse:deconnecte"));
+}
+
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-  let res: Response;
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const headers: Record<string, string> = {};
   if (authMode() === "cognito") {
     const t = await accessToken();
-    if (!t) { signedOutEverywhere(); throw new ApiError(401, "unauthenticated", "Connectez-vous pour continuer."); }
-    headers.Authorization = `Bearer ${t}`;
-  } else {
-    headers["X-AEGIS-User"] = userId();
+    if (!t) { signedOutEverywhere(); throw new ApiError(401, "non_connecte", "Connectez-vous pour continuer."); }
+    headers["x-ulysse-jeton"] = t;
   }
+  let payload: string | undefined;
+  if (body !== undefined) {
+    payload = JSON.stringify(body);
+    headers["content-type"] = "application/json";
+    headers["x-amz-content-sha256"] = await sha256Hex(payload);
+  }
+  let res: Response;
   try {
-    res = await fetch(`${BASE}/api/v1${path}`, {
-      method,
-      headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
+    res = await fetch(`/api${path}`, { method, headers, body: payload });
   } catch {
     throw new ApiError(0, "network", "Impossible de joindre le serveur. Vérifiez que le backend est démarré.");
   }
   const text = await res.text();
   let data: any = null;
-  try {
-    data = text ? JSON.parse(text) : null;
-  } catch {
-    data = null;
-  }
+  try { data = text ? JSON.parse(text) : null; } catch { data = null; }
   if (res.status === 401 && authMode() === "cognito") { await signOut(); signedOutEverywhere(); }
   if (!res.ok) {
-    const e = data?.error || data?.detail || {};
-    const msg = e.message || (res.status >= 500 || res.status === 0 ? "Le serveur ne répond pas. Vérifiez que le backend est démarré." : `Erreur HTTP ${res.status}`);
-    throw new ApiError(res.status, e.code || "http_error", msg, e);
+    const msg = data?.erreur || (res.status >= 500 || res.status === 0 ? "Le serveur ne répond pas. Vérifiez que le backend est démarré." : `Erreur HTTP ${res.status}`);
+    throw new ApiError(res.status, data?.code || "http_error", msg, data);
   }
   return data as T;
 }
@@ -76,31 +58,12 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 export const api = {
   get: <T = any>(p: string) => request<T>("GET", p),
   post: <T = any>(p: string, b?: unknown) => request<T>("POST", p, b ?? {}),
-  put: <T = any>(p: string, b?: unknown) => request<T>("PUT", p, b ?? {}),
-  del: <T = any>(p: string) => request<T>("DELETE", p),
 };
 
-export type JobStep = {
-  step_id: string;
-  agent_id: string;
-  label: string;
-  status: "pending" | "running" | "done" | "failed" | "skipped";
-  engine?: "calcul" | "ia" | "mixte" | null;
-  detail?: string | null;
-  latency_ms: number;
-  input_tokens: number;
-  output_tokens: number;
-  model_id?: string | null;
-};
-export type Job = { job_id: string; kind: string; status: "queued" | "running" | "done" | "failed"; steps: JobStep[]; result?: any; result_ref?: string | null; error?: string | null };
-
-export async function pollJob(jobId: string, onUpdate: (j: Job) => void, intervalMs = 1200, timeoutMs = 600000): Promise<Job> {
-  const t0 = Date.now();
-  for (;;) {
-    const j = await api.get<Job>(`/jobs/${jobId}`);
-    onUpdate(j);
-    if (j.status === "done" || j.status === "failed") return j;
-    if (Date.now() - t0 > timeoutMs) throw new ApiError(408, "timeout", "Délai dépassé pour la tâche");
-    await new Promise((r) => setTimeout(r, intervalMs));
-  }
+/** Query string from an object, skipping empty values. */
+export function qs(params: Record<string, string | number | null | undefined>): string {
+  const q = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) if (v !== null && v !== undefined && v !== "") q.set(k, String(v));
+  const s = q.toString();
+  return s ? `?${s}` : "";
 }

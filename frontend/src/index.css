@@ -29,3 +29,10 @@ h1, h2, h3 { text-wrap: balance; }
 @keyframes blink { 0%, 80%, 100% { opacity: .25; } 40% { opacity: 1; } }
 .dot { animation: blink 1.2s infinite both; }
 .dot:nth-child(2) { animation-delay: .2s; } .dot:nth-child(3) { animation-delay: .4s; }
+
+/* accessibility (keyboard only: nothing changes for mouse users) */
+:focus-visible { outline: 2px solid #3350ff; outline-offset: 2px; border-radius: 6px; }
+main:focus, main:focus-visible { outline: none; }
+.visuellement-cache { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.lien-evitement { position: absolute; left: 8px; top: -60px; background: #151413; color: #fff; padding: 8px 12px; border-radius: 10px; z-index: 100; }
+.lien-evitement:focus { top: 8px; }

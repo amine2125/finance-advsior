@@ -1,96 +1,82 @@
 # Hypothèses
 
-> Tout ce qui ne vient ni de l'énoncé ni d'une source du catalogue (`docs/donnees.md`) est une hypothèse, listée ici (énoncé p. 17 :
-> distinguer faits, hypothèses et scénarios fictifs). Les valeurs vivent dans `backend/app/methodology.py` ; elles se modifient sans toucher au reste du code. Aucune n'est une règle réglementaire.
+> Tout ce qui n'est **ni dans le PDF ni dans une source** est une hypothèse : listée ici, étiquetée « hypothèse » dans l'app, modifiable.
+> Les personas du PDF (p. 5–7) ne donnent ni capital, ni montants, ni portefeuilles.
 
-## 1. Personas : des comptes ordinaires, pas des cas codés
+## 1. Personas : valeurs fictives (profils pré-remplis et cas de test)
 
-Le moteur ne connaît aucun persona (énoncé p. 4) : le nom d'Amira, de Mateo ou de Robert n'apparaît dans aucune règle. Les trois
-comptes de démonstration (`backend/app/services/demo_accounts.py`) remplissent simplement le même questionnaire qu'un nouvel
-utilisateur, avec des réponses fictives tirées des fiches de l'énoncé (p. 5 à 7), et reçoivent un portefeuille fictif acheté aux
-vrais prix historiques.
+Portefeuilles fictifs **constitués le 2025-01-02** au prorata des poids ci-dessous, puis laissés dériver avec les prix réels. Si la date de simulation est antérieure (machine à remonter le temps), le portefeuille est constitué à la date de simulation avec les mêmes poids.
 
-| Compte | Réponses clés (hypothèses) | Portefeuille fictif (montants à l'achat) | Solde fictif |
-|---|---|---|---|
-| Amira | croissance, 20 ans, perte supportable 45 %, crypto « oui », intérêt pour la technologie et l'IA | QQQ 6 000, NVDA 4 000, SHOP.TO 2 500, MSFT 3 000, BTC-USD 2 500, XIU.TO 4 000, ESGV 3 000 $ | 5 000 $ |
-| Mateo | équilibre, 10 ans, perte supportable 30 %, deux enfants, ESG, secteur Énergie exclu | ESGV 11 000, XIU.TO 8 000, XBB.TO 18 000, AGG 8 000, FTS.TO 2 500, CNR.TO 2 500 $ | 10 000 $ |
-| Robert | revenu avec un peu de croissance, 5 ans, perte supportable 20 %, intérêt pour les titres populaires | NVDA 18 000, MSFT 15 000, QQQ 15 000, SPY 12 000, TSLA 8 000, XBB.TO 20 000, ZST.TO 12 000 $ | 20 000 $ |
+| Persona | Âge | Tolérance | Expérience | Capital (hyp.) | Objectifs (hyp. sur les parts et montants) | Allocation initiale (hyp.) | Limites « dites » |
+|---|---|---|---|---|---|---|---|
+| Amira | 26 | eleve | intermediaire | 40,000 $ | Faire croître mon capital à long terme (15 ans, 100 %) | SPY 28 %, XIU.TO 15 %, NVDA 8 %, SHOP.TO 7 %, MSFT 5 %, GOOGL 4 %, BTC-USD 4 %, ETH-USD 1 %, XBB.TO 10 %, GLD 6 %, CASH 12 % | techno_max = 45, crypto_max = 10 |
+| Mateo | 41 | modere | intermediaire | 180,000 $ | Études des enfants (8 ans, 35 %); Croissance équilibrée (12 ans, 65 %) | ESGV 25 %, XIU.TO 12 %, XBB.TO 22 %, AGG 5 %, FTS.TO 5 %, CNR.TO 5 %, MSFT 4 %, AAPL 3 %, JNJ 4 %, PG 3 %, GLD 4 %, CASH 8 % | speculatif_max = 5 |
+| Robert | 59 | faible_modere | avance | 650,000 $ | Retraite (3 ans, 100 %) | XBB.TO 30 %, ZST.TO 12 %, XIU.TO 13 %, SPY 8 %, RY.TO 5 %, TD.TO 4 %, ENB.TO 4 %, FTS.TO 4 %, JNJ 4 %, PG 3 %, GLD 4 %, CASH 9 % | crypto_max = 0 |
 
-Les portefeuilles sont volontairement contrastés : Amira et Robert dépassent leurs limites (concentration en technologie et en
-NVIDIA), Mateo les respecte. Ils servent à montrer l'adaptation au profil (énoncé p. 8 et 15), pas à représenter un client réel.
+Ce que le PDF dit et que le contrat traduit en clauses « dites » : Amira veut éviter de miser exclusivement sur la techno (limite techno, valeur 45 % = hypothèse) et s'intéresse aux cryptoactifs (limite crypto 10 % = hypothèse) ; Mateo veut éviter les controverses environnementales ou sociales importantes et est peu intéressé par le très spéculatif (limite 5 % = hypothèse) ; Robert est peu intéressé par les cryptoactifs (0 %) et prend sa retraite dans 3 à 5 ans (horizon retenu : 3 ans, borne basse prudente).
 
-## 2. Du questionnaire au profil
+## 2. Valeurs par défaut des clauses (selon la tolérance déclarée)
 
-« Connaître son client », version 2 (`profile_builder.kyc`) : quatre mesures, et **la plus basse fixe le niveau**.
+| Tolérance | Perte max. en crise | Actions max. | Par entreprise | Très volatil | Crypto | Liquidités min. |
+|---|---|---|---|---|---|---|
+| faible | 10 % | 30 % | 5 % | 0 % | 0 % | 10 % |
+| faible_modere | 15 % | 60 % | 5 % | 2 % | 0 % | 5 % |
+| modere | 25 % | 70 % | 8 % | 5 % | 2 % | 3 % |
+| eleve | 40 % | 95 % | 10 % | 15 % | 10 % | 2 % |
 
-| Mesure | Ce qui la détermine |
+- Plafond des actions selon l'objectif le plus proche : moins de 2 ans → 20 % ; moins de 5 ans → 50 % ; moins de 10 ans → 70 %.
+- Ces valeurs ne viennent d'aucune norme réglementaire : ce sont des points de départ prudents et lisibles, que l'utilisateur modifie (« Modifier ma règle »). Chaque clause par défaut porte cette justification dans l'app.
+- Allocation fictive proposée à un profil créé en direct qui ne décrit pas son portefeuille : faible : ZST.TO 35 %, XBB.TO 30 %, XIU.TO 10 %, SPY 5 %, CASH 20 %, faible_modere : XBB.TO 35 %, ZST.TO 10 %, XIU.TO 20 %, SPY 20 %, GLD 5 %, CASH 10 %, modere : XBB.TO 25 %, XIU.TO 25 %, SPY 30 %, GLD 5 %, AGG 5 %, CASH 10 %, eleve : XIU.TO 30 %, SPY 45 %, XBB.TO 10 %, GLD 5 %, CASH 10 %.
+
+## 3. Définitions et seuils de la politique de signal
+
+| Élément | Valeur | Raison |
+|---|---|---|
+| « Techno » | Secteurs GICS Technologies de l'information + Services de communication, FNB ouverts | Inclut Alphabet et Meta, que le public range dans la « techno » |
+| « Très volatil » (spéculatif) | Volatilité annualisée sur 1 an > 60 % ou cryptoactif | Seuil lisible, environ trois fois la volatilité d'un indice large |
+| Clause « approchée » | ≥ 80 % de la limite | Prévenir avant le dépassement |
+| Gravité d'un dépassement | (valeur − limite) ÷ limite, ×2 si clause importante | Proportionnalité |
+| ⛔ P1 | clause importante dépassée d'au moins 50 % de sa limite | Écart grave |
+| ⛔ P2 | somme des gravités ≥ 1,0 | Plusieurs écarts qui s'additionnent |
+| ⚠ encadré | gravité ≥ 0,25, clause ESG dépassée, ou clause importante invérifiable | Sinon note discrète |
+| Dépassement préexistant | compte seulement s'il est aggravé d'au moins 10 % de la limite | La Vigie signale les dérives à part |
+| Perte en crise | pire baisse du portefeuille rejoué dans les épisodes terminés avant la date : fin 2018 (2018-10-01 → 12-24), COVID (2020-02-19 → 03-23), 2022 (année civile) | Faits passés, pas une prévision |
+| Horizon | pire résultat sur toutes les périodes passées de la durée de l'horizon ; fenêtre réduite (et signalée « incertain ») si l'historique est plus court ; clause importante si l'horizon est < 5 ans | Mesure ce qu'on aurait trouvé en ayant besoin de l'argent à l'échéance |
+
+## 4. ESG
+
+- Définition d'une **controverse importante** (ULYSSE, modifiable) : procédure judiciaire ou administrative engagée par une autorité publique sur un enjeu environnemental ou social, documentée par une source vérifiable lue et citée mot pour mot.
+- Une exclusion par **activité** (ex. pétrole et gaz dans l'indice suivi par ESGV) est un contexte, pas une controverse.
+- Une clause ESG ne déclenche jamais ⛔ à elle seule (la qualification dépend d'une définition que l'utilisateur peut ne pas partager).
+
+## 5. Données
+
+- Délais de publication macro : voir `docs/donnees.md` (S4).
+- « Aujourd'hui » de l'app : 2026-11-14 (dernières données de marché : 2026-11-12 ; les compositions publiées le 12 sont utilisables à partir du 13).
+
+## 6. « Connaître son client » (ulysse/contract/kyc.py)
+
+Heuristique documentée inspirée des questionnaires « Connaître son client » (OCRI, règle 3200) ; pas une évaluation réglementaire de convenance.
+
+| Mesure | Règle |
 |---|---|
-| Tolérance déclarée | choix de portefeuille (A à D), pari (sûr / petit risque / gros risque), perte supportable (≤ 10 % prudent, ≤ 20 % faible à modéré, ≤ 30 % modéré, au-delà élevé) |
-| Comportement | la réaction à une baisse, le ressenti face aux variations et le comportement passé plafonnent la tolérance déclarée (« ce que l'on fait compte plus que ce que l'on dit ») |
-| Capacité | part de 3, retranchée si : coussin < 3 mois de dépenses, dette > 40 % du revenu, emploi instable, personnes à charge sans 6 mois d'épargne ; un coussin de 6 mois compense un revenu incertain |
-| Objectif et horizon | préserver → prudent au plus, revenu → faible à modéré, équilibre → modéré ; horizon < 3 ans → prudent, 3 à 7 ans → faible à modéré, 7 à 12 ans → modéré, ≥ 12 ans → élevé permis |
-| Connaissances | trois questions de quiz et produits détenus ; un débutant est plafonné à « Modéré », sans crypto |
+| Tolérance | moyenne (arrondie) du niveau déclaré et de la baisse supportable (≤ 10 % faible, ≤ 20 % faible à modéré, ≤ 30 % modéré, au-delà élevé), plafonnée par le comportement : « je vendrais tout » → faible, « une partie » → faible à modéré, « très stressé » → faible à modéré, « mal à l'aise » → modéré ; contradiction signalée si l'écart est d'au moins deux niveaux |
+| Capacité | horizon de l'objectif le plus proche (< 2 ans faible, < 5 faible à modéré, < 10 modéré) ; un niveau de moins pour : épargne < 3 mois de dépenses (deux si < 1 mois), dette de carte de crédit, dettes > 40 % du revenu annuel, emploi moins stable sans 6 mois d'épargne, personnes à charge sans 6 mois d'épargne, marge mensuelle nulle ou négative, besoin probable de l'argent |
+| Connaissances | quiz de 3 questions + produits détenus + niveau déclaré ; un débutant est plafonné à « modéré » et n'a pas de cryptoactifs |
+| Résultat | la plus basse des trois mesures fixe la tolérance du contrat ; l'âge n'est jamais utilisé ; taux de carte de crédit supposé : 20 % par an |
 
-L'âge n'est jamais utilisé pour deviner la tolérance au risque. Le taux de 20,99 % de la carte de crédit sert seulement à dire
-qu'une dette coûteuse passe avant un placement.
+## 7. Placements et argent fictif (ulysse/positions.py)
 
-## 3. Limites par niveau de profil (`profile_builder.budgets`)
+- Tant que rien n'est modifié, le portefeuille est l'allocation fictive du profil (inchangé).
+- Un achat ou une vente simulé se fait au cours de clôture de la date simulée, converti en CAD ; frais et impôts ignorés ; un achat est refusé si les liquidités manquent.
+- Une opération ne peut pas être datée avant une opération déjà enregistrée ; à une date passée, les opérations postérieures sont ignorées.
+- Connexion à un courtier : simulée, aucun identifiant demandé ; comptes fictifs (CELI, REER, non enregistré, CELIAPP) achetés à des dates tirées entre 2022-02-01 et 2025-09-30, aux vrais cours de ces dates, toujours les mêmes pour un profil et une institution.
 
-| Niveau | Actions et cryptos | Par entreprise | Par secteur | Cryptos | Seuil de revue de la pire baisse |
-|---|---|---|---|---|---|
-| Prudent | 10 – 30 % | 5 % | 20 % | 0 % | −8 % |
-| Faible à modéré | 30 – 45 % | 5 % | 25 % | 2 % | −10 % |
-| Modéré | 55 – 70 % | 10 % | 30 % | 5 % | −20 % |
-| Élevé | 80 – 95 % | 15 % | 40 % | 10 % | −30 % |
+## 8. Recherche de nouvelles (ulysse/nouvelles.py)
 
-Ce sont des points de départ prudents et lisibles. Le seuil de revue de la pire baisse vient du **niveau** de profil, pas de la
-réponse de la personne : les textes de l'application le disent ainsi (« seuil de revue prévu pour un profil … »).
+- Dépôts SEC : émetteurs américains seulement, formulaires 8-K, 10-Q, 10-K, 6-K, 20-F, 40-F, S-1, DEF 14A, sur les 120 jours précédant la date simulée.
+- Presse : articles GDELT des 14 jours précédant la date simulée ; deux titres identiques une fois normalisés comptent pour une seule nouvelle ; la date est la première détection par GDELT. GDELT ne couvre que 90 jours : pour une date plus ancienne, rien n'est montré, plutôt que des nouvelles postérieures.
 
-## 4. Niveau de risque d'un actif (`risk_tiers`, heuristique)
+## 9. Comptes de démonstration
 
-- Volatilité annualisée : faible sous 10 %, élevée au-dessus de 30 %. Pire baisse : faible au-dessus de −15 %, élevée à −50 % ou pire.
-  Le niveau retenu est le plus mauvais des deux ; moins de 250 observations : « inconnu ».
-- Règle structurelle : toute action individuelle (perte permanente possible), tout cryptoactif, produit à levier ou inverse : élevé.
-- Seuils fixés sur la fenêtre 2021-11-12 → 2024-06-28 seulement, puis gelés avant d'examiner la suite.
-
-## 5. Règles de vérification d'une demande
-
-1. Préférences déclarées : secteur exclu ou crypto non prévue → incompatible.
-2. Horizon : un actif de risque élevé avec un horizon de moins de 3 ans → incompatible.
-3. Un actif de deux niveaux au-dessus du niveau permis → incompatible.
-4. Après l'ajout hypothétique, chaque limite du tableau 3 est recalculée ; le montant maximal compatible est trouvé par dichotomie.
-5. Filtre ESG (section 7) : avertissement seulement.
-
-## 6. Portefeuille modèle et scénarios
-
-- **Portefeuille modèle simulé** (`plan_service`) : part de croissance = milieu de la fourchette du profil, arrondi à 5 % ; reste en
-  obligations (très court terme si seul un risque faible est permis). Uniquement des fonds indiciels larges ; ESGV au lieu de SPY si
-  la personne demande des critères ESG. Tant qu'une limite est dépassée, 5 % passent de la croissance aux obligations très court terme.
-- **Rejeu 2022** : poids actuels appliqués du 2022-03-01 au 2022-12-30, quand actions et obligations ont reculé ensemble (énoncé p. 14).
-  C'est un fait passé, pas une prévision.
-- **Chocs hypothétiques** (`scenarios.SHOCK_PRESETS`), chiffres choisis par l'équipe :
-
-| Choc | Hypothèse |
-|---|---|
-| Technologie | technologie −30 %, autres actions −10 %, FNB d'actions −15 %, obligations +2 %, cryptos −40 % |
-| Hausse de taux de 100 pb | obligations −6 % (duration d'environ 6 ans), actions −5 % |
-| Marché baissier | actions −25 %, obligations −5 %, or +5 %, cryptos −50 % |
-| Dollar canadien +10 % | USD/CAD −9,09 % |
-| Hiver crypto | cryptoactifs −60 % |
-
-## 7. ESG
-
-- Une exclusion par **activité** (combustibles fossiles dans l'indice suivi par ESGV, `docs/donnees.md` S12) est un contexte, pas
-  une controverse. Elle produit un avertissement sourcé, jamais un refus à elle seule, et ne fait pas sortir un portefeuille de son
-  profil de risque.
-- Le secteur Énergie du kit sert d'approximation des combustibles fossiles (Enbridge, Canadian Natural Resources, Exxon Mobil).
-- Exclure un secteur reste possible dans le questionnaire : c'est alors la personne qui l'a dit, et la règle devient bloquante.
-
-## 8. Données et dates
-
-- Délais de publication de la macro : `docs/donnees.md`, S4.
-- « Aujourd'hui » des signaux ULYSSE : deux jours après le dernier jour du datapack (2026-11-14 pour le jeu officiel), pour que les
-  pages vues et les compositions de FNB de ce dernier jour soient utilisables. `ULYSSE_ASOF` le fixe pour une démonstration.
-- Prix prolongés après le 2026-11-12 seulement avec `make data-refresh` ou `make deploy` (S10).
-- Frais de transaction, écarts, impôts et taxes : omis de tous les calculs.
-- Conversion des titres en USD au dernier taux de la Banque du Canada connu à la date.
+- Trois comptes Cognito fictifs (domaine réservé `example.com`), un par profil de référence de l'énoncé ; mot de passe affiché volontairement sur la page de connexion. Leur profil est recréé à la première connexion après « Effacer mes données ».

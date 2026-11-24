@@ -1,223 +1,146 @@
-# AEGIS — investir, avec un accompagnement qui *vous* ressemble
+# ULYSSE
 
-> Datathon PolyFinances 2026 · défi **AlphaForge AI** (Banque Nationale × AWS)
-> Une solution **agentique et auto-explicative** : vous dites en français ce que vous voulez faire de votre argent, des agents
-> analysent votre profil, vos placements et le marché, vérifient chaque chiffre et proposent une simulation. Vous décidez.
+**Une application de placement simulée qui vérifie tes intentions contre les règles que tu as toi-même fixées, faits à l'appui.**
+Datathon PolyFinances 2026 « AlphaForge AI » (Banque Nationale × AWS × PolyFinances).
 
-**Essayer en ligne : https://d2p220whqnshao.cloudfront.net** — trois comptes de démonstration sont prêts (voir plus bas).
+> **Branche `dev`** : le moteur et le workflow agentique de ULYSSE, l'interface visuelle d'AEGIS, et les fonctionnalités d'AEGIS reprises dans ULYSSE : comptes (Amazon Cognito), questionnaire « Connaître son client », placements modifiables et argent fictif, agents Pour / Contre, recherche de nouvelles (SEC EDGAR, GDELT), visite guidée et leçons. Le one-pager et la vidéo sont produits à part.
 
-*Simulation éducative : aucune transaction réelle, pas un conseil financier personnalisé.*
+> **Simulation, pas un conseil financier.** Aucune transaction réelle. ULYSSE ne dit jamais « achète », « vends » ou « tu devrais » : il montre si une intention est cohérente avec ton contrat, avec des preuves vérifiables. Profils et portefeuilles fictifs ; données publiques uniquement.
 
----
+Ulysse s'est fait attacher au mât pour résister au chant des sirènes. Ici, les sirènes sont l'engouement du marché ; le mât, ce sont tes règles, écrites à froid.
 
-## Sommaire
+## Ce que fait l'app
 
-1. [La problématique](#1-la-problématique)
-2. [Le contexte](#2-le-contexte)
-3. [Notre solution](#3-notre-solution)
-4. [Architecture AWS](#4-architecture-aws)
-5. [Le workflow agentique](#5-le-workflow-agentique)
-6. [Lancer l'application](#6-lancer-lapplication)
-7. [Comptes de démonstration](#7-comptes-de-démonstration)
-8. [Déployer sur AWS](#8-déployer-sur-aws)
-9. [Tests](#9-tests)
-10. [Organisation du code](#10-organisation-du-code)
-11. [Limites et responsabilité](#11-limites-et-responsabilité)
+- **Le Contrat (à froid)** : tes règles (perte maximale en crise, horizon, concentration, techno, crypto, liquidités, ESG…), chacune avec son origine (« tu l'as dit » ou « valeur par défaut, hypothèse documentée »), versionnées ; les contradictions sont relevées.
+- **Le Mât (à chaud)** : pendant la saisie d'un ordre simulé, chaque règle est vérifiée en code en ~10 ms ; selon la gravité : ✅ discret, ⚠ encadré ou ⛔ pause de réflexion, toujours avec « Continuer quand même » et « Modifier ma règle ».
+- **La Vigie (en continu)** : chaque heure (ou à la demande, ou rejouée à une date passée), elle surveille la dérive du portefeuille, l'attention inhabituelle sur les titres suivis et le climat de marché, puis pré-calcule les signaux.
+- **Le signal** : partout dans l'app, l'élément concerné s'allume (halo + pastille) ; un clic ouvre 2–3 faits, leurs preuves et des options.
+- **Le dossier de décision** : Données → Constats → Analyse → Options → Explication ; chaque phrase étiquetée (MESURÉ, DOCUMENTÉ, HYPOTHÈSE, INCERTAIN) ; chaque chiffre cliquable vers sa preuve ; un vérificateur en code rejette tout chiffre sans preuve.
+- **L'assistant (chatbot encadré)** : tu écris ce que tu envisages en français libre (« 20 000 $ dans NVIDIA », « et Tesla ? », « mon portefeuille respecte-t-il mes règles ? »). Le code comprend la question, calcule avec les mêmes outils que le reste de l'app (même niveau que le Mât) et vérifie chaque phrase ; le LLM peut seulement reformuler. Il ne recommande jamais, ne prédit rien, et le dit quand on le lui demande.
+- **La machine à remonter le temps** : toute l'app à une date passée, avec seulement l'information publiée à cette date.
+- **Comptes** (Amazon Cognito) : chaque compte ne voit que ses profils ; trois comptes de démonstration (profils de l'énoncé) pour le jury ; « Effacer mes données ».
+- **Connaître son client** : trois mesures (tolérance, capacité, connaissances) ; la plus basse fixe la tolérance du contrat, chaque raison est affichée, l'âge n'est jamais utilisé.
+- **Mes placements et l'argent fictif** : saisie, import CSV ou connexion simulée à un courtier ; « Enregistrer l'ordre » ou « Continuer quand même » applique l'achat aux vrais cours de clôture, payé avec les liquidités ; ventes et dépôts.
+- **Agents Pour / Contre** : dans chaque dossier, deux agents argumentent sur les mêmes preuves ; chacune de leurs phrases passe par le vérificateur.
+- **Sources officielles et presse** : dépôts SEC EDGAR et articles GDELT (regroupés quand ils reprennent la même nouvelle), jamais postérieurs à la date simulée.
+- **Apprendre** : visite guidée au premier passage, « Comment ça marche ? » sur chaque écran, sept leçons de 2 minutes.
 
----
+## Démarrage (local, sans AWS)
 
-## 1. La problématique
+Prérequis : Python 3.12+, Node 20+. macOS ou Linux avec `make` ; sous Windows, commandes PowerShell plus bas.
+Aucun fichier `.env` : en local, rien à configurer.
 
-Les investisseurs n'ont jamais eu autant d'informations : cours, publications d'entreprises, taux, nouvelles, réseaux sociaux.
-Leur difficulté n'est plus d'y accéder, mais de **les trier, les relier et en tirer une décision qui leur convient vraiment**.
+```bash
+make setup        # environnement Python + dépendances de l'interface
+make data         # construit le datapack (internet requis une fois : Yahoo Finance, Banque du Canada, FRED, Wikipédia, émetteurs de FNB)
+make test         # 123 tests, sans AWS ni réseau, LLM simulé
+make web-build    # construit l'interface
+make api          # serveur local : http://127.0.0.1:8000
+make demo         # (autre terminal) remet la démo dans un état connu
+make bench        # banc d'essai -> page Fiabilité
+```
 
-En pratique, trois choses tournent mal :
+Développement de l'interface avec rechargement : `make api` puis `make web` (http://localhost:5173).
 
-- **Le portefeuille ne ressemble pas à la personne.** Quelqu'un de prudent finit avec 90 % d'actions technologiques parce que
-  ce sont les titres dont tout le monde parle.
-- **L'engouement décide à la place de la personne.** Un titre « viral » pousse à acheter sous le coup de l'émotion, sans
-  regarder le risque ni la place qu'il prendrait dans le portefeuille.
-- **Les outils d'IA inventent ou n'expliquent pas.** Une réponse convaincante mais impossible à vérifier est dangereuse quand il
-  s'agit d'argent : d'où vient ce chiffre ? Sur quelle période ? Qu'est-ce qui pourrait mal tourner ?
+**Windows (PowerShell)**, sans `make` :
 
-Et pour celles et ceux qui débutent, la première question est souvent plus simple : *par où commencer ?*
+```powershell
+python -m venv backend\.venv
+backend\.venv\Scripts\python -m pip install -e "backend[data,api,aws,dev]"
+cd frontend; npm install; cd ..
+cd backend; .venv\Scripts\python -m ulysse.data.build; .venv\Scripts\python -m pytest -q
+$env:ULYSSE_LLM = "simule"; .venv\Scripts\uvicorn ulysse.api.server:app --port 8000     # terminal 1
+cd frontend; npm run dev                                                                    # terminal 2 : http://localhost:5173
+```
 
-## 2. Le contexte
+Avec Bedrock en local : connecte-toi une fois avec l'AWS CLI (`aws configure` ou `aws sso login`), puis lance l'API avec `ULYSSE_LLM=bedrock` ; les identifiants sont lus par le SDK, jamais écrits dans le dépôt.
 
-Le défi AlphaForge AI demande de **concevoir une solution agentique auto-explicative qui exploite des données financières
-publiques pour éclairer la décision d'investissement selon différents profils**, en expliquant ses sources, ses hypothèses et
-ses limites. L'objectif n'est pas de trouver le portefeuille le plus rentable, mais une démarche **crédible, utile et responsable**.
+## Configuration
 
-Trois investisseurs fictifs servent de cas de référence :
-
-| Persona | Profil | Ce que le cas teste |
+| Variable | Défaut | Rôle |
 |---|---|---|
-| **Amira**, 26 ans | risque élevé, horizon 15 ans+, attirée par l'IA et la crypto | jusqu'où accepter le risque, sans que « élevé » veuille dire « tout est permis » |
-| **Mateo**, 41 ans | modéré, deux enfants, préférences ESG | équilibre croissance / stabilité et respect de ses valeurs |
-| **Robert**, 59 ans | faible à modéré, horizon 3 à 5 ans, attiré par les titres populaires | la cohérence entre ce qu'il demande et ce que son profil permet |
+| `ULYSSE_LLM` | `simule` | `simule` (déterministe), `simule_defaut` (démo du vérificateur) ou `bedrock` |
+| `ULYSSE_BEDROCK_MODEL` | `anthropic.claude-opus-5-5` | modèle ou profil d'inférence Bedrock (planifier et rédiger seulement) |
+| `ULYSSE_ASOF` | `2026-11-14` | « aujourd'hui » de l'app (démo reproductible) |
+| `ULYSSE_STORE` | local | `aws` : DynamoDB + S3 |
+| `ULYSSE_KIT_DIR`, `ULYSSE_DATA_DIR`, `ULYSSE_DATAPACK_DIR`, `ULYSSE_STATE_DIR` | dossiers du dépôt | emplacements des données et de l'état |
+| `ULYSSE_LLM_LIMITE_JOUR_USD` | 0 (aucun) | au-delà, rédaction par gabarit sans LLM, consignée |
+| `ULYSSE_AUTH` | `aucune` | `cognito` : comptes Amazon Cognito (avec `ULYSSE_COGNITO_REGION`, `ULYSSE_COGNITO_CLIENT_ID`) |
+| `ULYSSE_COMPTES_DEMO`, `ULYSSE_DEMO_MOT_DE_PASSE` | désactivé | comptes de démonstration du jury (mode `cognito`) |
+| `ULYSSE_RECHERCHE_WEB` | `1` | `0` coupe la recherche SEC EDGAR / GDELT (tests, démo hors ligne) |
+| `ULYSSE_SEC_USER_AGENT`, `ULYSSE_CACHE_RECHERCHE` | valeurs génériques | contact demandé par la SEC ; dossier du cache de recherche |
+| `ULYSSE_LIMITE_REQ_PAR_MIN` | `180` | limite de débit générale par compte / IP (fenêtre glissante de 60 s, HTTP `429`, `0` désactive) |
+| `ULYSSE_LIMITE_LLM_PAR_MIN` | `20` | limite stricte sur les routes lourdes / LLM (`/api/dossiers`, `/assistant`, `/api/vigie/executer`) |
 
-Données : le jeu officiel du datathon (31 actifs, prix quotidiens de novembre 2021 à novembre 2026, taux de change de la
-Banque du Canada, taux et données macro), complété par des sources publiques (SEC EDGAR, GDELT, CoinGecko, Wikipédia).
+Aucun secret dans le code ni dans le dépôt.
 
-## 3. Notre solution
+## Architecture
 
-AEGIS fonctionne comme une application bancaire, avec une différence : **chaque décision passe par une équipe d'agents qui
-analyse, se contredit, se fait auditer et s'explique**, avant que vous ne disiez oui ou non.
+### Architecture Cloud AWS (Serverless, coût nul au repos)
 
-| Étape | Ce que vit l'utilisateur |
+![Architecture AWS ULYSSE](docs/aws-architecture.svg)
+
+| Service AWS / Externe | Rôle dans ULYSSE | Pourquoi ce choix (sans sur-ingénierie) |
+|---|---|---|
+| **Amazon CloudFront** | Point d'entrée HTTPS unique : sert l'interface React (`/*`) depuis S3 et achemine `/api/*` vers l'URL de fonction Lambda via **Origin Access Control (OAC SigV4)** | Un seul domaine (aucun problème CORS), compression Gzip/Brotli, cache mondial, buckets et Lambda jamais exposés publiquement |
+| **AWS Lambda** (1 seule fonction `arm64`, Python 3.12, Function URL) | Monolithe serverless (« Lambdalith ») : routeur HTTP `/api/*`, moteur d'analyse `numpy`, vérificateur déterministe, limiteur de débit intégré (`429`), orchestration des dossiers et exécution de la Vigie | Évite le découpage en microservices, les démarrages à froid multiples, la duplication du datapack de 6,5 Mo et la limite de 29 s d'API Gateway |
+| **Amazon S3 (`UiBucket` & `DataBucket`)** | `UiBucket` : fichiers statiques compilés (`frontend/dist`). `DataBucket` : datapack de marché (~6,5 Mo, copié une seule fois par conteneur dans `/tmp/datapack`) et traces/dossiers > 300 Ko | Stockage chiffré (SSE-S3 AES-256), privé (accès public bloqué), coût négligeable (< 0,10 $/mois) |
+| **Amazon DynamoDB** (`PAY_PER_REQUEST`) | Table unique (`pk` / `sk`) : profils, contrats versionnés, positions simulées, paquets de signaux pré-calculés, journal d'audit et compteur quotidien de budget LLM | Lecture en quelques millisecondes (< 300 ms pour les signaux), facturation à la requête (0 $ au repos dans l'offre gratuite) |
+| **Amazon Cognito** (User Pool + Client public) | Authentification SRP directe depuis le navigateur (les mots de passe ne transitent jamais par le backend) ; jeton validé via `GetUser` (`x-ulysse-jeton`) | Isolation stricte des profils par compte + 3 comptes de démo auto-confirmés pour le jury ; gratuit jusqu'à 10 000+ utilisateurs actifs |
+| **Amazon Bedrock** (Claude) | **Planifier** les outils d'analyse et **rédiger / reformuler** uniquement à partir des preuves calculées (sorties structurées Pydantic) | Aucun calcul ni décision par le LLM ; protégé par un plafond quotidien en USD (`ULYSSE_LLM_LIMITE_JOUR_USD`) avec repli automatique sur gabarit déterministe |
+| **Amazon EventBridge Scheduler** | Déclencheur horaire (`rate(1 hour)`) qui invoque la même fonction Lambda avec l'action `vigie` | Pré-calcule la dérive, l'engouement, le régime de marché et pré-charge SEC EDGAR / GDELT sans serveur permanent |
+| **AWS Budgets** | Alarme mensuelle de coût (alertes courriel à 80 % du réel et 100 % du prévisionnel) | Garde-fou financier au niveau du compte AWS |
+| **SEC EDGAR & GDELT DOC 2.0** | Sources publiques externes interrogées en HTTPS (filtrées strictement `<= as_of` pour respecter la machine à remonter le temps, mises en cache dans `/tmp`) | Dépôts réglementaires officiels américains (`10-K`, `10-Q`, `8-K`) et couverture de presse mondiale dédoublonnée, sans clé API payante |
+
+### Architecture logicielle (une seule base de code)
+
+```
+frontend/ (React + TypeScript)  ──/api──>  backend/ulysse (Python, une seule base de code)
+                                             ├─ data/        datapack + vue « as-of » (aucune information future)
+                                             ├─ analytics/   outils : risque, transparence des FNB, paris réels, rejeux, bootstrap, engouement, régimes
+                                             ├─ contract/    contrat, évaluation des clauses, contradictions, ESG sur preuves
+                                             ├─ policy.py    politique de signal (règles nommées, score de gravité)
+                                             ├─ governance.py, verifier.py, writer.py, llm.py, orchestrator.py, vigie.py
+                                             └─ api/         routes communes au serveur local et à la Lambda (+ limiteur de débit intégré)
+infra/ (AWS SAM)   CloudFront → S3 (interface) + URL de fonction Lambda ; DynamoDB ; S3 (données, preuves, traces) ;
+                   EventBridge Scheduler (Vigie horaire) ; Cognito ; Bedrock ; budget AWS — voir docs/aws.md
+bench/             banc d'essai (scénarios étiquetés, propriétés, latence)
+```
+
+Le LLM ne fait que **planifier** (choisir des modules d'analyse), **rédiger** (à partir des seules preuves) et **reformuler** les réponses de l'assistant (vérifiées comme les dossiers). Tout calcul, toute règle et tout niveau de signal sont du code testé.
+
+## Données
+
+Jeu de départ AlphaForge (31 actifs, 2021-11-12 → 2026-11-12) + ajouts documentés : prolongation historique 2016–2021 (mêmes sources), pages vues Wikipedia (CC0), compositions de FNB (SSGA, iShares Canada), preuves ESG citées (fiche Vanguard, règles FTSE, 10-K de XOM, dépêche AP). Correction de l'anomalie CNQ du 2022-08-22 prouvée par le communiqué de CNQ. Catalogue complet : [docs/donnees.md](docs/donnees.md).
+
+## Documentation
+
+| Document | Contenu |
 |---|---|
-| **Créer un compte** | Inscription sécurisée (Amazon Cognito). Chaque compte reçoit de l'argent fictif pour apprendre sans risque. |
-| **Faire connaissance** | Un questionnaire « Connaître son client » d'une vingtaine de questions : situation, budget, connaissances, rapport au risque. Trois mesures (ce que vous êtes prêt à risquer, ce que votre situation permet, ce que vous connaissez) ; **la plus basse fixe le profil**, et chaque raison est affichée. |
-| **Connecter ses placements** | Connexion simulée à un compte de courtage (placements fictifs achetés aux vrais prix historiques) ou saisie manuelle. Les agents disent tout de suite, en clair, si le portefeuille respecte le profil. |
-| **Demander** | En français libre : « J'ai 10 000 $ à investir », « Je veux 2 000 $ de NVIDIA », « Rééquilibre mon portefeuille ». |
-| **Voir les agents travailler** | Chaque étape s'affiche en direct, puis une proposition visuelle : verdict, ce qui a été trouvé, plan d'ordres groupé, ce que ça change, analyse complète repliée. |
-| **Décider** | Approuver (le portefeuille simulé et le solde sont mis à jour), Modifier ou Refuser. Rien n'est exécuté sans accord. |
-| **Apprendre** | Visite guidée au premier passage, « Comment ça marche ? » sur chaque écran, sept leçons de 2 minutes (risque, diversification, intérêts composés avec calculateur, émotions et frais…). Léa, l'assistante, répond aux questions à tout moment. |
+| [docs/technique.md](docs/technique.md) | Méthodes et justification, données, hypothèses, explicabilité avec un exemple réel, validations, limites, améliorations |
+| [docs/pitch.md](docs/pitch.md) | Plan, messages clés, chiffres sourcés |
+| [docs/aws.md](docs/aws.md) | Architecture AWS, rôle et raison de chaque service, coût estimé |
+| [docs/donnees.md](docs/donnees.md), [docs/hypotheses.md](docs/hypotheses.md) | Catalogue des sources ; hypothèses |
+| [docs/design.md](docs/design.md), [docs/skills.md](docs/skills.md), [docs/ux/validation.md](docs/ux/validation.md) | Système de design, skills UX/UI, validation UX |
+| [docs/decisions.md](docs/decisions.md), [docs/journal.md](docs/journal.md), [docs/audit.md](docs/audit.md) | Décisions, journal par phase, audit final |
 
-Ce qui rend les réponses **dignes de confiance** :
+## Limites (honnêtes)
 
-- **Les chiffres ne viennent jamais de l'IA.** Ils sont calculés en Python et enregistrés dans un *registre de métriques*
-  (valeur, méthode, période, source). L'IA écrit des identifiants ; l'interface affiche les vraies valeurs, cliquables.
-- **Un validateur** rejette tout chiffre non traçable et toute promesse (« va monter », « garanti »).
-- **Des agents adverses** (Opportunités contre Risques) argumentent, puis la Gouvernance audite chaque affirmation.
-- **Des signaux de marché qui décrivent sans prédire** (moteur ULYSSE) : climat de marché (calme, agité ou tendu) et attention
-  inhabituelle sur un titre, pour décider à froid.
-- **Le contrôle humain** reste au centre : l'application propose, la personne décide.
+- **Interface refaite (branche `fusion`)** : les mesures d'accessibilité et de performance de `docs/ux/validation.md` (axe, Lighthouse) portent sur l'ancienne interface ULYSSE et sont **à refaire**. Vérifié sur la nouvelle : compilation TypeScript sans erreur, build de production, parcours pilotés dans Chromium sans erreur de console.
+- **Assistant** : sans mémoire de conversation (chaque message est traité seul) ; il ne comprend que les 31 actifs de l'univers et des formulations simples (montant, % du portefeuille, titre).
 
-## 4. Architecture AWS
+- **AWS pas encore déployé** : l'infrastructure (SAM) est écrite et validée localement (`cfn-lint`) et le paquet Lambda est construit, mais le déploiement attend les accès de l'équipe (phase 7). Les mesures avec Bedrock (taux de rejet réel du vérificateur, durée et coût par dossier, latence sur AWS) ne sont donc **pas encore mesurées**.
+- Le LLM réel n'a pas encore été appelé : les dossiers de démonstration locale sont rédigés par un LLM simulé déterministe (gabarit), vérifiés par le même vérificateur.
+- Compositions de QQQ et d'ESGV non disponibles (pas de téléchargement automatisable chez les émetteurs ; les dépôts N-PORT de la SEC exigent une adresse de contact déclarée) : ces fonds sont traités comme des blocs opaques, et l'app le dit.
+- Composition historique de SPY non publiée par l'émetteur : en mode machine à remonter le temps, SPY est opaque avant novembre 2026.
+- Preuves ESG limitées à quelques titres (XOM, ENB, ESGV) ; ailleurs « données insuffisantes ».
+- Univers limité aux 31 actifs du jeu de départ ; un titre hors univers est signalé « non couvert ».
+- Valeurs par défaut des clauses et seuils de la politique : hypothèses lisibles, pas une norme réglementaire.
+- Scénarios du banc d'essai étiquetés par l'auteur du moteur après sa conception : biais possible.
+- Biais du survivant (univers choisi en 2026) ; données Yahoo non certifiées ; valeurs FRED révisées.
+- Anglais : interface seulement ; les textes générés et les explications restent en français.
+- Les explications ne sont pas un avis juridique ; la ligne directrice de l'OCRI citée dans le pitch est une piste.
 
-![Architecture AWS d'AEGIS](docs/architecture-aws.svg)
+## Licences
 
-| Service | Rôle dans AEGIS |
-|---|---|
-| **Amazon CloudFront** | Point d'entrée unique en HTTPS : sert l'interface et redirige `/api/*` vers l'API (même adresse, pas de CORS). |
-| **Amazon S3** | Trois buckets privés : l'interface React compilée, le jeu de données officiel, et la zone de préparation du déploiement. |
-| **Amazon Cognito** | Comptes et connexion. Le navigateur parle directement à Cognito ; le mot de passe ne passe jamais par nos serveurs. |
-| **Amazon API Gateway** | API HTTP devant la Lambda, avec limitation du débit. |
-| **AWS Lambda · API** | L'API FastAPI (via Mangum) : profil, placements, mandats, solde. Elle fait valider chaque jeton par Cognito. |
-| **AWS Lambda · agents** | Le workflow agentique, lancé en asynchrone (jusqu'à 10 minutes) pour ne jamais bloquer l'interface. |
-| **Amazon EventBridge** | Une règle toutes les 15 minutes (le rythme de mise à jour de GDELT) appelle la Lambda des agents pour relire les sources publiques (SEC, GDELT, CoinGecko) de chaque titre. Une analyse trouve ainsi les nouvelles déjà lues. Sans modèle de langage, donc sans coût Bedrock. |
-| **Amazon DynamoDB** | Toutes les données des utilisateurs, une partition par compte (`PK = USER#<compte>`) : personne ne lit les données d'un autre. Une partition à part (`USER#_shared`) garde le cache des nouvelles publiques, qui ne contient aucune donnée personnelle. |
-| **Amazon Bedrock** | Claude Haiku 4.5 (API Converse) pour les agents qui raisonnent et rédigent. Permission limitée à ce seul modèle. |
-| **Amazon CloudWatch** | Journaux, et pour chaque agent : jetons consommés et latence, dans un tableau de bord. |
-| **AWS CDK → CloudFormation** | Toute l'infrastructure est décrite en TypeScript (`infrastructure/`) et déployée en une commande. |
-
-Le moteur statistique ULYSSE (climat de marché, attention inhabituelle) tourne en direct en local ; pour AWS, ses signaux sont
-précalculés au moment du build et embarqués dans la Lambda, ce qui évite d'y ajouter scikit-learn et SciPy.
-
-## 5. Le workflow agentique
-
-![Workflow agentique d'un mandat](docs/workflow-agentique.svg)
-
-| # | Agent | Ce qu'il fait | Outil |
-|---|---|---|---|
-| 1 | **Profil** | lit les limites du profil et le solde disponible | Python |
-| 2 | **Superviseur** | comprend la demande (montant, titre, intention) ; retrouve un nom mal écrit dans la liste fermée des actifs | Python + Bedrock si besoin |
-| 3 | **Données** | valide prix, devises et taux ; signale toute donnée douteuse | Python |
-| 4 | **Recherche** | si un titre est demandé : dépôts SEC, nouvelles dédupliquées, attention inhabituelle (ULYSSE) | sources publiques |
-| 5 | **Analyste** | construit des ordres concrets : comble ce qui manque, ou corrige au minimum un dépassement | Python |
-| 6 | **Gouvernance** | vérifie chaque ordre : l'accepte, le réduit au montant permis, ou le bloque | Python |
-| 7 | **Scénarios** | rejoue 2022 et trois chocs hypothétiques, avant et après | Python |
-| 8 | **Opportunités / Risques** | arguments pour et contre, en parallèle (délai borné) | Bedrock |
-| 9 | **Gouvernance (audit)** | vérifie chaque chiffre cité contre le registre de métriques | Python |
-| 10 | **Explicabilité** | rédige la réponse en français, avec des chiffres vérifiés | Bedrock |
-| 11 | **Vous** | approuvez, modifiez ou refusez | humain |
-
-Si Bedrock est lent ou indisponible, la proposition est quand même produite (les étapes déterministes suffisent) et l'interface
-le dit clairement.
-
-## 6. Lancer l'application
-
-**Prérequis** : Python 3.12+, Node 20+.
-
-```bash
-git clone https://github.com/amine2125/finance-advsior.git && cd finance-advsior && git checkout fusion
-make setup      # environnement Python (AEGIS + ULYSSE), dépendances de l'interface et de l'infrastructure
-make data       # jeu de données officiel (data/active) + datapack ULYSSE (data/build), à partir du kit dans context/
-                # ou : make data-refresh  (même jeu, prolongé jusqu'à hier avec le script et les sources du kit, docs/donnees.md S10)
-make test       # tests backend, sans AWS ni réseau
-make api        # API sur http://127.0.0.1:8000
-make web        # interface sur http://localhost:5173 (dans un autre terminal)
-```
-
-**Configuration** : copiez `.env.example` en `.env`.
-
-- Sans rien d'autre, l'application tourne en **mode bac à sable** : pas de connexion, données dans des fichiers locaux, IA désactivée.
-- Avec des **clés AWS** (les lignes `export KEY=…` copiées d'un portail AWS sont acceptées), les agents utilisent Bedrock.
-- En décommentant la section **« Comptes et base de données »** (valeurs données par `cdk deploy`), le serveur local utilise les
-  mêmes comptes Cognito et la même table DynamoDB que la version en ligne.
-
-Les clés temporaires d'un atelier AWS expirent après quelques heures : si les agents ne répondent plus, recollez-en de nouvelles
-dans `.env` et relancez `make api`.
-
-## 7. Comptes de démonstration
-
-Sur la page de connexion, boutons **« Entrer »**, ou :
-
-| Compte | Courriel | Mot de passe | Ce qu'on y voit |
-|---|---|---|---|
-| Amira | `amira@demo.aegis-finance.ca` | `AegisDemo2026!` | profil élevé, trop concentrée en technologie et en NVIDIA |
-| Mateo | `mateo@demo.aegis-finance.ca` | `AegisDemo2026!` | profil modéré, portefeuille conforme : « rien à changer », avec des idées |
-| Robert | `robert@demo.aegis-finance.ca` | `AegisDemo2026!` | profil faible à modéré, trop d'actions populaires : rééquilibrage proposé |
-
-Ce sont des comptes ordinaires (mêmes écrans, mêmes agents, réponses modifiables). Leurs données sont recréées à la première
-connexion et après « Tout effacer et recommencer » (page Profil). On peut aussi créer son propre compte : il est actif tout de suite.
-
-Idées à essayer : avec Robert, « Je veux 3 000 $ de Tesla » (refusé, avec une alternative) ; avec Amira, « Rééquilibre mon
-portefeuille » ; avec Mateo, « J'ai 5 000 $ à investir ».
-
-## 8. Déployer sur AWS
-
-```bash
-make deploy
-```
-
-Cette commande :
-
-0. prolonge les prix jusqu'à la veille avec le script officiel du kit (`make data-refresh`), pour que prix et nouvelles partagent
-   la même date (énoncé p. 14) ; la page « À propos » indique la date de fin officielle et la prolongation ;
-1. construit le paquet Lambda sans Docker (bibliothèques Linux + code + signaux ULYSSE précalculés) ;
-2. compile l'interface ;
-3. lance `cdk deploy` : CDK génère un modèle CloudFormation, dépose les paquets dans S3, puis CloudFormation crée ou met à
-   jour la stack `AegisStack` (et annule tout en cas d'échec) ;
-4. crée ou réinitialise les trois comptes de démonstration dans Cognito.
-
-Les clés AWS sont lues dans `.env`. L'adresse du site est affichée à la fin (`AppUrl`).
-
-## 9. Tests
-
-```bash
-make test       # 108 tests (dont 10 qui demandent le datapack : make data d'abord) : formules, profils, verdicts, mandats,
-                # solde, signaux ULYSSE, API, gouvernance (conseil personnalisé, chiffres non traçables), ESG
-make e2e        # parcours complet dans un navigateur (make api + make web lancés) : inscription, questionnaire, visite guidée,
-                # deux demandes aux agents, approbation, leçon, déconnexion
-```
-
-## 10. Organisation du code
-
-```
-frontend/                interface React + Vite + Tailwind + Framer Motion
-backend/app/             API FastAPI (/api/v1) : comptes, profil, placements, mandats, agents, gouvernance, solde
-backend/ulysse/          moteur ULYSSE : datapack « à date », climat de marché, attention inhabituelle, mesures avancées
-backend/tests_aegis/     tests de l'API et des agents
-backend/tests/           tests du moteur ULYSSE
-infrastructure/          AWS CDK (TypeScript) : la stack complète
-scripts/                 import et prolongation du jeu de données, build Lambda, comptes de démonstration
-docs/                    technique.md (documentation technique), donnees.md (sources), hypotheses.md, one-pager.md,
-                         video-script.md, et les deux diagrammes de ce document
-context/Datathon2026/    énoncé et kit de départ officiels
-```
-
-## 11. Limites et responsabilité
-
-- **Simulation** : l'argent est fictif, aucune transaction n'est exécutée, aucune vraie banque n'est contactée.
-- **Pas un conseil personnalisé** : AEGIS vérifie la cohérence entre une idée et le profil déclaré ; il ne remplace pas un
-  conseiller.
-- **Le passé ne prédit pas l'avenir** : rejeux et scénarios décrivent ce qui s'est passé ou une hypothèse explicite.
-- **Données datées** : le jeu officiel s'arrête le 12 novembre 2026 ; `make deploy` le prolonge avec son propre script, et l'écran
-  indique quand les nouvelles lues sont plus récentes que les prix. Une donnée manquante est signalée, jamais inventée.
-- **ESG** : filtre par secteur tiré de la règle publiée de l'indice suivi par ESGV ; pas de note ESG ni de vérification des
-  controverses par entreprise.
-- **Seuils** : les limites par profil et les niveaux de risque sont des heuristiques documentées (`docs/hypotheses.md`), pas des
-  règles réglementaires.
-- **Comptes de démonstration partagés** : leurs identifiants sont publics par conception, pour le jury.
+Code : à définir par l'équipe. Skills tiers dans `.claude/skills/` : Apache-2.0 (Anthropic) et MIT (GitHub, Vercel), licences jointes. Données : conditions de chaque source dans [docs/donnees.md](docs/donnees.md) ; les téléchargements bruts restent dans un cache local non versionné.

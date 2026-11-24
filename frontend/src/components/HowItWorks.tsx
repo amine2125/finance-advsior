@@ -17,7 +17,7 @@ const HELP: Record<Topic, { title: string; points: string[]; lesson?: string }> 
       "« Que voulez-vous faire ? » : écrivez votre idée en français, des agents l'analysent et vous proposent un plan.",
       "À droite, le climat de marché et les titres qui attirent une attention inhabituelle : une description du présent, pas une prévision.",
     ],
-    lesson: "aegis",
+    lesson: "ulysse",
   },
   placements: {
     title: "Vos placements",
@@ -35,7 +35,7 @@ const HELP: Record<Topic, { title: string; points: string[]; lesson?: string }> 
       "« En attente » : vous n'avez pas encore choisi. « Approuvée » : votre portefeuille simulé a été mis à jour. « Refusée » : rien n'a changé.",
       "Ouvrez une décision pour revoir le plan, les raisons et l'analyse complète des agents.",
     ],
-    lesson: "aegis",
+    lesson: "ulysse",
   },
   proposal: {
     title: "Une proposition des agents",

@@ -1,41 +1,59 @@
 import clsx from "clsx";
 import { Check, ChevronDown, Pencil, X } from "lucide-react";
 import { useMemo, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { SplitBar } from "../components/charts";
 import { PageIn, Segmented, Stagger, Tabs } from "../components/motion";
 import HoldingsEditor from "../components/HoldingsEditor";
 import HowItWorks from "../components/HowItWorks";
 import { Button, ErrorBox, Spinner } from "../components/ui";
-import { checkLabel, checkText, useAnalysis } from "../hooks/useAnalysis";
 import { useApi } from "../hooks/useApi";
-import { useApp } from "../hooks/useApp";
-import { byCategory, CATEGORY, ORDER } from "../lib/assets";
-import { cad, pct } from "../lib/format";
-import { HoldingRow, launchMandate, REVIEW, signed, signedPct } from "./Home";
+import { useApp, useProfilePath } from "../hooks/useApp";
+import { useMarket } from "../hooks/useMarket";
+import { byCategory, CATEGORY, group, ORDER } from "../lib/assets";
+import { cad, date, pct } from "../lib/format";
+import { REVIEW, useLaunch } from "../lib/launch";
+import { clauseShort, Signal, StatutClause, vous } from "../lib/ulysse";
+import { api } from "../services/api";
+import { gainSince, Holding, HoldingRow, Positions, signed, signedPct, toHoldings } from "./Home";
 
 type Filter = "all" | "stocks" | "etf" | "crypto";
 const FILTERS: [Filter, string][] = [["all", "Tout"], ["stocks", "Actions"], ["etf", "FNB"], ["crypto", "Crypto"]];
-const SORTS: Record<string, [string, (a: any, b: any) => number]> = {
+const SORTS: Record<string, [string, (a: Holding, b: Holding) => number]> = {
   value: ["Valeur", (a, b) => b.value_cad - a.value_cad],
   alpha: ["Alphabétique", (a, b) => a.asset_id.localeCompare(b.asset_id)],
   day: ["Variation du jour", (a, b) => (b.day_change_pct ?? 0) - (a.day_change_pct ?? 0)],
   gain: ["Gain depuis l'achat", (a, b) => (b.gain_pct ?? -9) - (a.gain_pct ?? -9)],
 };
+const ORIGIN: Record<string, string> = { allocation_initiale: "portefeuille de départ du profil (fictif)", saisie: "saisis à la main", import_csv: "importés d'un fichier CSV" };
 
 export default function Holdings() {
-  const { me, portfolio, setPortfolioId, reload } = useApp();
-  const nav = useNavigate();
+  const { reload, asOf } = useApp();
+  const path = useProfilePath();
+  const launch = useLaunch();
   const [params] = useSearchParams();
   const [tab, setTab] = useState<"list" | "mix">("list");
   const [filter, setFilter] = useState<Filter>("all");
   const [sort, setSort] = useState("value");
   const [editing, setEditing] = useState(params.get("ajouter") === "1");
-  const h = useApi<any>("/holdings");
-  const rows = useMemo(() => (h.data?.holdings || [])
-    .filter((x: any) => filter === "all" || (filter === "crypto" ? x.asset_class === "crypto" : filter === "etf" ? x.asset_class === "etf" : x.asset_class === "equity"))
-    .sort(SORTS[sort][1]), [h.data, filter, sort]);
-  const has = (h.data?.holdings || []).length > 0;
+  const [tick, setTick] = useState(0);
+  const h = useApi<Positions>(path("/positions"), [tick]);
+  const hist = useApi<any>(path("/historique", { jours: 10 }), [tick]);
+  const market = useMarket();
+  const all = useMemo(() => toHoldings(h.data, market.data?.actifs), [h.data, market.data]);
+  const rows = useMemo(() => all
+    .filter((x) => filter === "all" || (filter === "crypto" ? group(x) === "crypto" : filter === "etf" ? group(x) === "etf" : group(x) === "equity"))
+    .sort(SORTS[sort][1]), [all, filter, sort]);
+  const has = all.length > 0;
+  const g = gainSince(all);
+  const day = hist.data?.veille_cad;
+  const origin = h.data ? (h.data.origine.startsWith("connexion:") ? "compte connecté (simulation)" : ORIGIN[h.data.origine] ?? h.data.origine) : "";
+  const resetToStart = async () => {
+    const p = path("/positions/reinitialiser", { as_of: null });
+    if (!p || !confirm("Revenir au portefeuille de départ du profil ? Vos placements actuels seront remplacés.")) return;
+    await api.post(p, { as_of: asOf });
+    await reload(); setTick((t) => t + 1);
+  };
 
   return (
     <PageIn className="mx-auto max-w-3xl px-5 pb-16 pt-10">
@@ -43,7 +61,7 @@ export default function Holdings() {
         <div>
           <div className="mb-3"><HowItWorks topic="placements" /></div>
           <h1 className="font-display text-[40px] font-semibold leading-none tracking-tightest text-ink">Placements</h1>
-          {has && <p className="tabular-nums mt-3 text-sm text-ink-muted">{cad(h.data.total_value_cad, 2)}{h.data.gain_cad != null && <> · <span className={h.data.gain_cad >= 0 ? "text-gain-700" : "text-accent-700"}>{signed(h.data.gain_cad, 0)} ({signedPct(h.data.gain_pct)}) depuis vos achats</span></>} · <span className={h.data.day_change_cad >= 0 ? "text-gain-700" : "text-accent-700"}>{signed(h.data.day_change_cad)} aujourd'hui</span></p>}
+          {has && h.data && <p className="tabular-nums mt-3 text-sm text-ink-muted">{cad(h.data.total_cad - h.data.liquidites_cad, 2)}{g && <> · <span className={g.gain >= 0 ? "text-gain-700" : "text-accent-700"}>{signed(g.gain, 0)} ({signedPct(g.pct)}) depuis vos achats</span></>}{day != null && <> · <span className={day >= 0 ? "text-gain-700" : "text-accent-700"}>{signed(day)} à la dernière clôture</span></>}</p>}
         </div>
         <Button variant="secondary" size="sm" onClick={() => setEditing(!editing)}>{editing ? <><X className="h-4 w-4" /> Fermer</> : <><Pencil className="h-4 w-4" /> Modifier</>}</Button>
       </div>
@@ -52,9 +70,9 @@ export default function Holdings() {
         <section className="mt-6 border-t border-line py-6">
           <h2 className="font-display text-xl font-medium text-ink">Vos placements</h2>
           <p className="mb-4 mt-0.5 text-sm text-ink-muted">Ce que vous détenez, ici ou ailleurs. Montants en dollars canadiens.</p>
-          <HoldingsEditor personaId={me!.profile.persona_id} portfolioId={portfolio?.portfolio_id} submitLabel="Enregistrer et analyser"
-            initial={(h.data?.holdings || []).map((x: any) => ({ asset_id: x.asset_id, amount_cad: Math.round(x.value_cad) }))}
-            onSaved={async (pf) => { setPortfolioId(pf.portfolio_id); setEditing(false); await reload(); await launchMandate(nav, REVIEW, pf.portfolio_id); }} />
+          <HoldingsEditor submitLabel="Enregistrer et analyser"
+            initial={all.map((x) => ({ asset_id: x.asset_id, amount_cad: Math.round(x.value_cad) }))}
+            onSaved={async () => { setEditing(false); await reload(); setTick((t) => t + 1); await launch(REVIEW, { type: "portefeuille" }); }} />
         </section>
       )}
 
@@ -78,14 +96,30 @@ export default function Holdings() {
           </div>
           <div className="mt-3" data-testid="holdings-list">
             <Stagger key={filter + sort}>
-              {rows.map((x: any) => <HoldingRow key={x.asset_id} h={x} />)}
+              {rows.map((x) => <HoldingRow key={x.asset_id} h={x} />)}
             </Stagger>
             {!rows.length && <p className="py-8 text-center text-sm text-ink-muted">Aucun placement dans cette catégorie.</p>}
           </div>
+          {h.data && (
+            <div className="mt-6 space-y-3 text-sm">
+              <p className="text-ink-muted">Liquidités : <span className="tabular-nums font-medium text-ink">{cad(h.data.liquidites_cad, 2)}</span> · placements {origin}, évalués aux vrais cours de clôture en $ CA.</p>
+              {h.data.mouvements?.length > 0 && (
+                <details>
+                  <summary className="cursor-pointer text-ink-muted hover:text-ink">Mouvements de liquidités ({h.data.mouvements.length})</summary>
+                  <ul className="mt-2 divide-y divide-line border-y border-line">
+                    {h.data.mouvements.map((m: any) => (
+                      <li key={m.id} className="flex justify-between gap-3 py-2.5"><span className="text-ink-soft">{date(m.date)} · {m.libelle}</span><span className={clsx("tabular-nums", m.montant_cad >= 0 ? "text-gain-700" : "text-ink")}>{signed(m.montant_cad)}</span></li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+              {h.data.origine !== "allocation_initiale" && <button onClick={resetToStart} className="text-ink-muted underline-offset-4 hover:text-ink hover:underline">Revenir au portefeuille de départ du profil</button>}
+            </div>
+          )}
         </>
       )}
 
-      {has && tab === "mix" && <Mix />}
+      {has && tab === "mix" && h.data && <Mix pos={h.data} onFix={() => launch(REVIEW, { type: "portefeuille" })} />}
 
       {h.data && !has && !editing && (
         <div className="mt-10 border-t border-line py-12 text-center">
@@ -98,42 +132,54 @@ export default function Holdings() {
   );
 }
 
-function Mix() {
-  const { me, portfolio } = useApp();
-  const nav = useNavigate();
-  const { data: xr, loading } = useAnalysis(portfolio?.portfolio_id);
-  if (loading && !xr) return <Spinner />;
-  if (!xr) return null;
-  const b = me!.profile.budget;
-  const cats = byCategory(xr.positions);
-  const checks: any[] = (xr.persona_assessment?.budget_checks || []).filter((c: any) => c.status !== "UNKNOWN");
-  const bad = checks.filter((c) => c.status !== "OK");
+/** « 54,8 % · limite 50 % » from a clause status (the engine's values are in percent). */
+function measured(c: StatutClause): string {
+  const val = c.valeur_apres ?? c.valeur_avant;
+  if (val == null || c.limite == null) return c.statut === "donnees_insuffisantes" ? "données insuffisantes" : "";
+  const f = (x: number) => `${x.toLocaleString("fr-CA", { maximumFractionDigits: 1 })}${c.unite === "%" ? " %" : ` ${c.unite}`}`;
+  return `${f(val)} · ${c.type === "liquidites_min" ? "minimum" : "limite"} ${f(c.limite)}`;
+}
+
+function Mix({ pos, onFix }: { pos: Positions; onFix: () => Promise<void> }) {
+  const { me } = useApp();
+  const path = useProfilePath();
+  const home = useApi<{ statut_contrat: Signal }>(path("/accueil"));
+  const [busy, setBusy] = useState(false);
+  const cats = byCategory(pos.lignes, pos.total_cad ? pos.liquidites_cad / pos.total_cad : 0);
+  const s = home.data?.statut_contrat;
+  const checks = (s?.clauses || []).filter((c) => c.statut !== "non_applicable");
+  const bad = checks.filter((c) => c.statut === "depassee");
+  const actions = s?.clauses.find((c) => c.type === "actions_max");
   return (
     <div className="mt-6 space-y-5">
       <section className="border-t border-line py-6">
         <h2 className="font-display text-xl font-medium text-ink">Répartition</h2>
         <div className="mt-4"><SplitBar slices={ORDER.map((k) => ({ id: k, label: CATEGORY[k].label, value: cats[k], color: CATEGORY[k].color }))} /></div>
-        <p className="mt-4 text-sm text-ink-muted">Votre profil {me!.profile.risk_profile_label.toLowerCase()} prévoit entre {pct(b.growth_min, 0)} et {pct(b.growth_max, 0)} en actions et cryptos. Vous en avez {pct(cats.growth + cats.speculative, 0)}.</p>
+        {actions?.limite != null && actions.valeur_apres != null && (
+          <p className="mt-4 text-sm text-ink-muted">Votre profil {me!.profile!.risk_profile_label.toLowerCase()} prévoit au plus {pct(actions.limite / 100, 0)} en actions (FNB compris). Vous en avez {pct(actions.valeur_apres / 100, 0)}.</p>
+        )}
+        <p className="mt-2 text-xs text-ink-muted">Stabilité : obligations, or et liquidités. Les FNB d'actions sont ouverts quand leur composition publiée est disponible.</p>
       </section>
       <section className="border-t border-line">
         <div className="flex items-center justify-between pt-6">
-          <h2 className="font-display text-xl font-medium text-ink">Vos limites</h2>
-          <span className={clsx("text-sm font-medium", bad.length ? "text-accent-700" : "text-gain-700")}>{bad.length ? `${bad.length} dépassée${bad.length > 1 ? "s" : ""}` : "Toutes respectées"}</span>
+          <h2 className="font-display text-xl font-medium text-ink">Vos règles</h2>
+          {s && <span className={clsx("text-sm font-medium", bad.length ? "text-accent-700" : "text-gain-700")}>{bad.length ? `${bad.length} dépassée${bad.length > 1 ? "s" : ""}` : "Toutes respectées"}</span>}
         </div>
+        {!s && <Spinner />}
         <ul className="mt-2 pb-2">
           {checks.map((c) => (
-            <li key={c.rule_id} className="flex gap-3 py-3">
-              {c.status === "OK" ? <Check className="mt-0.5 h-4 w-4 shrink-0 text-gain-600" /> : <X className="mt-0.5 h-4 w-4 shrink-0 text-accent-600" />}
+            <li key={c.clause_id} className="flex gap-3 py-3">
+              {c.statut === "respectee" ? <Check className="mt-0.5 h-4 w-4 shrink-0 text-gain-600" /> : c.statut === "depassee" ? <X className="mt-0.5 h-4 w-4 shrink-0 text-accent-600" /> : <span className="mt-1.5 h-2 w-2 shrink-0 translate-x-1 rounded-full bg-primary-500" />}
               <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap justify-between gap-x-3 text-sm"><span className="font-medium text-ink">{checkLabel(c)}</span><span className="tabular text-ink-muted">{c.measured} · limite {c.limit}</span></div>
-                {c.status !== "OK" && <p className="mt-0.5 text-sm text-ink-muted">{checkText(c)}</p>}
+                <div className="flex flex-wrap justify-between gap-x-3 text-sm"><span className="font-medium text-ink">{clauseShort(c)}</span><span className="tabular text-ink-muted">{measured(c)}</span></div>
+                {c.statut !== "respectee" && <p className="mt-0.5 text-sm text-ink-muted">{vous(c.explication)}</p>}
               </div>
             </li>
           ))}
         </ul>
         {bad.length > 0 && (
           <div className="border-t border-line py-4">
-            <Button onClick={() => launchMandate(nav, REVIEW, portfolio?.portfolio_id)}>Demander aux agents de corriger</Button>
+            <Button disabled={busy} onClick={async () => { setBusy(true); try { await onFix(); } catch { setBusy(false); } }}>{busy ? "Les agents démarrent…" : "Demander aux agents d'analyser"}</Button>
           </div>
         )}
       </section>

@@ -1,0 +1,10 @@
+{
+  "origin": "official_datathon_zip",
+  "official_datathon_zip": true,
+  "imported_at": "2026-11-15T17:17:22+00:00",
+  "source": "context/Datathon2026/alphaforge_starter",
+  "import_notes": [
+    "Macro: daily rates marked point-in-time safe (1-day lag); monthly CPI/unemployment pit_safe=0"
+  ],
+  "extension": null
+}

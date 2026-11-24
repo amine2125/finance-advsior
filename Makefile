@@ -1,46 +1,43 @@
-PY  := backend/.venv/bin/python
+PY := backend/.venv/bin/python
 PIP := backend/.venv/bin/pip
-KIT := context/Datathon2026/alphaforge_starter
-KIT_EXT := data/kit
 
-.PHONY: setup data data-refresh test api web web-build e2e lambda deploy demo-accounts
+.PHONY: setup data data-refresh test api web web-build bench lambda lint-infra deploy demo
 
-setup:          ## Python 3.12+ environment (AEGIS API + ULYSSE engine), interface and CDK dependencies
+setup:            ## create the Python environment, install backend and frontend
 	python3 -m venv backend/.venv
-	$(PIP) install -q --upgrade pip uv
-	$(PIP) install -q -e "backend[api,aws,signals,data,dev]"
+	$(PIP) install -q --upgrade pip
+	$(PIP) install -q -e "backend[data,api,aws,dev]"
 	cd frontend && npm install --no-audit --no-fund
-	cd infrastructure && npm ci --no-audit --no-fund
 
-data:           ## official dataset for AEGIS (data/active) + ULYSSE datapack (data/build), both from the committed starter kit
-	$(PY) scripts/import_datathon_zip.py $(KIT) --out data/active
-	cd backend && ULYSSE_KIT_DIR="$(abspath $(KIT))" .venv/bin/python -m ulysse.data.build
+data:             ## build the datapack (downloads missing sources into data/cache once)
+	cd backend && ../$(PY) -m ulysse.data.build
 
-data-refresh:   ## official kit extended to yesterday with the kit's own script (Yahoo, Bank of Canada, FRED), then `make data` on it
-	$(PY) scripts/extend_kit.py $(KIT) --out $(KIT_EXT)
-	$(MAKE) data KIT=$(KIT_EXT)
+data-refresh:     ## re-download sources, then rebuild
+	cd backend && ../$(PY) -m ulysse.data.build --fetch
 
-test:           ## all backend tests (AEGIS + ULYSSE): no AWS, no network, LLM stubbed
-	cd backend && .venv/bin/python -m pytest -q
+test:             ## run the test suite (no AWS, no network, simulated LLM)
+	cd backend && ../$(PY) -m pytest
 
-api:            ## API on http://127.0.0.1:8000 (reads .env: Bedrock, Cognito, DynamoDB)
-	cd backend && .venv/bin/uvicorn app.main:app --port 8000 --reload
+api:              ## local server: API + built interface on http://127.0.0.1:8000
+	cd backend && ULYSSE_LLM=simule .venv/bin/uvicorn ulysse.api.server:app --host 127.0.0.1 --port 8000
 
-web:            ## interface on http://localhost:5173 (needs `make api`)
+web:              ## interface in development mode on http://localhost:5173 (needs `make api`)
 	cd frontend && npm run dev
 
-web-build:      ## production build of the interface
+web-build:        ## production build of the interface (served by `make api`)
 	cd frontend && npm run build
 
-e2e:            ## full browser journey against the local stack (`make api` + `make web` running)
-	cd frontend && AEGIS_URL=http://localhost:5173 npx playwright test
+demo:             ## reset the demo state (profiles, Vigie at 2026-11-14) on the local server
+	curl -s -X POST -H 'content-type: application/json' -d '{}' http://127.0.0.1:8000/api/demo/reinitialiser > /dev/null && echo "démo réinitialisée"
 
-lambda:         ## Lambda package (Linux wheels, no Docker) with the ULYSSE signals pre-computed
-	PATH="$(CURDIR)/backend/.venv/bin:$$PATH" bash scripts/build_lambda.sh
+bench:            ## run the test bench and write bench/resultats/ (served on the Reliability page)
+	cd backend && ../$(PY) ../bench/run_bench.py
 
-deploy: data-refresh lambda web-build   ## prices extended to yesterday, then deploy to AWS with the CDK (AWS credentials in .env)
-	cd backend && .venv/bin/python -c "import app.config, os, subprocess, sys; sys.exit(subprocess.run(['npx', 'cdk', 'deploy', 'AegisStack', '--require-approval', 'never', '--outputs-file', 'cdk-outputs.json'], cwd='../infrastructure', env=os.environ).returncode)"
-	$(MAKE) demo-accounts
+lambda:           ## build the Lambda package without Docker (Linux arm64 wheels)
+	./infra/build_lambda.sh
 
-demo-accounts:  ## create or reset the three jury accounts (Amira, Mateo, Robert) in Cognito
-	$(PY) scripts/seed_demo_accounts.py
+lint-infra:       ## validate the SAM template locally (no AWS call)
+	infra/.venv/bin/cfn-lint infra/template.yaml
+
+deploy:           ## deploy to AWS (phase 7; needs AWS credentials and BUDGET_EMAIL)
+	./infra/deploy.sh

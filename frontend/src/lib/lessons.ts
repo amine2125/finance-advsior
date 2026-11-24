@@ -1,3 +1,5 @@
+import { APP_NAME } from "./brand";
+
 // « Apprendre » : short lessons for people who have never invested. Plain words, no jargon without an explanation,
 // no promise: every number is either a definition, a computed illustration labelled as such, or a figure from the app.
 
@@ -29,7 +31,7 @@ export const LESSONS: Lesson[] = [
     paragraphs: [
       "Un placement qui peut rapporter beaucoup peut aussi baisser beaucoup. Il n'existe pas de placement à la fois très rentable et sans risque : si on vous en promet un, méfiez-vous.",
       "Votre profil (prudent, modéré, élevé…) dit combien de hauts et de bas vous pouvez vivre sans vendre au pire moment. Il dépend de votre horizon, de votre situation et de ce que vous supportez vraiment.",
-      "C'est pour ça qu'AEGIS vous a posé des questions sur des baisses concrètes : « il resterait 7 000 $ sur 10 000 $ », c'est plus parlant qu'un pourcentage.",
+      `C'est pour ça que ${APP_NAME} vous a posé des questions sur des baisses concrètes : « il resterait 7 000 $ sur 10 000 $ », c'est plus parlant qu'un pourcentage.`,
     ],
     takeaway: "Le bon placement est celui avec lequel vous dormez bien, même pendant une mauvaise année.",
   },
@@ -38,7 +40,7 @@ export const LESSONS: Lesson[] = [
     paragraphs: [
       "Si tout votre argent est dans une seule entreprise, une seule mauvaise nouvelle peut vous faire perdre beaucoup. Réparti sur 500 entreprises, la même nouvelle pèse très peu.",
       "On diversifie entre entreprises, mais aussi entre secteurs (banques, technologie, énergie…), entre pays, et entre types de placements (actions et obligations ne réagissent pas pareil).",
-      "AEGIS vérifie ces limites pour vous : le poids maximum d'une seule entreprise, d'un secteur, d'un thème comme la technologie, et la part en actions permise par votre profil.",
+      `${APP_NAME} vérifie ces limites pour vous : le poids maximum d'une seule entreprise (FNB compris), la part en actions, en cryptoactifs ou en technologies permise par votre profil, et ce que votre portefeuille aurait perdu dans les crises passées.`,
     ],
     takeaway: "Diversifier ne supprime pas le risque, mais évite qu'un seul accident vous coûte très cher.",
   },
@@ -54,21 +56,21 @@ export const LESSONS: Lesson[] = [
   {
     id: "emotions", title: "Les émotions, l'engouement et les frais", short: "Les trois pièges les plus coûteux, et comment les éviter.", minutes: 2, visual: "fees",
     paragraphs: [
-      "L'engouement : quand tout le monde parle d'un titre, on a peur de manquer le train. AEGIS signale ces attentions inhabituelles (vues, volume échangé) pour que vous décidiez à froid.",
+      `L'engouement : quand tout le monde parle d'un titre, on a peur de manquer le train. ${APP_NAME} signale ces attentions inhabituelles (pages vues, volume échangé) pour que vous décidiez à froid.`,
       "La panique : vendre pendant une chute transforme une baisse temporaire en perte réelle. Un plan décidé à l'avance aide à tenir.",
       "Les frais : 1 ou 2 % par année semblent petits, mais ils se composent eux aussi, année après année.",
     ],
     takeaway: "Décidez avec un plan, pas sous le coup de l'émotion, et regardez toujours les frais.",
   },
   {
-    id: "aegis", title: "Comment AEGIS vous aide", short: "Des agents qui analysent et vérifient, vous qui décidez.", minutes: 2, visual: "agents",
+    id: "ulysse", title: `Comment ${APP_NAME} vous aide`, short: "Vos règles fixées à froid, une vérification à chaud, vous qui décidez.", minutes: 2, visual: "agents",
     paragraphs: [
-      "Votre profil vient de vos réponses au questionnaire : il fixe vos limites (part en actions, poids d'une entreprise, cryptoactifs).",
-      "Vous écrivez ce que vous voulez faire, en français. Des agents se relaient : lire votre profil, comprendre la demande, réunir les données, construire une proposition, la vérifier, la tester sur 2022, peser le pour et le contre, l'expliquer.",
-      "Chaque chiffre vient d'un calcul vérifié ; l'IA rédige, mais un vérificateur rejette tout chiffre qu'elle ne peut pas justifier. Et rien n'est fait sans votre accord : vous approuvez, modifiez ou refusez.",
-      "Tout est simulé : l'argent est fictif et aucune transaction réelle n'a lieu. C'est l'endroit idéal pour apprendre sans risque.",
+      "Votre profil vient de vos réponses au questionnaire : il fixe vos règles (perte acceptée en cas de crise, part en actions, poids d'une seule entreprise, cryptoactifs). Vous pouvez changer une règle à tout moment : le changement est daté et gardé.",
+      "Vous écrivez ce que vous voulez faire, en français. Des agents se relaient : lire votre profil, choisir les analyses utiles, calculer, vérifier chacune de vos règles, décider du niveau du signal, peser le pour et le contre, l'expliquer.",
+      "Chaque chiffre vient d'un calcul vérifié ; l'IA peut rédiger, mais un vérificateur rejette toute phrase dont un chiffre n'est pas prouvé. Le niveau (compatible, à regarder, pause de réflexion) est décidé par des règles écrites, jamais par l'IA.",
+      "Tout est simulé : l'argent est fictif et aucune transaction réelle n'a lieu. Et rien n'est fait sans votre accord : vous gardez toujours le dernier mot.",
     ],
-    takeaway: "AEGIS ne décide pas à votre place : il vous montre, chiffres vérifiés à l'appui, si une idée vous convient.",
+    takeaway: `${APP_NAME} ne décide pas à votre place : il vous montre, chiffres prouvés à l'appui, si une idée respecte les règles que vous avez fixées.`,
   },
 ];
 

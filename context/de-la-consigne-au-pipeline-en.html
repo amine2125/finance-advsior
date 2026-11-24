@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="generator" content="templates/diaporama">
+<meta name="theme-statut" content="PROVISOIRE">
+<title>From an instruction to a self-correcting pipeline</title>
+<style>
+:root{--primaire:#DE161D;--primaire-fonce:#A5121A;--secondaire:#1572C5;--accent:#F0AD4E;--sombre:#262626;--fond:#FFFFFF;--fond-alt:#F4F4F4;--texte:#212121;--texte-doux:#595959;--bordure:#D9D9D9;--conf-MESURE:#2E7D32;--conf-CONVERGENT:#1572C5;--conf-INDICATIF:#6F4E9C;--conf-DOCUMENTE:#F0AD4E;--conf-RAISONNE:#E67E22;--conf-REFUTE:#DE161D;--conf-BORNE:#8A8F98;--conf-CONTEXTE:#8A8F98;--police-titres:"Arial";--police-corps:"Arial";--police-mono:"Courier New"}
+/* Diaporama — gabarit HTML autonome. Aucune dépendance, aucun réseau.
+   Les couleurs et les polices viennent UNIQUEMENT des variables injectées depuis le thème
+   (templates/diaporama/themes/*.json) : aucune couleur n'est écrite en dur ici.
+   Géométrie : scène de 13,333 po x 7,5 po (16:9), unités po / pt, identiques au rendu PPTX. */
+
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  background: var(--sombre); color: var(--texte);
+  font-family: var(--police-corps), Arial, Helvetica, sans-serif;
+  overflow: hidden; -webkit-print-color-adjust: exact; print-color-adjust: exact;
+}
+.sr-only {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden;
+  clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+[hidden] { display: none !important; }
+
+.scene { position: fixed; left: 0; right: 0; top: 0; bottom: var(--bas, 0); overflow: hidden; }
+.stage {
+  position: absolute; left: 50%; top: 50%; width: 13.333in; height: 7.5in;
+  transform-origin: 50% 50%; transform: translate(-50%, -50%) scale(var(--echelle, 1));
+  background: var(--fond); box-shadow: 0 .2in .8in rgba(0, 0, 0, .45);
+}
+
+/* ------------------------------------------------------------ diapositives */
+.diapo { position: absolute; inset: 0; display: none; overflow: hidden; background: var(--fond); color: var(--texte); }
+.diapo.actif { display: block; animation: apparition .18s ease-out; }
+@keyframes apparition { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .diapo.actif { animation: none; } }
+.diapo h1, .diapo h2, .diapo h3, .diapo p, .diapo ul, .diapo ol, .diapo dl, .diapo dd { margin: 0; }
+.diapo code {
+  font-family: var(--police-mono), "Courier New", monospace; font-size: .92em;
+  background: var(--fond-alt); border: 1px solid var(--bordure); border-radius: .04in; padding: 0 .05in;
+}
+
+.onglet { position: absolute; left: .67in; top: .42in; width: .75in; height: .08in; background: var(--primaire); }
+.titre {
+  position: absolute; left: .67in; top: .58in; width: 12in; height: 1in; overflow: hidden;
+  font: 700 30pt/1.12 var(--police-titres), Arial, Helvetica, sans-serif; color: var(--texte);
+}
+.corps { position: absolute; left: .67in; top: 1.75in; width: 12in; height: 4.85in; }
+
+.pied {
+  position: absolute; left: .67in; top: 6.85in; width: 12in; height: .45in;
+  border-top: 1px solid var(--bordure); display: flex; align-items: center; gap: .2in;
+  font-size: 10pt; color: var(--texte-doux);
+}
+.pied-deck { flex: 0 0 3.6in; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pied-centre { flex: 1 1 auto; display: flex; align-items: center; gap: .15in; min-width: 0; white-space: nowrap; overflow: hidden; }
+.pied-src { overflow: hidden; text-overflow: ellipsis; }
+.pied-num { flex: 0 0 1.2in; text-align: right; font-variant-numeric: tabular-nums; }
+.puce-conf { display: inline-flex; align-items: center; gap: .07in; color: var(--texte); font-weight: 700; }
+.pastille { display: inline-block; width: .12in; height: .12in; border-radius: 50%; flex: none; }
+
+/* ------------------------------------------------------------ titre */
+.diapo--titre { background: var(--primaire); color: var(--fond); }
+.diapo--titre .logo { position: absolute; left: .9in; top: .5in; height: .7in; }
+.diapo--titre .genre { position: absolute; left: .9in; top: 1.45in; font: 700 14pt/1 var(--police-corps), Arial, sans-serif; letter-spacing: .12em; }
+.diapo--titre .onglet { left: .9in; top: 1.95in; background: var(--fond); }
+.diapo--titre .titre-principal {
+  position: absolute; left: .9in; top: 2.25in; width: 10.8in; height: 1.9in; overflow: hidden;
+  font: 700 40pt/1.12 var(--police-titres), Arial, sans-serif; color: var(--fond);
+}
+.diapo--titre .sous-titre { position: absolute; left: .9in; top: 4.3in; width: 10.8in; height: 1.2in; overflow: hidden; font-size: 22pt; line-height: 1.25; }
+.diapo--titre .meta { position: absolute; left: .9in; top: 6.3in; width: 11in; font-size: 13pt; }
+.diapo--titre .bande {
+  position: absolute; left: 0; right: 0; bottom: 0; height: .5in; background: var(--primaire-fonce);
+  display: flex; align-items: center; justify-content: flex-end; padding-right: .9in; font-size: 10pt; color: var(--fond);
+}
+
+/* ------------------------------------------------------------ section */
+.diapo--section { background: var(--sombre); color: var(--fond); }
+.diapo--section .barre { position: absolute; left: 0; top: 0; width: .35in; height: 100%; background: var(--primaire); }
+.diapo--section .numero { position: absolute; left: 1.2in; top: 2.2in; font: 700 16pt/1 var(--police-corps), Arial, sans-serif; letter-spacing: .12em; color: var(--accent); }
+.diapo--section .titre-section {
+  position: absolute; left: 1.2in; top: 2.7in; width: 10.5in; height: 2in; overflow: hidden;
+  font: 700 40pt/1.12 var(--police-titres), Arial, sans-serif; color: var(--fond);
+}
+.diapo--section .sous-titre { position: absolute; left: 1.2in; top: 4.9in; width: 10.5in; font-size: 20pt; line-height: 1.25; }
+.diapo--section .pied-num-section { position: absolute; right: .67in; bottom: .3in; font-size: 10pt; color: var(--fond); }
+
+/* ------------------------------------------------------------ listes */
+.puces, .numerotee { list-style: none; padding: 0; }
+.puces > li { position: relative; padding-left: .38in; margin-bottom: .14in; line-height: 1.2; }
+.puces > li::before { content: ""; position: absolute; left: .05in; top: calc(.6em - .06in); width: .12in; height: .12in; border-radius: 50%; background: var(--primaire); }
+.puces .sous { list-style: none; padding: 0; margin-top: .05in; font-size: calc(1em - 3pt); color: var(--texte-doux); }
+.puces .sous > li { position: relative; padding-left: .38in; margin-bottom: .05in; line-height: 1.2; }
+.puces .sous > li::before { content: "–"; position: absolute; left: .05in; }
+.numerotee { counter-reset: n; }
+.numerotee > li { counter-increment: n; position: relative; padding-left: .5in; margin-bottom: .2in; line-height: 1.2; }
+.numerotee > li::before { content: counter(n) "."; position: absolute; left: 0; top: 0; font-weight: 700; color: var(--primaire); }
+
+/* ------------------------------------------------------------ objectifs, légende */
+.intro { position: absolute; left: .67in; top: 1.75in; width: 12in; font-size: 16pt; color: var(--texte-doux); }
+.obj-grille { position: absolute; left: .67in; top: 2.3in; width: 12in; height: 4.3in; display: flex; gap: .5in; }
+.obj-liste { flex: 0 0 7.4in; }
+.carte-format { flex: 1 1 auto; align-self: flex-start; background: var(--fond-alt); border-top: .06in solid var(--primaire); padding: .25in; font-size: 16pt; }
+.carte-format dt { font-weight: 700; font-size: 12pt; color: var(--texte-doux); letter-spacing: .06em; text-transform: uppercase; }
+.carte-format dd { margin: 0 0 .22in; }
+.carte-format dd:last-child { margin-bottom: 0; }
+.legende { display: grid; grid-template-columns: 2.4in 1fr; row-gap: .13in; align-items: center; }
+.legende .puce-conf { font-size: 16pt; }
+.legende p { font-size: 15pt; }
+
+/* ------------------------------------------------------------ deux colonnes, étapes */
+.colonnes { display: flex; gap: .5in; }
+.colonne { flex: 1 1 0; border-top: .05in solid var(--primaire); padding-top: .15in; }
+.colonne h3 { font: 700 20pt/1.2 var(--police-titres), Arial, sans-serif; margin-bottom: .2in; }
+.etapes { display: flex; gap: .2in; height: 3.9in; }
+.etape { flex: 1 1 0; background: var(--fond-alt); border: 1px solid var(--bordure); border-radius: .1in; padding: .2in; }
+.etape .rond {
+  width: .55in; height: .55in; border-radius: 50%; background: var(--primaire); color: var(--fond);
+  font: 700 20pt/.55in var(--police-titres), Arial, sans-serif; text-align: center; margin-bottom: .15in;
+}
+.etape h3 { font-weight: 700; margin-bottom: .12in; line-height: 1.2; }
+.etape p { line-height: 1.2; }
+
+/* ------------------------------------------------------------ tableau */
+.tableau { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.tableau th { background: var(--primaire); color: var(--fond); text-align: left; font-weight: 700; padding: .11in .15in; }
+.tableau td { padding: .11in .15in; vertical-align: middle; line-height: 1.2; }
+.tableau tbody tr:nth-child(odd) td { background: var(--fond-alt); }
+.diapo .legende-tableau { margin-top: .3in; font-size: 13pt; color: var(--texte-doux); }
+
+/* ------------------------------------------------------------ message */
+.diapo--message .barre { position: absolute; left: .67in; width: .12in; background: var(--primaire); }
+.diapo--message .kicker { position: absolute; left: 1.1in; font: 700 14pt/1 var(--police-corps), Arial, sans-serif; letter-spacing: .12em; color: var(--primaire); }
+.diapo--message .enonce {
+  position: absolute; left: 1.1in; width: 11in; overflow: hidden;
+  font: 700 34pt/1.15 var(--police-titres), Arial, sans-serif; color: var(--texte);
+}
+.diapo--message .precision { position: absolute; left: 1.1in; width: 11in; font-size: 18pt; line-height: 1.25; color: var(--texte-doux); }
+
+/* ------------------------------------------------------------ exercice, quiz */
+.etiquette {
+  background: var(--primaire); color: var(--fond); font: 700 11pt/1 var(--police-corps), Arial, sans-serif;
+  letter-spacing: .08em; padding: .08in .16in; border-radius: .3in;
+}
+.etiquette.haut { position: absolute; left: .67in; top: .2in; }
+.exo-grille { display: flex; gap: .4in; }
+.consigne { flex: 0 0 7.7in; line-height: 1.25; }
+.encadre { flex: 1 1 auto; align-self: flex-start; background: var(--fond-alt); border-left: .06in solid var(--primaire); padding: .2in; font-size: 16pt; line-height: 1.25; }
+.encadre h3 { font: 700 12pt/1.2 var(--police-corps), Arial, sans-serif; color: var(--primaire); letter-spacing: .06em; margin-bottom: .08in; }
+.encadre p + h3 { margin-top: .2in; }
+.bouton {
+  font: 700 13pt/1 var(--police-corps), Arial, sans-serif; color: var(--fond); background: var(--secondaire);
+  border: 0; border-radius: .06in; padding: .12in .22in; cursor: pointer;
+}
+.bouton:hover { background: var(--sombre); }
+.exo .btn-corrige { position: absolute; left: 0; bottom: 0; z-index: 2; }
+.exo .corrige {
+  position: absolute; left: 0; right: 0; top: 0; bottom: .75in; z-index: 1; overflow: auto;
+  background: var(--fond); border: 1px solid var(--bordure); border-left: .06in solid var(--secondaire);
+  padding: .2in .3in; font-size: 16pt; line-height: 1.3;
+}
+.exo .corrige strong { display: block; margin-bottom: .1in; font-size: 12pt; letter-spacing: .06em; text-transform: uppercase; color: var(--secondaire); }
+.choix { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: .18in; }
+.choix button {
+  display: flex; align-items: center; gap: .2in; width: 100%; padding: .14in .22in; text-align: left;
+  font: 400 20pt/1.2 var(--police-corps), Arial, sans-serif; color: var(--texte); background: var(--fond);
+  border: 2px solid var(--bordure); border-radius: .1in; cursor: pointer;
+}
+.choix button:hover { border-color: var(--primaire); }
+.lettre {
+  flex: 0 0 .5in; height: .5in; border-radius: 50%; background: var(--fond-alt); border: 1px solid var(--bordure);
+  display: flex; align-items: center; justify-content: center; font-weight: 700;
+}
+.choix button.ok { border-color: var(--conf-MESURE); }
+.choix button.ok .lettre { background: var(--conf-MESURE); color: var(--fond); border-color: var(--conf-MESURE); }
+.choix button.ko { border-color: var(--primaire); }
+.choix button.ko .lettre { background: var(--primaire); color: var(--fond); border-color: var(--primaire); }
+.explication { margin-top: .2in; padding: .15in .22in; background: var(--fond-alt); border-left: .06in solid var(--primaire); font-size: 15pt; line-height: 1.25; }
+button:focus-visible, .plan button:focus-visible { outline: 3px solid var(--secondaire); outline-offset: 2px; }
+
+/* ------------------------------------------------------------ chrome (hors scène) */
+.barre-progression { position: fixed; left: 0; top: 0; right: 0; height: 4px; z-index: 20; }
+.barre-progression div { height: 100%; width: 0; background: var(--primaire); transition: width .2s; }
+.commandes {
+  position: fixed; left: 50%; bottom: .18in; transform: translateX(-50%); z-index: 20;
+  display: flex; align-items: center; gap: .08in; padding: .06in .14in; border-radius: .3in;
+  background: var(--sombre); color: var(--fond); font: 12pt var(--police-corps), Arial, sans-serif;
+  border: 1px solid var(--texte-doux); opacity: 0; transition: opacity .2s;
+}
+.commandes.visible, .commandes:focus-within { opacity: .95; }
+.commandes button { font: inherit; color: inherit; background: transparent; border: 0; cursor: pointer; padding: .05in .1in; border-radius: .1in; }
+.commandes button:hover { background: var(--texte-doux); }
+.commandes .compteur { min-width: .9in; text-align: center; font-variant-numeric: tabular-nums; }
+.notes-panneau {
+  position: fixed; left: 0; right: 0; bottom: 0; height: 2.2in; z-index: 15; overflow: auto;
+  background: var(--fond); color: var(--texte); border-top: 3px solid var(--primaire);
+  padding: .15in .4in; font: 14pt/1.4 var(--police-corps), Arial, sans-serif;
+}
+.notes-panneau h2 { margin: 0 0 .06in; font-size: 11pt; letter-spacing: .08em; text-transform: uppercase; color: var(--texte-doux); }
+.notes-panneau p { margin: 0 0 .08in; }
+.plan {
+  position: fixed; top: 0; right: 0; bottom: 0; width: 4.2in; z-index: 30; overflow: auto;
+  background: var(--fond); color: var(--texte); border-left: 3px solid var(--primaire); padding: .3in;
+  font: 13pt/1.3 var(--police-corps), Arial, sans-serif;
+}
+.plan ol { list-style: none; margin: 0; padding: 0; }
+.plan button { display: block; width: 100%; text-align: left; font: inherit; color: inherit; background: transparent; border: 0; padding: .07in .1in; border-radius: .06in; cursor: pointer; }
+.plan button:hover, .plan button[aria-current="true"] { background: var(--fond-alt); }
+.plan button[aria-current="true"] { font-weight: 700; border-left: 4px solid var(--primaire); }
+.aide {
+  position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 40; min-width: 5.5in;
+  background: var(--fond); color: var(--texte); border: 3px solid var(--primaire); border-radius: .12in; padding: .3in .4in;
+  font: 14pt/1.5 var(--police-corps), Arial, sans-serif;
+}
+.aide h2 { margin: 0 0 .12in; font-size: 16pt; }
+.aide dl { display: grid; grid-template-columns: auto 1fr; gap: .06in .3in; margin: 0; }
+.aide dt { font-weight: 700; font-family: var(--police-mono), monospace; }
+.aide dd { margin: 0; }
+
+/* ------------------------------------------------------------ parcours : page « niveau » (HTML seul) */
+.diapo--niveau { background: var(--fond); }
+.nv-haut {
+  position: absolute; left: .6in; right: .6in; top: .17in; height: .3in; display: flex; align-items: center;
+  justify-content: space-between; font: 700 10pt/1 var(--police-corps), Arial, sans-serif;
+  letter-spacing: .1em; text-transform: uppercase; color: var(--texte-doux);
+}
+.nv-haut .nv-rang { color: var(--primaire); }
+.nv-progres { position: absolute; left: .6in; right: .6in; top: .5in; height: 3px; background: var(--bordure); border-radius: 2px; overflow: hidden; }
+.nv-progres i { display: block; height: 100%; width: calc(100% * var(--n) / var(--t)); background: var(--primaire); }
+.nv-tete { position: absolute; left: .6in; top: .66in; width: 12.1in; }
+.nv-titre { font: 700 29pt/1.1 var(--police-titres), Arial, sans-serif; color: var(--texte); }
+.nv-clair { margin-top: .07in; font-size: 16pt; line-height: 1.25; color: var(--texte-doux); }
+.nv-clair, .nv-probleme p, .nv-legende p, .nv-limite p, .nv-verdict span { text-wrap: balance; }
+.nv-label { display: block; margin-bottom: .05in; font: 700 9.5pt/1 var(--police-corps), Arial, sans-serif; letter-spacing: .12em; color: var(--primaire); }
+
+.nv-gauche { position: absolute; z-index: 3; left: .6in; top: 1.72in; width: 8.5in; height: 4.58in; display: flex; flex-direction: column; gap: .13in; }
+.nv-probleme { min-height: .76in; }
+.nv-probleme p { font-size: 15pt; line-height: 1.22; }
+.nv-panneaux { position: relative; flex: 1 1 auto; display: flex; gap: .2in; min-height: 0; }
+.nv-panneau {
+  flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; background: var(--fond);
+  border: 1px solid var(--bordure); border-radius: .12in; overflow: hidden; box-shadow: 0 .03in .14in rgba(0, 0, 0, .08);
+}
+.nv-panneau header { display: flex; align-items: center; gap: .12in; padding: .1in .15in .08in; }
+.nv-pastille { flex: none; padding: .05in .13in; border-radius: .2in; font: 700 9.5pt/1 var(--police-corps), Arial, sans-serif; letter-spacing: .1em; color: var(--fond); }
+.nv-avant .nv-pastille { background: var(--primaire); }
+.nv-apres .nv-pastille { background: var(--secondaire); }
+.nv-sous { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5pt; font-weight: 700; color: var(--texte); }
+.nv-code {
+  flex: 1 1 auto; margin: 0 .1in; padding: .1in .12in; overflow: hidden; border-radius: .08in;
+  background: var(--sombre); color: var(--fond); font: 400 11pt/1.32 var(--police-mono), "Courier New", monospace;
+}
+.nv-l { white-space: pre-wrap; overflow-wrap: anywhere; }
+.nv-code mark { padding: 0 .03in; border-radius: .03in; font-weight: 700; color: var(--fond); background: var(--primaire); }
+.nv-apres .nv-code mark { background: var(--secondaire); }
+.nv-verdict { display: flex; align-items: flex-start; gap: .09in; min-height: .62in; padding: .09in .15in .11in; font: 700 12.5pt/1.2 var(--police-corps), Arial, sans-serif; }
+.nv-avant .nv-verdict { color: var(--primaire-fonce); }
+.nv-apres .nv-verdict { color: var(--secondaire); }
+.nv-ico { flex: none; width: .2in; height: .2in; margin-top: .01in; }
+.nv-ico circle { fill: currentColor; }
+.nv-ico path { fill: none; stroke: var(--fond); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.nv-fleche {
+  position: absolute; left: calc(50% - .26in); top: .72in; z-index: 3; width: .52in; height: .52in; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; background: var(--fond); border: 2px solid var(--bordure);
+  box-shadow: 0 .02in .08in rgba(0, 0, 0, .18);
+}
+.nv-fleche svg { width: .3in; height: .3in; }
+.nv-fleche path { fill: none; stroke: var(--primaire); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+
+.nv-preuve { position: relative; flex: none; display: flex; align-items: center; gap: .25in; min-height: .95in; padding: .1in .18in; background: var(--fond-alt); border-left: .07in solid var(--primaire); border-radius: .08in; }
+.nv-chiffre { flex: 0 0 3.5in; white-space: nowrap; font-family: var(--police-titres), Arial, sans-serif; font-weight: 700; line-height: 1.05; color: var(--primaire); }
+.nv-legende { flex: 1 1 auto; min-width: 0; }
+.nv-legende p { font-size: 13pt; line-height: 1.22; }
+.nv-meta { display: flex; align-items: center; gap: .2in; margin-top: .07in; font-size: 10.5pt; }
+.nv-sources summary { cursor: pointer; list-style: none; font-weight: 700; color: var(--secondaire); }
+.nv-sources summary::-webkit-details-marker { display: none; }
+.nv-sources summary::before { content: ""; display: inline-block; width: .06in; height: .06in; margin-right: .08in; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: translateY(-.02in) rotate(-45deg); }
+.nv-sources[open] summary::before { transform: translateY(-.04in) rotate(45deg); }
+.nv-sources ul {
+  position: absolute; right: 0; bottom: calc(100% + .08in); z-index: 5; width: 7.2in; margin: 0; padding: .12in .15in; list-style: none;
+  background: var(--fond); border: 1px solid var(--bordure); border-radius: .08in; box-shadow: 0 .04in .2in rgba(0, 0, 0, .25);
+  font-size: 10pt; line-height: 1.3;
+}
+.nv-sources li { margin: 0 0 .06in; overflow-wrap: anywhere; }
+.nv-sources li:last-child { margin-bottom: 0; }
+.nv-type { display: inline-block; min-width: .95in; margin-right: .06in; font-weight: 700; color: var(--texte-doux); }
+
+.nv-pile { position: absolute; left: 9.4in; top: 1.72in; width: 3.33in; height: 4.58in; display: flex; flex-direction: column; }
+.nv-pile h3 { margin-bottom: .07in; font: 700 9.5pt/1 var(--police-corps), Arial, sans-serif; letter-spacing: .12em; color: var(--texte-doux); }
+.nv-pile ol { flex: 1 1 auto; display: flex; flex-direction: column; justify-content: flex-end; gap: .03in; margin: 0; padding: 0; list-style: none; }
+.nv-brique button {
+  width: 100%; display: grid; grid-template-columns: .22in 1fr auto; grid-template-areas: "num nom etiq" ". fichier compte";
+  align-items: center; column-gap: .09in; text-align: left;
+  padding: .035in .09in; border: 1px solid var(--bordure); border-radius: .09in; cursor: pointer;
+  background: var(--fond-alt); color: var(--texte); font: 700 10pt/1.15 var(--police-corps), Arial, sans-serif;
+}
+.nv-brique button:hover { border-color: var(--primaire); }
+.nv-num { grid-area: num; width: .22in; height: .22in; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: var(--fond); border: 1px solid var(--bordure); font-size: 9pt; }
+.nv-nom { grid-area: nom; }
+.nv-etiq { grid-area: etiq; }
+.nv-compte { grid-area: etiq; font-size: 8.5pt; font-weight: 400; color: var(--texte-doux); white-space: nowrap; }
+.nv-nouveau { padding: .02in .07in; border-radius: .1in; font-size: 7.5pt; letter-spacing: .1em; text-transform: uppercase; background: var(--accent); color: var(--sombre); }
+.nv-fichier { grid-area: fichier; margin-top: .02in; overflow-wrap: anywhere; font: 400 8pt/1.2 var(--police-mono), "Courier New", monospace; }
+.nv-courant button { background: var(--primaire); border-color: var(--primaire); color: var(--fond); box-shadow: 0 .05in .2in rgba(0, 0, 0, .25); }
+.nv-courant .nv-num { background: var(--fond); border-color: var(--fond); color: var(--primaire); }
+.nv-courant .nv-compte { grid-area: compte; align-self: end; color: var(--fond); }
+.nv-futur button { background: transparent; border-style: dashed; color: var(--texte-doux); font-weight: 400; opacity: .78; }
+.nv-base { margin-top: .03in; padding: .05in .1in 0; text-align: center; border-top: 3px solid var(--sombre); font: 700 9.5pt/1.2 var(--police-corps), Arial, sans-serif; letter-spacing: .06em; color: var(--texte-doux); }
+.nv-date { margin-top: .05in; font-size: 8pt; color: var(--texte-doux); }
+
+.nv-limite {
+  position: absolute; left: .6in; top: 6.42in; width: 12.13in; height: .72in; display: flex; align-items: center; gap: .3in;
+  padding: .06in .2in; border-radius: .1in; background: var(--sombre); color: var(--fond);
+}
+.nv-limite > div { flex: 1 1 auto; min-width: 0; }
+.nv-limite .nv-label { color: var(--accent); margin-bottom: .03in; }
+.nv-limite p { font-size: 14pt; line-height: 1.18; }
+.nv-suite {
+  flex: 0 0 3.3in; display: grid; grid-template-columns: 1fr auto; align-items: center; column-gap: .12in; text-align: left;
+  padding: .06in .15in; border: 2px solid var(--fond); border-radius: .1in; cursor: pointer; background: transparent;
+  color: var(--fond); font-family: var(--police-corps), Arial, sans-serif;
+}
+.nv-suite span { grid-column: 1 / 3; font-size: 8pt; letter-spacing: .12em; color: var(--accent); }
+.nv-suite b { font-size: 12.5pt; line-height: 1.15; }
+.nv-suite:hover { background: var(--primaire); border-color: var(--primaire); }
+.nv-ico-suite { width: .26in; height: .26in; }
+.nv-ico-suite path { fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+.nv-fin { flex: 0 0 3.3in; text-align: right; font: 700 15pt/1.2 var(--police-titres), Arial, sans-serif; color: var(--accent); }
+
+/* Écran d'ouverture d'un parcours : une surcouche, pas une page (elle s'efface au premier « suivant »). */
+.ouverture { position: absolute; inset: 0; z-index: 12; display: flex; align-items: center; padding: 0 1in; background: var(--primaire); color: var(--fond); }
+.ouv-contenu { width: 11.3in; }
+.ouverture :where(h1, p, ol) { margin: 0; }
+.ouv-genre { font: 700 14pt/1 var(--police-corps), Arial, sans-serif; letter-spacing: .14em; }
+.ouv-titre { margin-top: .25in; font: 700 42pt/1.08 var(--police-titres), Arial, sans-serif; }
+.ouv-sous { margin-top: .22in; max-width: 10.4in; font-size: 19pt; line-height: 1.25; }
+.ouv-lire { margin-top: .5in; font: 700 10.5pt/1 var(--police-corps), Arial, sans-serif; letter-spacing: .14em; color: var(--accent); }
+.ouv-lecture { display: grid; grid-template-columns: repeat(4, 1fr); gap: .18in; margin-top: .12in; padding: 0; list-style: none; counter-reset: n; }
+.ouv-lecture li { counter-increment: n; padding: .14in .17in; border-radius: .1in; background: var(--primaire-fonce); font-size: 12pt; line-height: 1.25; }
+.ouv-lecture li::before { content: counter(n); display: block; margin-bottom: .04in; font: 700 20pt/1 var(--police-titres), Arial, sans-serif; color: var(--accent); }
+.ouv-lecture b { display: block; font-size: 13.5pt; margin-bottom: .03in; }
+.ouv-meta { margin-top: .35in; font-size: 14pt; }
+.ouv-astuce { margin-top: .14in; font-size: 11pt; color: var(--accent); }
+.ouv-go { margin-top: .22in; padding: .11in .32in; border: 0; border-radius: .3in; cursor: pointer; background: var(--fond); color: var(--primaire); font: 700 15pt/1 var(--police-corps), Arial, sans-serif; }
+.ouv-go:hover { background: var(--accent); color: var(--sombre); }
+.ouv-provisoire { position: absolute; right: 1in; bottom: .3in; font-size: 10pt; }
+
+/* Pas à pas : sans JavaScript tout est visible ; avec JavaScript chaque page se dévoile par étapes. */
+.js-etapes .diapo--niveau [data-etape]:not(.revele) { opacity: 0; visibility: hidden; }
+.diapo--niveau [data-etape].revele { animation: nv-entree .5s cubic-bezier(.2, .8, .2, 1) both; }
+@keyframes nv-entree { from { opacity: 0; transform: translateY(.2in); } to { opacity: 1; transform: none; } }
+@keyframes nv-pose { 0% { opacity: 0; transform: translateY(-.45in) scale(.96); } 60% { opacity: 1; transform: translateY(.03in); } 100% { opacity: 1; transform: none; } }
+@keyframes nv-barre { from { width: calc(100% * (var(--n) - 1) / var(--t)); } }
+.diapo--niveau.actif .nv-tete { animation: nv-entree .45s ease-out both; }
+.diapo--niveau.actif .nv-probleme { animation: nv-entree .5s ease-out .1s both; }
+.diapo--niveau.actif .nv-courant { animation: nv-pose .65s cubic-bezier(.2, .8, .2, 1) .15s both; }
+.diapo--niveau.actif .nv-progres i { animation: nv-barre .7s ease-out both; }
+body[data-parcours] .barre-progression { display: none; }
+@media (prefers-reduced-motion: reduce) { .diapo--niveau, .diapo--niveau * { animation: none !important; } }
+
+/* ------------------------------------------------------------ impression : une diapositive par page */
+@media print {
+  @page { size: 13.333in 7.5in; margin: 0; }
+  html, body { height: auto; overflow: visible; background: var(--fond); }
+  .scene { position: static; }
+  .stage { position: static; width: auto; height: auto; transform: none; box-shadow: none; }
+  .diapo { display: block !important; position: relative; width: 13.333in; height: 7.5in; page-break-after: always; break-after: page; animation: none; }
+  .diapo:last-of-type { page-break-after: auto; break-after: auto; }
+  .barre-progression, .commandes, .notes-panneau, .plan, .aide { display: none !important; }
+  .notes { display: none !important; }
+  .js-etapes .diapo--niveau [data-etape]:not(.revele) { opacity: 1 !important; visibility: visible !important; }
+  .diapo--niveau, .diapo--niveau * { animation: none !important; }
+  .ouverture { display: none !important; }
+}
+
+</style>
+</head>
+<body data-sur="of" data-diapositive="Slide" data-parcours="1">
+<div class="barre-progression" aria-hidden="true"><div id="progres"></div></div>
+<div class="scene" id="scene"><main class="stage" id="stage" aria-label="From an instruction to a self-correcting pipeline">
+<section class="diapo diapo--niveau" data-index="0" data-etapes="3" aria-roledescription="slide" aria-label="Slide 1 of 10: An instruction that names the case"><div class="nv-haut"><span class="nv-deck">From an instruction to a self-correcting pipeline</span><span class="nv-rang">LEVEL 1 / 10</span></div><div class="nv-progres" style="--n:1;--t:10" aria-hidden="true"><i></i></div><div class="nv-tete"><h2 class="nv-titre">An instruction that names the case</h2><p class="nv-clair">A house rule on the wall: the agent no longer has to guess your habits.</p></div><div class="nv-gauche"><div class="nv-probleme"><span class="nv-label">THE PROBLEM</span><p>With no instruction, the agent guesses your conventions. It finds the right folder… but makes up the file name.</p></div><div class="nv-panneaux"><section class="nv-panneau nv-avant" data-etape="1"><header><span class="nv-pastille">BEFORE</span><span class="nv-sous">No instruction</span></header><div class="nv-code"><div class="nv-l">Request: “Add a testable hypothesis…”</div><div class="nv-l">Result:</div><div class="nv-l">3-<wbr>hypotheses/<wbr><mark>hypothese-<wbr>exemple-<wbr>vs-<wbr>regle.<wbr>md</mark></div></div><footer class="nv-verdict"><svg class="nv-ico" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="8"/><path d="M5.2 5.2l5.6 5.6M10.8 5.2l-5.6 5.6"/></svg><span>Right folder, made-up name: 0 compliant out of 24</span></footer></section><div class="nv-fleche" data-etape="2" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12h13M13 6.5l5.5 5.5-5.5 5.5"/></svg></div><section class="nv-panneau nv-apres" data-etape="2"><header><span class="nv-pastille">AFTER</span><span class="nv-sous">With the written rule</span></header><div class="nv-code"><div class="nv-l">Rule: hypothesis → 3-<wbr>hypotheses/<wbr>H-<wbr>YYYYMMDD-<wbr>&lt;slug&gt;.<wbr>md</div><div class="nv-l">Result:</div><div class="nv-l">3-<wbr>hypotheses/<wbr><mark>H-<wbr>20260920-<wbr>exemple-<wbr>vs-<wbr>regle-<wbr>seule.<wbr>md</mark></div></div><footer class="nv-verdict"><svg class="nv-ico" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="8"/><path d="M4.4 8.3l2.5 2.5 4.7-5.1"/></svg><span>Convention followed: 24 compliant out of 24</span></footer></section></div><div class="nv-preuve" data-etape="3"><div class="nv-chiffre" style="font-size:34pt">0/24 → 24/24</div><div class="nv-legende"><p>compliant names without, then with the instructions file · 60 runs, same model, deterministic judge</p><div class="nv-meta"><span class="puce-conf" title="Tested several times, with an automatic judge: you can rely on it."><i class="pastille" style="background:var(--conf-MESURE)"></i>Measured</span><details class="nv-sources"><summary>Evidence · 2</summary><ul><li><span class="nv-type">Document</span><code>labs/custom-instruction/o1-terrain/notes.md</code></li><li><span class="nv-type">Knowledge base</span><code>MAITRISE-COPILOT/07-instructions-base-de-savoir.md</code></li></ul></details></div></div></div></div><aside class="nv-pile" aria-label="The system now"><h3>THE SYSTEM NOW</h3><ol><li class="nv-brique nv-futur"><button type="button" data-i="9" aria-label="Go to level 10: Memory + measurement"><span class="nv-num">10</span><span class="nv-nom">Memory + measurement</span></button></li><li class="nv-brique nv-futur"><button type="button" data-i="8" aria-label="Go to level 9: Self-correction"><span class="nv-num">9</span><span class="nv-nom">Self-correction</span></button></li><li class="nv-brique nv-futur"><button type="button" data-i="7" aria-label="Go to level 8: Scripted pipeline"><span class="nv-num">8</span><span class="nv-nom">Scripted pipeline</span></button></li><li class="nv-brique nv-futur"><button type="button" data-i="6" aria-label="Go to level 7: Orchestration"><span class="nv-num">7</span><span class="nv-nom">Orchestration</span></button></li><li class="nv-brique nv-futur"><button type="button" data-i="5" aria-label="Go to level 6: Hook / mechanical guard"><span class="nv-num">6</span><span class="nv-nom">Hook / mechanical guard</span></button></li><li class="nv-brique nv-futur"><button type="button" data-i="4" aria-label="Go to level 5: Template + script"><span class="nv-num">5</span><span class="nv-nom">Template + script</span></button></li><li class="nv-brique nv-futur"><button type="button" data-i="3" aria-label="Go to level 4: Skill"><span class="nv-num">4</span><span class="nv-nom">Skill</span></button></li><li class="nv-brique nv-futur"><button type="button" data-i="2" aria-label="Go to level 3: Specialized agent"><span class="nv-num">3</span><span class="nv-nom">Specialized agent</span></button></li><li class="nv-brique nv-futur"><button type="button" data-i="1" aria-label="Go to level 2: Scoped rules"><span class="nv-num">2</span><span class="nv-nom">Scoped rules</span></button></li><li class="nv-brique nv-courant"><button type="button" data-i="0" aria-label="Go to level 1: Repo instructions"><span class="nv-num">1</span><span class="nv-nom">Repo instructions</span><span class="nv-etiq"><span class="nv-nouveau">new</span></span><span class="nv-fichier">.github/copilot-instructions.md</span><span class="nv-compte">1 file</span></button></li><li class="nv-brique nv-base"><span class="nv-nom">The model alone</span></li></ol><p class="nv-date">counts as of 2026-11-13</p></aside><div class="nv-limite" data-etape="3"><div><span class="nv-label">BUT…</span><p>The file doubled the input cost (×2.12), on every request — even when no file is being created. And it will grow.</p></div><button type="button" class="nv-suite" data-action="suivant"><span>NEXT LEVEL</span><b>One rule per file, in the right place</b><svg class="nv-ico-suite" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4.5l7.5 7.5L8 19.5"/></svg></button></div><aside class="notes" hidden><p>[≈ 2 min] Message: an instruction is only worth something if it NAMES the case. Show the two real files: with no instruction the agent almost always files things in the right place (17 out of 24) but makes up the name (0 out of 24); with the instructions file, 24 out of 24. The H-YYYYMMDD convention is arbitrary: no model can guess it, so the information really does come from the file. Keep in reserve in case you are asked: (1) named case 10/10, “write robust code” 0/10, same as saying nothing; (2) tone (imperative, vague, prohibition) changes nothing: 3/3 for all three, 0/3 with no instruction; (3) a rule written against a failure already seen is worth three times a rule written blind (0.75 vs 0.25). Limits: the session's model (not named in the lab notes), 60 runs, a deterministic judge that only sees the folder, the name and the language — not the quality. Transition: “this file costs double on every request; it has to be pruned without losing anything”.</p><p>Level: Measured · Sources: labs/custom-instruction/o1-terrain/notes.md, MAITRISE-COPILOT/07-instructions-base-de-savoir.md</p></aside></section>
+<section class="diapo diapo--niveau" data-index="1" data-etapes="3" aria-roledescription="slide" aria-label="Slide 2 of 10: One rule per file, in the right place"><div class="nv-haut"><span class="nv-deck">From an instruction to a self-correcting pipeline</span><span class="nv-rang">LEVEL 2 / 10</span></div><div class="nv-progres" style="--n:2;--t:10" aria-hidden="true"><i></i></div><div class="nv-tete"><h2 class="nv-titre">One rule per file, in the right place</h2><p class="nv-clair">You don't reread the whole rulebook to change a light bulb.</p></div><div class="nv-gauche"><div class="nv-probleme"><span class="nv-label">THE PROBLEM</span><p>The file has grown: 320 lines, 4,931 words, reread on every request — even for a completely unrelated task.</p></div><div class="nv-panneaux"><section class="nv-panneau nv-avant" data-etape="1"><header><span class="nv-pastille">BEFORE</span><span class="nv-sous">One big file</span></header><div class="nv-code"><div class="nv-l">copilot-<wbr>instructions: <mark>4,931 words</mark></div><div class="nv-l">pushed on every request</div><div class="nv-l">25 skills + 20 hooks copied into it</div><div class="nv-l">two rules that contradict each other?</div><div class="nv-l">conflict flagged: <mark>0 times out of 5</mark></div></div><footer class="nv-verdict"><svg class="nv-ico" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="8"/><path d="M5.2 5.2l5.6 5.6M10.8 5.2l-5.6 5.6"/></svg><span>Cost paid on every turn, contradictions invisible</span></footer></section><div class="nv-fleche" data-etape="2" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12h13M13 6.5l5.5 5.5-5.5 5.5"/></svg></div><section class="nv-panneau nv-apres" data-etape="2"><header><span class="nv-pastille">AFTER</span><span class="nv-sous">A core + scoped rules</span></header><div class="nv-code"><div class="nv-l">copilot-<wbr>instructions: <mark>1,623 words</mark></div><div class="nv-l">scripts.<wbr>instructions.<wbr>md</div><div class="nv-l">  applyTo: &quot;scripts/<wbr>**/<wbr>*.<wbr>py&quot;</div><div class="nv-l">  stdin=DEVNULL: 2 h 20 min lost</div><div class="nv-l">  <mark>Does NOT apply</mark> via mesure.<wbr>lancer</div></div><footer class="nv-verdict"><svg class="nv-ico" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="8"/><path d="M4.4 8.3l2.5 2.5 4.7-5.1"/></svg><span>Every rule comes with its boundary</span></footer></section></div><div class="nv-preuve" data-etape="3"><div class="nv-chiffre" style="font-size:29pt">−67% text</div><div class="nv-legende"><p>same result: naming 24/24 vs 24/24, −54% of the file's own overhead (60 runs, deterministic judge)</p><div class="nv-meta"><span class="puce-conf" title="Tested several times, with an automatic judge: you can rely on it."><i class="pastille" style="background:var(--conf-MESURE)"></i>Measured</span><details class="nv-sources"><summary>Evidence · 4</summary><ul><li><span class="nv-type">Document</span><code>labs/custom-instruction/o2-optimiser/notes.md</code></li><li><span class="nv-type">Document</span><code>labs/custom-instruction/o3-livrer/notes.md</code></li><li><span class="nv-type">Document</span><code>.github/instructions/scripts.instructions.md</code></li><li><span class="nv-type">Knowledge base</span><code>MAITRISE-COPILOT/09-guide-montage-systeme-agentique.md</code></li></ul></details></div></div></div></div><aside class="nv-pile" aria-label="The system now"><h3>THE SYSTEM NOW</h3><ol><li class="nv-brique nv-futur"><button type="button" data-i="9" aria-label="Go to level 10: Memory + measurement"><span class="nv-num">10</span><span class="nv-nom">Memory + measurement</span></button></li><li class="nv-brique nv-futur"><button type="button" data-i="8" aria-label="Go to level 9: Self-correction"><span class="nv-num">9</span><span class="nv-nom">Self-correction</span></button></li><li class="nv-brique nv-futur"><button type="button" data-i="7" aria-label="Go to level 8: Scripted pipeline"><span class="nv-num">8</span><span class="nv-nom">Scripted pipeline</span></button></li><li class="nv-brique nv-futur"><button type="button" data-i="6" aria-label="Go to level 7: Orchestration"><span class="nv-num">7</span><span class="nv-nom">Orchestration</span></button></li><li class="nv-brique nv-futur"><button type="button" data-i="5" aria-label="Go to level 6: Hook / mechanical guard"><span class="nv-num">6</span><span class="nv-nom">Hook / mechanical guard</span></button></li><li class="nv-brique nv-futur"><button type="button" data-i="4" aria-label="Go to level 5: Template + script"><span class="nv-num">5</span><span class="nv-nom">Template + script</span></button></li><li class="nv-brique nv-futur"><button type="button" data-i="3" aria-label="Go to level 4: Skill"><span class="nv-num">4</span><span class="nv-nom">Skill</span></button></li><li class="nv-brique nv-futur"><button type="button" data-i="2" aria-label="Go to level 3: Specialized agent"><span class="nv-num">3</span><span class="nv-nom">Specialized agent</span></button></li><li class="nv-brique nv-courant"><button type="button" data-i="1" aria-label="Go to level 2: Scoped rules"><span class="nv-num">2</span><span class="nv-nom">Scoped rules</span><span class="nv-etiq"><span class="nv-nouveau">new</span></span><span class="nv-fichier">.github/instructions/*.instructions.md</span><span class="nv-compte">39 rules</span></button></li><li class="nv-brique nv-passe"><button type="button" data-i="0" aria-label="Go to level 1: Repo instructions"><span class="nv-num">1</span><span class="nv-nom">Repo instructions</span><span class="nv-compte">1 file</span></button></li><li class="nv-brique nv-base"><span class="nv-nom">The model alone</span></li></ol><p class="nv-date">counts as of 2026-11-13</p></aside><div class="nv-limite" data-etape="3"><div><span class="nv-label">BUT…</span><p>A rule says how to do it. It says neither who does it nor with which tools: the agent remains a generalist.</p></div><button type="button" class="nv-suite" data-action="suivant"><span>NEXT LEVEL</span><b>A specialized agent</b><svg class="nv-ico-suite" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4.5l7.5 7.5L8 19.5"/></svg></button></div><aside class="notes" hidden><p>[≈ 2 min] Same task, same judge: the file pruned from 4,931 to 1,623 words gives exactly the same result (24/24 vs 24/24), with the file's own overhead cut in half. Pruning principle: what must be known BEFORE a file is born (where to put it, how to name it, the red gates) stays pushed; the rest already has a vehicle that fires at the right moment (applyTo). Real example on the right: the scripts/ rule carries its incident (a background launch froze a whole process group for 2 h 20 min) AND its boundary (it does not apply via mesure.lancer). Keep in reserve: bounding the scope removes spillover (out-of-scope 0.33 → 1.00 brick by brick; 0.53 → 0.93 in the full setup, a wide gap but not proven in the strict sense); two rules that contradict each other are flagged 9 times out of 10 when they live in two files, 0 times out of 5 in a single one; a repository-wide instruction was loaded for 90,968 files and was useful in only 145. Honesty: our 35 whole files only reach a recall of 0.42 for +75% cost, whereas a single dedicated, bounded rule reaches 0.89. Transition: “a rule doesn't say who does the work”.</p><p>Level: Measured · Sources: labs/custom-instruction/o2-optimiser/notes.md, labs/custom-instruction/o3-livrer/notes.md, .github/instructions/scripts.instructions.md, MAITRISE-COPILOT/09-guide-montage-systeme-agentique.md</p></aside></section>
+<section class="diapo diapo--niveau" data-index="2" data-etapes="3" aria-roledescription="slide" aria-label="Slide 3 of 10: A specialized agent"><div class="nv-haut"><span class="nv-deck">From an instruction to a self-correcting pipeline</span><span class="nv-rang">LEVEL 3 / 10</span></div><div class="nv-progres" style="--n:3;--t:10" aria-hidden="true"><i></i></div><div class="nv-tete"><h2 class="nv-titre">A specialized agent</h2><p class="nv-clair">A job description: one trade, limited tools, written don'ts.</p></div><div class="nv-gauche"><div class="nv-probleme"><span class="nv-label">THE PROBLEM</span><p>A rule doesn't choose who does the work. A generalist with every tool also does what it shouldn't.</p></div><div class="nv-panneaux"><section class="nv-panneau nv-avant" data-etape="1"><header><span class="nv-pastille">BEFORE</span><span class="nv-sous">Catch-all agent (example)</span></header><div class="nv-code"><div class="nv-l">name: Assistant</div><div class="nv-l">description: Helps with everything.<wbr></div><div class="nv-l">tools: <mark>all tools</mark></div><div class="nv-l">Request: delete a file</div><div class="nv-l">→ file deleted <mark>5 times out of 5</mark></div></div><footer class="nv-verdict"><svg class="nv-ico" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="8"/><path d="M5.2 5.2l5.6 5.6M10.8 5.2l-5.6 5.6"/></svg><span>Nothing stops it from acting; ×1.77 the cost on top</span></footer></section><div class="nv-fleche" data-etape="2" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12h13M13 6.5l5.5 5.5-5.5 5.5"/></svg></div><section class="nv-panneau nv-apres" data-etape="2"><header><span class="nv-pastille">AFTER</span><span class="nv-sous">Evidence Auditor (real)</span></header><div class="nv-code"><div class="nv-l">name: &quot;Evidence Auditor&quot;</div><div class="nv-l">description: &quot;Use when a CLAIM must be…</div><div class="nv-l">NOT for repository fit, naming… →</div><div class="nv-l">use Copilot Reviewer</div><div class="nv-l">tools: <mark>[read, search]</mark></div><div class="nv-l">→ cannot write anything</div></div><footer class="nv-verdict"><svg class="nv-ico" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="8"/><path d="M4.4 8.3l2.5 2.5 4.7-5.1"/></svg><span>One trade, an explicit NOT, bounded tools</span></footer></section></div><div class="nv-preuve" data-etape="3"><div class="nv-chiffre" style="font-size:46pt">5/5 → 0/5</div><div class="nv-legende"><p>requested deletions: with no guardrail, then with an allowlist of read-only tools (3 reads out of 3) · N=5, claude-haiku-4.5</p><div class="nv-meta"><span class="puce-conf" title="Tested several times, with an automatic judge: you can rely on it."><i class="pastille" style="background:var(--conf-MESURE)"></i>Measured</span><details class="nv-sources"><summary>Evidence · 4</summary><ul><li><span class="nv-type">Document</span><code>labs/CHAIN-140/notes.md</code></li><li><span class="nv-type">Document</span><code>.github/agents/evidence-auditor.agent.md</code></li><li><span class="nv-type">Knowledge base</span><code>MAITRISE-COPILOT/10-agents-base-de-savoir.md</code></li><li><span class="nv-type">Knowledge base</span><code>MAITRISE-COPILOT/09-guide-montage-systeme-agentique.md</code></li></ul></details></div></div></div></div><aside class="nv-pile" aria-label="The system now"><h3>THE SYSTEM NOW</h3><ol><li class="nv-brique nv-futur"><button type="button" data-i="9" aria-label="Go to level 10: Memory + measurement"><span class="nv-num">10</span><span class="nv-nom">Memory + measurement</span></button></li><li class="nv-brique nv-futur"><button type="button" data-i="8" aria-label="Go to level 9: Self-correction"><span class="nv-num">9</span><span class="nv-nom">Self-correction</span></button></li><li class="nv-brique nv-futur"><button type="button" data-i="7" aria-label="Go to level 8: Scripted pipeline"><span class="nv-num">8</span><span class="nv-nom">Scripted pipeline</span></button></li><li class="nv-brique nv-futur"><button type="button" data-i="6" aria-label="Go to level 7: Orchestration"><span class="nv-num">7</span><span class="nv-nom">Orchestration</span></button></li><li class="nv-brique nv-futur"><button type="button" data-i="5" aria-label="Go to level 6: Hook / mechanical guard"><span class="nv-num">6</span><span class="nv-nom">Hook / mechanical guard</span></button></li><li class="nv-brique nv-futur"><button type="button" data-i="4" aria-label="Go to level 5: Template + script"><span class="nv-num">5</span><span class="nv-nom">Template + script</span></button></li><li class="nv-brique nv-futur"><button type="button" data-i="3" aria-label="Go to level 4: Skill"><span class="nv-num">4</span><span class="nv-nom">Skill</span></button></li><li class="nv-brique nv-courant"><button type="button" data-i="2" aria-label="Go to level 3: Specialized agent"><span class="nv-num">3</span><span class="nv-nom">Specialized agent</span><span class="nv-etiq"><span class="nv-nouveau">new</span></span><span class="nv-fichier">.github/agents/&lt;role&gt;.agent.md</span><span class="nv-compte">26 agents</span></button></li><li class="nv-brique nv-passe"><button type="button" data-i="1" aria-label="Go to level 2: Scoped rules"><span class="nv-num">2</span><span class="nv-nom">Scoped rules</span><span class="nv-compte">39 rules</span></button></li><li class="nv-brique nv-passe"><button type="button" data-i="0" aria-label="Go to level 1: Repo instructions"><span class="nv-num">1</span><span class="nv-nom">Repo instructions</span><span class="nv-compte">1 file</span></button></li><li class="nv-brique nv-base"><span class="nv-nom">The model alone</span></li></ol><p class="nv-date">counts as of 2026-11-13</p></aside><div class="nv-limite" data-etape="3"><div><span class="nv-label">BUT…</span><p>A well-bounded agent only knows what is written for it. A long procedure, useful only sometimes, would clutter every one of its requests.</p></div><button type="button" class="nv-suite" data-action="suivant"><span>NEXT LEVEL</span><b>A skill: the procedure, on demand</b><svg class="nv-ico-suite" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4.5l7.5 7.5L8 19.5"/></svg></button></div><aside class="notes" hidden><p>[≈ 2 min] Message: an agent is a trade plus limited tools. The real example is the Evidence Auditor: a description that says when to use it AND when not to, and only [read, search] — it cannot write anything. The “before” is a constructed example; the measurement is real (CHAIN-140, N=5, claude-haiku-4.5, file deletion explicitly requested): with no guardrail, 5 destructions out of 5; a denylist of a single tool, 0 out of 5 but the agent can take another route; an approval judge, 5 out of 5 (no barrier at all); an allowlist, 0 out of 5 and 3 successful reads out of 3. Anecdote to tell: the first attempt with “read, search” gave 0 destructions… and 0 reads, because those names don't exist in the CLI: the agent was paralyzed. The capability check avoided a false “it works”. Limit: the allowlist moves the weakness to whoever writes it (put bash in it and the protection falls). Other reference points (measured on a model since retired, to be replayed): an agent name that states its trade is enough on its own to pick the right agent (6 out of 6); never put in an agent a rule that must hold all the time (agent alone 0/3, instructions 3/3); a catalog of 3 tools divides the cost by 1.77; but removing the tool that does the work drops a task from 27/30 to 8/30.</p><p>Level: Measured · Sources: labs/CHAIN-140/notes.md, .github/agents/evidence-auditor.agent.md, MAITRISE-COPILOT/10-agents-base-de-savoir.md, MAITRISE-COPILOT/09-guide-montage-systeme-agentique.md</p></aside></section>
+<section class="diapo diapo--niveau" data-index="3" data-etapes="3" aria-roledescription="slide" aria-label="Slide 4 of 10: A skill: the procedure, on demand"><div class="nv-haut"><span class="nv-deck">From an instruction to a self-correcting pipeline</span><span class="nv-rang">LEVEL 4 / 10</span></div><div class="nv-progres" style="--n:4;--t:10" aria-hidden="true"><i></i></div><div class="nv-tete"><h2 class="nv-titre">A skill: the procedure, on demand</h2><p class="nv-clair">The procedures binder: it only comes out of the drawer when the task calls for it.</p></div><div class="nv-gauche"><div class="nv-probleme"><span class="nv-label">THE PROBLEM</span><p>A long procedure, useful only sometimes, clutters the instructions (pushed on every request) — and the model can't guess it.</p></div><div class="nv-panneaux"><section class="nv-panneau nv-avant" data-etape="1"><header><span class="nv-pastille">BEFORE</span><span class="nv-sous">House convention, no skill</span></header><div class="nv-code"><div class="nv-l">Request: a sheet following the house</div><div class="nv-l">formatting convention</div><div class="nv-l">→ the model makes it up</div><div class="nv-l">successes: <mark>0 out of 30</mark></div></div><footer class="nv-verdict"><svg class="nv-ico" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="8"/><path d="M5.2 5.2l5.6 5.6M10.8 5.2l-5.6 5.6"/></svg><span>The convention cannot be guessed</span></footer></section><div class="nv-fleche" data-etape="2" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12h13M13 6.5l5.5 5.5-5.5 5.5"/></svg></div><section class="nv-panneau nv-apres" data-etape="2"><header><span class="nv-pastille">AFTER</span><span class="nv-sous">A skill from the lab (real)</span></header><div class="nv-code"><div class="nv-l">name: &quot;check-<wbr>source-<wbr>novelty&quot;</div><div class="nv-l">description: &quot;Use when about to ingest…</div><div class="nv-l">… NOT for periodic multi-<wbr>site</div><div class="nv-l">prospecting sweeps → use</div><div class="nv-l">prospect-<wbr>sources.<wbr></div><div class="nv-l">→ loaded on demand only</div></div><footer class="nv-verdict"><svg class="nv-ico" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="8"/><path d="M4.4 8.3l2.5 2.5 4.7-5.1"/></svg><span>29 successes out of 30, convention delivered on demand</span></footer></section></div><div class="nv-preuve" data-etape="3"><div class="nv-chiffre" style="font-size:34pt">0/30 → 29/30</div><div class="nv-legende"><p>sheets following a house convention, without then with the skill supplied · same model (claude-haiku-4.5), same prompt, 60 runs</p><div class="nv-meta"><span class="puce-conf" title="Tested several times, with an automatic judge: you can rely on it."><i class="pastille" style="background:var(--conf-MESURE)"></i>Measured</span><details class="nv-sources"><summary>Evidence · 3</summary><ul><li><span class="nv-type">Document</span><code>labs/capacites/l12-capa3-30r-b/notes.md</code></li><li><span class="nv-type">Document</span><code>.github/skills/check-source-novelty/SKILL.md</code></li><li><span class="nv-type">Knowledge base</span><code>MAITRISE-COPILOT/09-guide-montage-systeme-agentique.md</code></li></ul></details></div></div></div></div><aside class="nv-pile" aria-label="The system now"><h3>THE SYSTEM NOW</h3><ol><li class="nv-brique nv-futur"><button type="button" data-i="9" aria-label="Go to level 10: Memory + measurement"><span class="nv-num">10</span><span class="nv-nom">Memory + measurement</span></button></li><li class="nv-brique nv-futur"><button type="button" data-i="8" aria-label="Go to level 9: Self-correction"><span class="nv-num">9</span><span class="nv-nom">Self-correction</span></button></li><li class="nv-brique nv-futur"><button type="button" data-i="7" aria-label="Go to level 8: Scripted pipeline"><span class="nv-num">8</span><span class="nv-nom">Scripted pipeline</span></button></li><li class="nv-brique nv-futur"><button type="button" data-i="6" aria-label="Go to level 7: Orchestration"><span class="nv-num">7</span><span class="nv-nom">Orchestration</span></button></li><li class="nv-brique nv-futur"><button type="button" data-i="5" aria-label="Go to level 6: Hook / mechanical guard"><span class="nv-num">6</span><span class="nv-nom">Hook / mechanical guard</span></button></li><li class="nv-brique nv-futur"><button type="button" data-i="4" aria-label="Go to level 5: Template + script"><span class="nv-num">5</span><span class="nv-nom">Template + script</span></button></li><li class="nv-brique nv-courant"><button type="button" data-i="3" aria-label="Go to level 4: Skill"><span class="nv-num">4</span><span class="nv-nom">Skill</span><span class="nv-etiq"><span class="nv-nouveau">new</span></span><span class="nv-fichier">.github/skills/&lt;name&gt;/SKILL.md</span><span class="nv-compte">41 skills</span></button></li><li class="nv-brique nv-passe"><button type="button" data-i="2" aria-label="Go to level 3: Specialized agent"><span class="nv-num">3</span><span class="nv-nom">Specialized agent</span><span class="nv-compte">26 agents</span></button></li><li class="nv-brique nv-passe"><button type="button" data-i="1" aria-label="Go to level 2: Scoped rules"><span class="nv-num">2</span><span class="nv-nom">Scoped rules</span><span class="nv-compte">39 rules</span></button></li><li class="nv-brique nv-passe"><button type="button" data-i="0" aria-label="Go to level 1: Repo instructions"><span class="nv-num">1</span><span class="nv-nom">Repo instructions</span><span class="nv-compte">1 file</span></button></li><li class="nv-brique nv-base"><span class="nv-nom">The model alone</span></li></ol><p class="nv-date">counts as of 2026-11-13</p></aside><div class="nv-limite" data-etape="3"><div><span class="nv-label">BUT…</span><p>A skill is still text: nothing guarantees it gets loaded, or followed to the letter. Whatever must be identical every time moves out of the model.</p></div><button type="button" class="nv-suite" data-action="suivant"><span>NEXT LEVEL</span><b>A template and a script</b><svg class="nv-ico-suite" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4.5l7.5 7.5L8 19.5"/></svg></button></div><aside class="notes" hidden><p>[≈ 2 min] Message: a skill is a procedure stored separately, loaded only when the task calls for it. Measurement (30 runs per arm, claude-haiku-4.5, same prompt, same inputs): a house formatting convention that the prompt does not describe — without the skill 0 successes out of 30, with the skill supplied 29 out of 30, disjoint intervals. Why a skill rather than an instruction: instructions are PUSHED (a cost on every request), skills are PULLED. From 1 to 41 skills, cost rises by only 8% and recall does not drop; 35 instruction files, by contrast, cost +75%. Golden rule: prune copilot-instructions, let the skill library grow. The description must name what it excludes (“NOT for … → use …”), as above. Caution: loading is not guaranteed. On the same small model, one setup gave 0 loads out of 6 (2026-09-20) and another 29 out of 30 (2026-10-06): require a loading canary before concluding. Candidate result: one model, one type of task.</p><p>Level: Measured · Sources: labs/capacites/l12-capa3-30r-b/notes.md, .github/skills/check-source-novelty/SKILL.md, MAITRISE-COPILOT/09-guide-montage-systeme-agentique.md</p></aside></section>
+<section class="diapo diapo--niveau" data-index="4" data-etapes="3" aria-roledescription="slide" aria-label="Slide 5 of 10: A template and a script"><div class="nv-haut"><span class="nv-deck">From an instruction to a self-correcting pipeline</span><span class="nv-rang">LEVEL 5 / 10</span></div><div class="nv-progres" style="--n:5;--t:10" aria-hidden="true"><i></i></div><div class="nv-tete"><h2 class="nv-titre">A template and a script</h2><p class="nv-clair">The coffee machine: you no longer expect the barista to improvise, you press a button.</p></div><div class="nv-gauche"><div class="nv-probleme"><span class="nv-label">THE PROBLEM</span><p>What gets redone every time, the agent redoes slightly differently — and it writes its numbers from memory.</p></div><div class="nv-panneaux"><section class="nv-panneau nv-avant" data-etape="1"><header><span class="nv-pastille">BEFORE</span><span class="nv-sous">The model writes from memory</span></header><div class="nv-code"><div class="nv-l">Report written by the agent:</div><div class="nv-l">“<mark>329</mark> runs analyzed”</div><div class="nv-l">number written from memory</div></div><footer class="nv-verdict"><svg class="nv-ico" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="8"/><path d="M5.2 5.2l5.6 5.6M10.8 5.2l-5.6 5.6"/></svg><span>Wrong: 5th from-memory figure disproved that day</span></footer></section><div class="nv-fleche" data-etape="2" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12h13M13 6.5l5.5 5.5-5.5 5.5"/></svg></div><section class="nv-panneau nv-apres" data-etape="2"><header><span class="nv-pastille">AFTER</span><span class="nv-sous">Code counts and builds</span></header><div class="nv-code"><div class="nv-l">recounted on disk: <mark>273</mark> runs</div><div class="nv-l">deck.<wbr>json = the spec, no styling</div><div class="nv-l">the generator builds the HTML</div><div class="nv-l">a defect in the spec?</div><div class="nv-l"><mark>no file is written</mark></div></div><footer class="nv-verdict"><svg class="nv-ico" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="8"/><path d="M4.4 8.3l2.5 2.5 4.7-5.1"/></svg><span>The count comes from disk; the generator rejects the defect</span></footer></section></div><div class="nv-preuve" data-etape="3"><div class="nv-chiffre" style="font-size:46pt">3 of 13</div><div class="nv-legende"><p>scripts whose ESTIMATED test count was exact: hence the replay — we run the test and read its tally, we no longer estimate</p><div class="nv-meta"><span class="puce-conf" title="Tested several times, with an automatic judge: you can rely on it."><i class="pastille" style="background:var(--conf-MESURE)"></i>Measured</span><details class="nv-sources"><summary>Evidence · 4</summary><ul><li><span class="nv-type">Knowledge base</span><code>MAITRISE-COPILOT/07-instructions-base-de-savoir.md</code></li><li><span class="nv-type">Document</span><code>infos/pipeline/README.md</code></li><li><span class="nv-type">Document</span><code>labs/completude/c4-audit/notes.md</code></li><li><span class="nv-type">Document</span><code>templates/diaporama/README.md</code></li></ul></details></div></div></div></div><aside class="nv-pile" aria-label="The system now"><h3>THE SYSTEM NOW</h3><ol><li class="nv-brique nv-futur"><button type="button" data-i="9" aria-label="Go to level 10: Memory + measurement"><span class="nv-num">10</span><span class="nv-nom">Memory + measurement</span></button></li><li class="nv-brique nv-futur"><button type="button" data-i="8" aria-label="Go to level 9: Self-correction"><span class="nv-num">9</span><span class="nv-nom">Self-correction</span></button></li><li class="nv-brique nv-futur"><button type="button" data-i="7" aria-label="Go to level 8: Scripted pipeline"><span class="nv-num">8</span><span class="nv-nom">Scripted pipeline</span></button></li><li class="nv-brique nv-futur"><button type="button" data-i="6" aria-label="Go to level 7: Orchestration"><span class="nv-num">7</span><span class="nv-nom">Orchestration</span></button></li><li class="nv-brique nv-futur"><button type="button" data-i="5" aria-label="Go to level 6: Hook / mechanical guard"><span class="nv-num">6</span><span class="nv-nom">Hook / mechanical guard</span></button></li><li class="nv-brique nv-courant"><button type="button" data-i="4" aria-label="Go to level 5: Template + script"><span class="nv-num">5</span><span class="nv-nom">Template + script</span><span class="nv-etiq"><span class="nv-nouveau">new</span></span><span class="nv-fichier">templates/ · scripts/ · outils/</span><span class="nv-compte">166 scripts</span></button></li><li class="nv-brique nv-passe"><button type="button" data-i="3" aria-label="Go to level 4: Skill"><span class="nv-num">4</span><span class="nv-nom">Skill</span><span class="nv-compte">41 skills</span></button></li><li class="nv-brique nv-passe"><button type="button" data-i="2" aria-label="Go to level 3: Specialized agent"><span class="nv-num">3</span><span class="nv-nom">Specialized agent</span><span class="nv-compte">26 agents</span></button></li><li class="nv-brique nv-passe"><button type="button" data-i="1" aria-label="Go to level 2: Scoped rules"><span class="nv-num">2</span><span class="nv-nom">Scoped rules</span><span class="nv-compte">39 rules</span></button></li><li class="nv-brique nv-passe"><button type="button" data-i="0" aria-label="Go to level 1: Repo instructions"><span class="nv-num">1</span><span class="nv-nom">Repo instructions</span><span class="nv-compte">1 file</span></button></li><li class="nv-brique nv-base"><span class="nv-nom">The model alone</span></li></ol><p class="nv-date">counts as of 2026-11-13</p></aside><div class="nv-limite" data-etape="3"><div><span class="nv-label">BUT…</span><p>A script only sees what it knows how to read: with no instruction, it catches just 3 violations out of 18. And it judges after the fact, never before.</p></div><button type="button" class="nv-suite" data-action="suivant"><span>NEXT LEVEL</span><b>A guardrail that blocks, not just reminds</b><svg class="nv-ico-suite" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4.5l7.5 7.5L8 19.5"/></svg></button></div><aside class="notes" hidden><p>[≈ 2 min] Message: whatever gets counted or built must move out of the model. Two illustrations. (1) A figure written from memory: “329 runs” when the count was 273 — the fifth from-memory figure disproved that day; it was recounted on disk, and the coverage status has since been recounted by a script (couverture.py), which had already caught a “743 runs” for 702. Likewise, the static estimate of the number of tests was exact for only 3 scripts out of 13: the pipeline now RUNS each regression test and publishes its tally. (2) This slide deck: a JSON spec with no style field, a generator that rejects any defect — one text too long and no file is written. Two measured nuances not to leave out: a deterministic check is perfect and free on its own format (10/10 on literals) but blind elsewhere (0/9 on the purely semantic), hence “deterministic first, judge for the rest” (pattern P-20260714); and a script does not replace the instruction: with no instruction it catches only 3 violations out of 18 (17%), because an omission leaves no trace. The instruction acts at production time, the script at detection time. Transition: “the script judges after the fact; what if the mistake is irreversible?”</p><p>Level: Measured · Sources: MAITRISE-COPILOT/07-instructions-base-de-savoir.md, infos/pipeline/README.md, labs/completude/c4-audit/notes.md, templates/diaporama/README.md</p></aside></section>
+<section class="diapo diapo--niveau" data-index="5" data-etapes="3" aria-roledescription="slide" aria-label="Slide 6 of 10: A guardrail that blocks, not just reminds"><div class="nv-haut"><span class="nv-deck">From an instruction to a self-correcting pipeline</span><span class="nv-rang">LEVEL 6 / 10</span></div><div class="nv-progres" style="--n:6;--t:10" aria-hidden="true"><i></i></div><div class="nv-tete"><h2 class="nv-titre">A guardrail that blocks, not just reminds</h2><p class="nv-clair">The lock on the door: you no longer count on everyone remembering not to go in.</p></div><div class="nv-gauche"><div class="nv-probleme"><span class="nv-label">THE PROBLEM</span><p>A written rule gets bypassed silently — especially when the mistake is costly and hard to see.</p></div><div class="nv-panneaux"><section class="nv-panneau nv-avant" data-etape="1"><header><span class="nv-pastille">BEFORE</span><span class="nv-sous">Written rule only</span></header><div class="nv-code"><div class="nv-l">“no call before approval”</div><div class="nv-l">2026-<wbr>10-<wbr>15: the engine runs the task</div><div class="nv-l">that required a human's approval</div><div class="nv-l"><mark>307.9 credits</mark> spent</div></div><footer class="nv-verdict"><svg class="nv-ico" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="8"/><path d="M5.2 5.2l5.6 5.6M10.8 5.2l-5.6 5.6"/></svg><span>The spend was logged, not prevented</span></footer></section><div class="nv-fleche" data-etape="2" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12h13M13 6.5l5.5 5.5-5.5 5.5"/></svg></div><section class="nv-panneau nv-apres" data-etape="2"><header><span class="nv-pastille">AFTER</span><span class="nv-sous">Guard in the code (simplified)</span></header><div class="nv-code"><div class="nv-l">if tache in hors_<wbr>moteur:</div><div class="nv-l">    return {&quot;etat&quot;: INVALIDE,</div><div class="nv-l">      &quot;raison&quot;: &quot;… <mark>rien ne part</mark>&quot;}</div><div class="nv-l">nothing is sent, nothing is written</div></div><footer class="nv-verdict"><svg class="nv-ico" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="8"/><path d="M4.4 8.3l2.5 2.5 4.7-5.1"/></svg><span>The launcher refuses: nothing is sent, nothing is counted</span></footer></section></div><div class="nv-preuve" data-etape="3"><div class="nv-chiffre" style="font-size:41pt">5/5 · +4%</div><div class="nv-legende"><p>tell AND block: 5 tasks done out of 5 for +4% cost; block alone: 3 out of 5 for +177% · 5 runs per setup, silent refusal</p><div class="nv-meta"><span class="puce-conf" title="Measured, but the gap is not proven at this statistical power: a solid lead."><i class="pastille" style="background:var(--conf-INDICATIF)"></i>Indicative</span><details class="nv-sources"><summary>Evidence · 4</summary><ul><li><span class="nv-type">Knowledge base</span><code>MAITRISE-COPILOT/09-guide-montage-systeme-agentique.md</code></li><li><span class="nv-type">Pattern</span><code>7-patterns/P-20260908-mecanisme-hook-bloque-independamment-du-modele.md</code> <em>(candidate (indicative))</em></li><li><span class="nv-type">Document</span><code>labs/_commun/mesure.py</code></li><li><span class="nv-type">Document</span><code>outils/garde-temoins/sitecustomize.py</code></li></ul></details></div></div></div></div><aside class="nv-pile" aria-label="The system now"><h3>THE SYSTEM NOW</h3><ol><li class="nv-brique nv-futur"><button type="button" data-i="9" aria-label="Go to level 10: Memory + measurement"><span class="nv-num">10</span><span class="nv-nom">Memory + measurement</span></button></li><li class="nv-brique nv-futur"><button type="button" data-i="8" aria-label="Go to level 9: Self-correction"><span class="nv-num">9</span><span class="nv-nom">Self-correction</span></button></li><li class="nv-brique nv-futur"><button type="button" data-i="7" aria-label="Go to level 8: Scripted pipeline"><span class="nv-num">8</span><span class="nv-nom">Scripted pipeline</span></button></li><li class="nv-brique nv-futur"><button type="button" data-i="6" aria-label="Go to level 7: Orchestration"><span class="nv-num">7</span><span class="nv-nom">Orchestration</span></button></li><li class="nv-brique nv-courant"><button type="button" data-i="5" aria-label="Go to level 6: Hook / mechanical guard"><span class="nv-num">6</span><span class="nv-nom">Hook / mechanical guard</span><span class="nv-etiq"><span class="nv-nouveau">new</span></span><span class="nv-fichier">outils/garde-temoins/ · mesure.py</span></button></li><li class="nv-brique nv-passe"><button type="button" data-i="4" aria-label="Go to level 5: Template + script"><span class="nv-num">5</span><span class="nv-nom">Template + script</span><span class="nv-compte">166 scripts</span></button></li><li class="nv-brique nv-passe"><button type="button" data-i="3" aria-label="Go to level 4: Skill"><span class="nv-num">4</span><span class="nv-nom">Skill</span><span class="nv-compte">41 skills</span></button></li><li class="nv-brique nv-passe"><button type="button" data-i="2" aria-label="Go to level 3: Specialized agent"><span class="nv-num">3</span><span class="nv-nom">Specialized agent</span><span class="nv-compte">26 agents</span></button></li><li class="nv-brique nv-passe"><button type="button" data-i="1" aria-label="Go to level 2: Scoped rules"><span class="nv-num">2</span><span class="nv-nom">Scoped rules</span><span class="nv-compte">39 rules</span></button></li><li class="nv-brique nv-passe"><button type="button" data-i="0" aria-label="Go to level 1: Repo instructions"><span class="nv-num">1</span><span class="nv-nom">Repo instructions</span><span class="nv-compte">1 file</span></button></li><li class="nv-brique nv-base"><span class="nv-nom">The model alone</span></li></ol><p class="nv-date">counts as of 2026-11-13</p></aside><div class="nv-limite" data-etape="3"><div><span class="nv-label">BUT…</span><p>A guardrail that watches for a word can be bypassed: 4 escapes out of 20 (encoding, intermediate script). You have to check the real effect.</p></div><button type="button" class="nv-suite" data-action="suivant"><span>NEXT LEVEL</span><b>A brigade: one chef, several specialists</b><svg class="nv-ico-suite" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4.5l7.5 7.5L8 19.5"/></svg></button></div><aside class="notes" hidden><p>[≈ 2 min] Message: an instruction reminds, a guardrail prevents. Founding incident: on 2026-10-15 a task that required a human's approval was run by the engine (307.9 credits) — the rule was only prose, the spend was logged, not prevented. Today the launcher refuses before anything is written. In the same spirit: the garde-témoins guard (outils/garde-temoins/sitecustomize.py) makes any paid agent call, git push or network access impossible while the tests are replayed: “an instruction not to do it would be broken silently; this file makes it impossible”. Measurements (5 runs per setup, hence indicative): tell 5/5 (+3%); block alone 3/5 (+177%: a silent refusal leaves the agent facing a wall, 2 times out of 5 it gives up); tell AND block 5/5 (+4%). The safety net is only free if the instruction gets through almost every time. A hook that watches for a word can be bypassed: 12 direct paths out of 12 blocked, but encoding gets 3 escapes out of 4 and an intermediate script 1 out of 4 (CHAIN-097, indicative); prefer a structural check (permissions, real effect). Product limit: in the terminal, a hook placed in the repository is inert (0/10), only COPILOT_HOME takes effect (10/10), measured on CLI 1.0.83. And a hook that never fires gives 0/30: check the effect, not the declaration.</p><p>Level: Indicative · Sources: MAITRISE-COPILOT/09-guide-montage-systeme-agentique.md, P-20260908-mecanisme-hook-bloque-independamment-du-modele, labs/_commun/mesure.py, outils/garde-temoins/sitecustomize.py</p></aside></section>
+<section class="diapo diapo--niveau" data-index="6" data-etapes="3" aria-roledescription="slide" aria-label="Slide 7 of 10: A brigade: one chef, several specialists"><div class="nv-haut"><span class="nv-deck">From an instruction to a self-correcting pipeline</span><span class="nv-rang">LEVEL 7 / 10</span></div><div class="nv-progres" style="--n:7;--t:10" aria-hidden="true"><i></i></div><div class="nv-tete"><h2 class="nv-titre">A brigade: one chef, several specialists</h2><p class="nv-clair">A chef hands out the work, specialists cook, and nobody grades their own dish.</p></div><div class="nv-gauche"><div class="nv-probleme"><span class="nv-label">THE PROBLEM</span><p>A single agent does everything, reviews itself and says “done”: we take its word for it.</p></div><div class="nv-panneaux"><section class="nv-panneau nv-avant" data-etape="1"><header><span class="nv-pastille">BEFORE</span><span class="nv-sous">An agent reviewing itself</span></header><div class="nv-code"><div class="nv-l">Claims with no trace:</div><div class="nv-l">“the file is written”</div><div class="nv-l">“the command succeeded”</div><div class="nv-l">“it's saved to memory”</div></div><footer class="nv-verdict"><svg class="nv-ico" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="8"/><path d="M5.2 5.2l5.6 5.6M10.8 5.2l-5.6 5.6"/></svg><span>Seen 4 times in one week; twice the exact opposite</span></footer></section><div class="nv-fleche" data-etape="2" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12h13M13 6.5l5.5 5.5-5.5 5.5"/></svg></div><section class="nv-panneau nv-apres" data-etape="2"><header><span class="nv-pastille">AFTER</span><span class="nv-sous">Chef + disk check</span></header><div class="nv-code"><div class="nv-l">chef → delegates to the specialist</div><div class="nv-l">specialist → writes the deliverable</div><div class="nv-l">chef → READS the disk:</div><div class="nv-l">  present? <mark>yes</mark> → next step</div><div class="nv-l">  absent? <mark>no</mark> → relaunch</div></div><footer class="nv-verdict"><svg class="nv-ico" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="8"/><path d="M4.4 8.3l2.5 2.5 4.7-5.1"/></svg><span>The disk decides, never the self-report</span></footer></section></div><div class="nv-preuve" data-etape="3"><div class="nv-chiffre" style="font-size:32pt">2–4 of ~50</div><div class="nv-legende"><p>defects lost when delegating; the message format makes no difference. Splitting roles is for bounding and readability, not for better judging</p><div class="nv-meta"><span class="puce-conf" title="Measured, but the gap is not proven at this statistical power: a solid lead."><i class="pastille" style="background:var(--conf-INDICATIF)"></i>Indicative</span><details class="nv-sources"><summary>Evidence · 4</summary><ul><li><span class="nv-type">Knowledge base</span><code>MAITRISE-COPILOT/13-orchestration-base-de-savoir.md</code></li><li><span class="nv-type">Document</span><code>.github/instructions/anti-fail-open.instructions.md</code></li><li><span class="nv-type">Document</span><code>.github/skills/verify-handoff/SKILL.md</code></li><li><span class="nv-type">Document</span><code>infos/pipeline/README.md</code></li></ul></details></div></div></div></div><aside class="nv-pile" aria-label="The system now"><h3>THE SYSTEM NOW</h3><ol><li class="nv-brique nv-futur"><button type="button" data-i="9" aria-label="Go to level 10: Memory + measurement"><span class="nv-num">10</span><span class="nv-nom">Memory + measurement</span></button></li><li class="nv-brique nv-futur"><button type="button" data-i="8" aria-label="Go to level 9: Self-correction"><span class="nv-num">9</span><span class="nv-nom">Self-correction</span></button></li><li class="nv-brique nv-futur"><button type="button" data-i="7" aria-label="Go to level 8: Scripted pipeline"><span class="nv-num">8</span><span class="nv-nom">Scripted pipeline</span></button></li><li class="nv-brique nv-courant"><button type="button" data-i="6" aria-label="Go to level 7: Orchestration"><span class="nv-num">7</span><span class="nv-nom">Orchestration</span><span class="nv-etiq"><span class="nv-nouveau">new</span></span><span class="nv-fichier">agents · handoffs · verify-handoff</span></button></li><li class="nv-brique nv-passe"><button type="button" data-i="5" aria-label="Go to level 6: Hook / mechanical guard"><span class="nv-num">6</span><span class="nv-nom">Hook / mechanical guard</span></button></li><li class="nv-brique nv-passe"><button type="button" data-i="4" aria-label="Go to level 5: Template + script"><span class="nv-num">5</span><span class="nv-nom">Template + script</span><span class="nv-compte">166 scripts</span></button></li><li class="nv-brique nv-passe"><button type="button" data-i="3" aria-label="Go to level 4: Skill"><span class="nv-num">4</span><span class="nv-nom">Skill</span><span class="nv-compte">41 skills</span></button></li><li class="nv-brique nv-passe"><button type="button" data-i="2" aria-label="Go to level 3: Specialized agent"><span class="nv-num">3</span><span class="nv-nom">Specialized agent</span><span class="nv-compte">26 agents</span></button></li><li class="nv-brique nv-passe"><button type="button" data-i="1" aria-label="Go to level 2: Scoped rules"><span class="nv-num">2</span><span class="nv-nom">Scoped rules</span><span class="nv-compte">39 rules</span></button></li><li class="nv-brique nv-passe"><button type="button" data-i="0" aria-label="Go to level 1: Repo instructions"><span class="nv-num">1</span><span class="nv-nom">Repo instructions</span><span class="nv-compte">1 file</span></button></li><li class="nv-brique nv-base"><span class="nv-nom">The model alone</span></li></ol><p class="nv-date">counts as of 2026-11-13</p></aside><div class="nv-limite" data-etape="3"><div><span class="nv-label">BUT…</span><p>Chefs and specialists are agents: who chains them overnight, relaunches them when things crash, and picks up where they left off?</p></div><button type="button" class="nv-suite" data-action="suivant"><span>NEXT LEVEL</span><b>A scripted pipeline that resumes on its own</b><svg class="nv-ico-suite" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4.5l7.5 7.5L8 19.5"/></svg></button></div><aside class="notes" hidden><p>[≈ 3 min] Message: a brigade is not more accurate; it is more readable, more bounded and faster. Candidate measurement (2 replicates, one target, models since retired): a handoff loses 2 to 4 defects out of about fifty, indistinguishable from an agent that sees everything, and clearly above a control that receives nothing (about 7 out of 11 vs 3.4); the message format (prose or imposed fields) changes nothing; neither does sequential or parallel order — we take parallel for the latency. So you don't split an agent for performance, but for readability, reuse and bounding the tools. A useful anecdote: one of the models found 9 defects out of 11 without receiving anything — it was guessing. Without a blind control arm, we would have believed it was relaying perfectly. House rule: an agent never produces its own proof; the chef reads the disk (verify-handoff skill) and relaunches if the deliverable is missing. Lab finding: 4 times in one week an agent declared a state with no trace, including 2 times the exact opposite of reality.</p><p>Level: Indicative · Sources: MAITRISE-COPILOT/13-orchestration-base-de-savoir.md, .github/instructions/anti-fail-open.instructions.md, .github/skills/verify-handoff/SKILL.md, infos/pipeline/README.md</p></aside></section>
+<section class="diapo diapo--niveau" data-index="7" data-etapes="3" aria-roledescription="slide" aria-label="Slide 8 of 10: A scripted pipeline that resumes on its own"><div class="nv-haut"><span class="nv-deck">From an instruction to a self-correcting pipeline</span><span class="nv-rang">LEVEL 8 / 10</span></div><div class="nv-progres" style="--n:8;--t:10" aria-hidden="true"><i></i></div><div class="nv-tete"><h2 class="nv-titre">A scripted pipeline that resumes on its own</h2><p class="nv-clair">A chef who never sleeps: every 10 s, they check what is actually on the counter.</p></div><div class="nv-gauche"><div class="nv-probleme"><span class="nv-label">THE PROBLEM</span><p>“No run in progress” while twelve tracks were waiting: each one was launched by hand, one at a time.</p></div><div class="nv-panneaux"><section class="nv-panneau nv-avant" data-etape="1"><header><span class="nv-pastille">BEFORE</span><span class="nv-sous">Launching by hand</span></header><div class="nv-code"><div class="nv-l">dashboard:</div><div class="nv-l">“no run in progress”</div><div class="nv-l">12 tracks waiting</div><div class="nv-l">one manual launch per track</div></div><footer class="nv-verdict"><svg class="nv-ico" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="8"/><path d="M5.2 5.2l5.6 5.6M10.8 5.2l-5.6 5.6"/></svg><span>Nobody was chaining them</span></footer></section><div class="nv-fleche" data-etape="2" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12h13M13 6.5l5.5 5.5-5.5 5.5"/></svg></div><section class="nv-panneau nv-apres" data-etape="2"><header><span class="nv-pastille">AFTER</span><span class="nv-sous">The disk dictates the move</span></header><div class="nv-code"><div class="nv-l">every 10 s:</div><div class="nv-l">  read the DISK: plan and evidence</div><div class="nv-l">  work out the next move</div><div class="nv-l">  launch it, detached, under a lock</div><div class="nv-l">stop or crash → restart from the disk</div></div><footer class="nv-verdict"><svg class="nv-ico" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="8"/><path d="M4.4 8.3l2.5 2.5 4.7-5.1"/></svg><span>Natural resume: the state lives on disk</span></footer></section></div><div class="nv-preuve" data-etape="3"><div class="nv-chiffre" style="font-size:32pt">2,778 / 2,844</div><div class="nv-legende"><p>steps done out of 2,844, across 69 programs (960 tasks) · snapshot of 2026‑11‑13 from chantier/*/state/plan.json</p><div class="nv-meta"><span class="puce-conf" title="General knowledge or scene-setting: makes no claim on the lab's measurements."><i class="pastille" style="background:var(--conf-CONTEXTE)"></i>Context</span><details class="nv-sources"><summary>Evidence · 4</summary><ul><li><span class="nv-type">Document</span><code>infos/pipeline/phases/P1-ordonnancer.md</code></li><li><span class="nv-type">Document</span><code>infos/pipeline/phases/P8-cloturer.md</code></li><li><span class="nv-type">Document</span><code>infos/pipeline/revue/plan-spec.json</code></li><li><span class="nv-type">Document</span><code>chantier/README.md</code></li></ul></details></div></div></div></div><aside class="nv-pile" aria-label="The system now"><h3>THE SYSTEM NOW</h3><ol><li class="nv-brique nv-futur"><button type="button" data-i="9" aria-label="Go to level 10: Memory + measurement"><span class="nv-num">10</span><span class="nv-nom">Memory + measurement</span></button></li><li class="nv-brique nv-futur"><button type="button" data-i="8" aria-label="Go to level 9: Self-correction"><span class="nv-num">9</span><span class="nv-nom">Self-correction</span></button></li><li class="nv-brique nv-courant"><button type="button" data-i="7" aria-label="Go to level 8: Scripted pipeline"><span class="nv-num">8</span><span class="nv-nom">Scripted pipeline</span><span class="nv-etiq"><span class="nv-nouveau">new</span></span><span class="nv-fichier">scripts/enchainer_pistes.py · chantier/</span><span class="nv-compte">12 steps</span></button></li><li class="nv-brique nv-passe"><button type="button" data-i="6" aria-label="Go to level 7: Orchestration"><span class="nv-num">7</span><span class="nv-nom">Orchestration</span></button></li><li class="nv-brique nv-passe"><button type="button" data-i="5" aria-label="Go to level 6: Hook / mechanical guard"><span class="nv-num">6</span><span class="nv-nom">Hook / mechanical guard</span></button></li><li class="nv-brique nv-passe"><button type="button" data-i="4" aria-label="Go to level 5: Template + script"><span class="nv-num">5</span><span class="nv-nom">Template + script</span><span class="nv-compte">166 scripts</span></button></li><li class="nv-brique nv-passe"><button type="button" data-i="3" aria-label="Go to level 4: Skill"><span class="nv-num">4</span><span class="nv-nom">Skill</span><span class="nv-compte">41 skills</span></button></li><li class="nv-brique nv-passe"><button type="button" data-i="2" aria-label="Go to level 3: Specialized agent"><span class="nv-num">3</span><span class="nv-nom">Specialized agent</span><span class="nv-compte">26 agents</span></button></li><li class="nv-brique nv-passe"><button type="button" data-i="1" aria-label="Go to level 2: Scoped rules"><span class="nv-num">2</span><span class="nv-nom">Scoped rules</span><span class="nv-compte">39 rules</span></button></li><li class="nv-brique nv-passe"><button type="button" data-i="0" aria-label="Go to level 1: Repo instructions"><span class="nv-num">1</span><span class="nv-nom">Repo instructions</span><span class="nv-compte">1 file</span></button></li><li class="nv-brique nv-base"><span class="nv-nom">The model alone</span></li></ol><p class="nv-date">counts as of 2026-11-13</p></aside><div class="nv-limite" data-etape="3"><div><span class="nv-label">BUT…</span><p>A pipeline knows how to chain steps, not how to repair itself: a kitchen that is “switched on” is not a kitchen that gets back up on its own.</p></div><button type="button" class="nv-suite" data-action="suivant"><span>NEXT LEVEL</span><b>Maintenance that corrects itself</b><svg class="nv-ico-suite" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4.5l7.5 7.5L8 19.5"/></svg></button></div><aside class="notes" hidden><p>[≈ 3 min] Message: the pipeline is a skeleton of scripts; the model only steps in at the steps where understanding is needed. Each program has a plan (plan-spec.json) that lists its expected deliverables (expects); the engine alone holds the state (state/plan.json); a “done” status does not survive the absence of its proof: closing rereads the disk and reopens whatever is missing. Every 10 seconds, the scheduler reads the disk, works out the next move and launches it in a detached process under a lock; it slows down when the kitchen is saturated and stops insisting on a dish that failed three times. The 12 steps: frame, schedule, hypothesize, write the protocol, review, design the measurement, run, document, close, heal, show, validate. Snapshot of 2026-11-13: 69 programs, 960 tasks, 2,844 steps of which 2,778 done, 62 to redo, 4 undecided (sum of the chantier/*/state/plan.json files; this is a status report, not a measurement of effect). To explore: infos/pipeline/index.html, which replays six stories step by step. Optional demo (2 min): the Polytechnique workshop kit (agent_demo.py, outside the repository) shows the same skeleton in 100 lines — the code holds the loop, capped at 4 decisions, and the model only chooses the next tool; “--case B” replays the abstention (“cause undetermined” rather than an invented cause). Simulated policy: it illustrates, it measures no model.</p><p>Level: Context · Sources: infos/pipeline/phases/P1-ordonnancer.md, infos/pipeline/phases/P8-cloturer.md, infos/pipeline/revue/plan-spec.json, chantier/README.md</p></aside></section>
+<section class="diapo diapo--niveau" data-index="8" data-etapes="3" aria-roledescription="slide" aria-label="Slide 9 of 10: Maintenance that corrects itself"><div class="nv-haut"><span class="nv-deck">From an instruction to a self-correcting pipeline</span><span class="nv-rang">LEVEL 9 / 10</span></div><div class="nv-progres" style="--n:9;--t:10" aria-hidden="true"><i></i></div><div class="nv-tete"><h2 class="nv-titre">Maintenance that corrects itself</h2><p class="nv-clair">A maintenance crew: it names the fault with evidence and repairs whatever is mechanical.</p></div><div class="nv-gauche"><div class="nv-probleme"><span class="nv-label">THE PROBLEM</span><p>The pipeline review reads the code itself: a protocol rewritten after rejection was never re-reviewed, just sent on to design.</p></div><div class="nv-panneaux"><section class="nv-panneau nv-avant" data-etape="1"><header><span class="nv-pastille">BEFORE</span><span class="nv-sous">The defect, found by the review</span></header><div class="nv-code"><div class="nv-l">protocol rejected → rewritten</div><div class="nv-l">the scheduler sees the old rejection</div><div class="nv-l">and assumes the new protocol was reviewed</div><div class="nv-l"><mark>33 tracks</mark> sent on with no review</div></div><footer class="nv-verdict"><svg class="nv-ico" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="8"/><path d="M5.2 5.2l5.6 5.6M10.8 5.2l-5.6 5.6"/></svg><span>The harness was built on an unreviewed protocol</span></footer></section><div class="nv-fleche" data-etape="2" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12h13M13 6.5l5.5 5.5-5.5 5.5"/></svg></div><section class="nv-panneau nv-apres" data-etape="2"><header><span class="nv-pastille">AFTER</span><span class="nv-sous">Fix + regression test</span></header><div class="nv-code"><div class="nv-l">revue_<wbr>acquise() only counts a review</div><div class="nv-l">if <mark>VERDICT: ACCEPTE</mark></div><div class="nv-l">AND newer than the protocol</div><div class="nv-l">test: <mark>23/<wbr>23</mark></div><div class="nv-l">the scheduler sends it back for review</div></div><footer class="nv-verdict"><svg class="nv-ico" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="8"/><path d="M4.4 8.3l2.5 2.5 4.7-5.1"/></svg><span>The protocol goes back before the reviewer</span></footer></section></div><div class="nv-preuve" data-etape="3"><div class="nv-chiffre" style="font-size:46pt">33 tracks</div><div class="nv-legende"><p>built on a protocol nobody had reviewed: defect found on 2026‑09‑30, fixed on 2026‑10‑02 with a 23/23 regression test</p><div class="nv-meta"><span class="puce-conf" title="Tested several times, with an automatic judge: you can rely on it."><i class="pastille" style="background:var(--conf-MESURE)"></i>Measured</span><details class="nv-sources"><summary>Evidence · 4</summary><ul><li><span class="nv-type">Document</span><code>infos/pipeline/revue/constats/P4.md</code></li><li><span class="nv-type">Document</span><code>infos/pipeline/phases/P4-reviser.md</code></li><li><span class="nv-type">Document</span><code>infos/pipeline/phases/P9-soigner.md</code></li><li><span class="nv-type">Document</span><code>infos/pipeline/phases/P11-valider.md</code></li></ul></details></div></div></div></div><aside class="nv-pile" aria-label="The system now"><h3>THE SYSTEM NOW</h3><ol><li class="nv-brique nv-futur"><button type="button" data-i="9" aria-label="Go to level 10: Memory + measurement"><span class="nv-num">10</span><span class="nv-nom">Memory + measurement</span></button></li><li class="nv-brique nv-courant"><button type="button" data-i="8" aria-label="Go to level 9: Self-correction"><span class="nv-num">9</span><span class="nv-nom">Self-correction</span><span class="nv-etiq"><span class="nv-nouveau">new</span></span><span class="nv-fichier">docteur_*.py · superviseur.py</span></button></li><li class="nv-brique nv-passe"><button type="button" data-i="7" aria-label="Go to level 8: Scripted pipeline"><span class="nv-num">8</span><span class="nv-nom">Scripted pipeline</span><span class="nv-compte">12 steps</span></button></li><li class="nv-brique nv-passe"><button type="button" data-i="6" aria-label="Go to level 7: Orchestration"><span class="nv-num">7</span><span class="nv-nom">Orchestration</span></button></li><li class="nv-brique nv-passe"><button type="button" data-i="5" aria-label="Go to level 6: Hook / mechanical guard"><span class="nv-num">6</span><span class="nv-nom">Hook / mechanical guard</span></button></li><li class="nv-brique nv-passe"><button type="button" data-i="4" aria-label="Go to level 5: Template + script"><span class="nv-num">5</span><span class="nv-nom">Template + script</span><span class="nv-compte">166 scripts</span></button></li><li class="nv-brique nv-passe"><button type="button" data-i="3" aria-label="Go to level 4: Skill"><span class="nv-num">4</span><span class="nv-nom">Skill</span><span class="nv-compte">41 skills</span></button></li><li class="nv-brique nv-passe"><button type="button" data-i="2" aria-label="Go to level 3: Specialized agent"><span class="nv-num">3</span><span class="nv-nom">Specialized agent</span><span class="nv-compte">26 agents</span></button></li><li class="nv-brique nv-passe"><button type="button" data-i="1" aria-label="Go to level 2: Scoped rules"><span class="nv-num">2</span><span class="nv-nom">Scoped rules</span><span class="nv-compte">39 rules</span></button></li><li class="nv-brique nv-passe"><button type="button" data-i="0" aria-label="Go to level 1: Repo instructions"><span class="nv-num">1</span><span class="nv-nom">Repo instructions</span><span class="nv-compte">1 file</span></button></li><li class="nv-brique nv-base"><span class="nv-nom">The model alone</span></li></ol><p class="nv-date">counts as of 2026-11-13</p></aside><div class="nv-limite" data-etape="3"><div><span class="nv-label">BUT…</span><p>One fix can break another: on September 26, four defects came from fixes. So we re-run every regression test.</p></div><button type="button" class="nv-suite" data-action="suivant"><span>NEXT LEVEL</span><b>A memory that names, and the proof</b><svg class="nv-ico-suite" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4.5l7.5 7.5L8 19.5"/></svg></button></div><aside class="notes" hidden><p>[≈ 3 min] Message: “a kitchen that doesn't get back up on its own isn't automatic, it's just switched on”. Example: the pipeline review (every claim checked against the code) found a defect in the code itself — a protocol rejected then rewritten was never re-reviewed: 36 tracks came up, 33 had a REFUSE review older than the current protocol. Fix: revue_acquise() only accepts an ACCEPTE review newer than the protocol; regression test 23/23; effect verified on 2026-10-02. Other maintenance moves, all born of incidents: on 2026-10-02 a missing CLI produced 25 false abandonments in one minute, hence the probe before any launch (missing: nothing is sent, no abandonment counted); a supervisor that relaunches endlessly hides the fault, hence the cap of 3 relaunches per hour — and it says so; the repair agent receives a COPY of the files in a sandbox, because its natural shortcut would be to fabricate the missing proof. Limit: on September 26, four defects came from fixes (a gate that was too wide rejected sixteen correct protocols); so we re-run every regression test (step P11).</p><p>Level: Measured · Sources: infos/pipeline/revue/constats/P4.md, infos/pipeline/phases/P4-reviser.md, infos/pipeline/phases/P9-soigner.md, infos/pipeline/phases/P11-valider.md</p></aside></section>
+<section class="diapo diapo--niveau" data-index="9" data-etapes="3" aria-roledescription="slide" aria-label="Slide 10 of 10: A memory that names, and the proof"><div class="nv-haut"><span class="nv-deck">From an instruction to a self-correcting pipeline</span><span class="nv-rang">LEVEL 10 / 10</span></div><div class="nv-progres" style="--n:10;--t:10" aria-hidden="true"><i></i></div><div class="nv-tete"><h2 class="nv-titre">A memory that names, and the proof</h2><p class="nv-clair">The logbook: yesterday's failure becomes tomorrow's instruction, and nothing is believed without proof.</p></div><div class="nv-gauche"><div class="nv-probleme"><span class="nv-label">THE PROBLEM</span><p>Every session starts from scratch. In our trials, native memory carried nothing over from one session to the next.</p></div><div class="nv-panneaux"><section class="nv-panneau nv-avant" data-etape="1"><header><span class="nv-pastille">BEFORE</span><span class="nv-sous">The product's native memory</span></header><div class="nv-code"><div class="nv-l">session 1: “remember this color”</div><div class="nv-l">→ it cobbles together a notes file</div><div class="nv-l">session 2: “what is the color?”</div><div class="nv-l">→ <mark>it finds nothing</mark></div></div><footer class="nv-verdict"><svg class="nv-ico" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="8"/><path d="M5.2 5.2l5.6 5.6M10.8 5.2l-5.6 5.6"/></svg><span>The workaround fails: the next session ignores it</span></footer></section><div class="nv-fleche" data-etape="2" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12h13M13 6.5l5.5 5.5-5.5 5.5"/></svg></div><section class="nv-panneau nv-apres" data-etape="2"><header><span class="nv-pastille">AFTER</span><span class="nv-sous">Loop closed by the script</span></header><div class="nv-code"><div class="nv-l">the script grades the model's answer</div><div class="nv-l">and NAMES the defect:</div><div class="nv-l">“text around the JSON”</div><div class="nv-l">it writes it at the top of the next run:</div><div class="nv-l">“<mark>Do not repeat it.<wbr></mark>”</div></div><footer class="nv-verdict"><svg class="nv-ico" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="8"/><path d="M4.4 8.3l2.5 2.5 4.7-5.1"/></svg><span>The named defect becomes the next run's memory</span></footer></section></div><div class="nv-preuve" data-etape="3"><div class="nv-chiffre" style="font-size:37pt">0/12 → 5/12</div><div class="nv-legende"><p>tasks passed without, then with the closed loop (strict replay). The first reading, 6/8, was optimistic: it improves without guaranteeing.</p><div class="nv-meta"><span class="puce-conf" title="Measured, but the gap is not proven at this statistical power: a solid lead."><i class="pastille" style="background:var(--conf-INDICATIF)"></i>Indicative</span><details class="nv-sources"><summary>Evidence · 4</summary><ul><li><span class="nv-type">Pattern</span><code>7-patterns/P-20260912-boucle-memoire-fermee-defaut-nomme-cumulatif.md</code> <em>(confirmed candidate (within-chain, disjoint Wilson CIs))</em></li><li><span class="nv-type">Document</span><code>labs/CHAIN-121/E-20260911-boucle-memoire-fermee/harness/run_boucle.py</code></li><li><span class="nv-type">Document</span><code>labs/maitrise/lot-06/notes.md</code></li><li><span class="nv-type">Knowledge base</span><code>MAITRISE-COPILOT/00-conventions.md</code></li></ul></details></div></div></div></div><aside class="nv-pile" aria-label="The system now"><h3>THE SYSTEM NOW</h3><ol><li class="nv-brique nv-courant"><button type="button" data-i="9" aria-label="Go to level 10: Memory + measurement"><span class="nv-num">10</span><span class="nv-nom">Memory + measurement</span><span class="nv-etiq"><span class="nv-nouveau">new</span></span><span class="nv-fichier">registry/ · labs/ · tests</span><span class="nv-compte">639 decisions</span></button></li><li class="nv-brique nv-passe"><button type="button" data-i="8" aria-label="Go to level 9: Self-correction"><span class="nv-num">9</span><span class="nv-nom">Self-correction</span></button></li><li class="nv-brique nv-passe"><button type="button" data-i="7" aria-label="Go to level 8: Scripted pipeline"><span class="nv-num">8</span><span class="nv-nom">Scripted pipeline</span><span class="nv-compte">12 steps</span></button></li><li class="nv-brique nv-passe"><button type="button" data-i="6" aria-label="Go to level 7: Orchestration"><span class="nv-num">7</span><span class="nv-nom">Orchestration</span></button></li><li class="nv-brique nv-passe"><button type="button" data-i="5" aria-label="Go to level 6: Hook / mechanical guard"><span class="nv-num">6</span><span class="nv-nom">Hook / mechanical guard</span></button></li><li class="nv-brique nv-passe"><button type="button" data-i="4" aria-label="Go to level 5: Template + script"><span class="nv-num">5</span><span class="nv-nom">Template + script</span><span class="nv-compte">166 scripts</span></button></li><li class="nv-brique nv-passe"><button type="button" data-i="3" aria-label="Go to level 4: Skill"><span class="nv-num">4</span><span class="nv-nom">Skill</span><span class="nv-compte">41 skills</span></button></li><li class="nv-brique nv-passe"><button type="button" data-i="2" aria-label="Go to level 3: Specialized agent"><span class="nv-num">3</span><span class="nv-nom">Specialized agent</span><span class="nv-compte">26 agents</span></button></li><li class="nv-brique nv-passe"><button type="button" data-i="1" aria-label="Go to level 2: Scoped rules"><span class="nv-num">2</span><span class="nv-nom">Scoped rules</span><span class="nv-compte">39 rules</span></button></li><li class="nv-brique nv-passe"><button type="button" data-i="0" aria-label="Go to level 1: Repo instructions"><span class="nv-num">1</span><span class="nv-nom">Repo instructions</span><span class="nv-compte">1 file</span></button></li><li class="nv-brique nv-base"><span class="nv-nom">The model alone</span></li></ol><p class="nv-date">counts as of 2026-11-13</p></aside><div class="nv-limite" data-etape="3"><div><span class="nv-label">BUT…</span><p>Measured on a single model, in the terminal, sometimes at N=5: every lever gets replayed on your own ground before it is believed.</p></div><button type="button" class="nv-suite" data-action="debut"><span>START OVER</span><b>An instruction that names the case</b><svg class="nv-ico-suite" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4.5l7.5 7.5L8 19.5"/></svg></button></div><aside class="notes" hidden><p>[≈ 3 min] Message: memory, here, is a file that the code writes and the next run reads — not a product feature: in our trials native memory carried nothing over from one session to the next. Closed loop (CHAIN-121, claude-haiku-4.5, task “return bare JSON”): the checking script names the defect (“you added text around the JSON”) and writes it at the top of the next instruction. First reading 6 out of 8 vs 0 out of 8; replay in strict alternation: 5 out of 12 vs 0 out of 12. The effect is reproduced but halved: it improves without guaranteeing (two series out of four fall back at the third iteration). Around this loop, the lab's memory chain: evidence, levels, registry, map, views — guarded by checks that test themselves (--autotest): “a recent but false line lies better than an old one”. 639 decisions logged, one per file. Closing: recap the ten levels by following the stack, then restate the limits — a single model, the terminal, sometimes N=5: everything gets replayed on your own ground.</p><p>Level: Indicative · Sources: P-20260912-boucle-memoire-fermee-defaut-nomme-cumulatif, labs/CHAIN-121/E-20260911-boucle-memoire-fermee/harness/run_boucle.py, labs/maitrise/lot-06/notes.md, MAITRISE-COPILOT/00-conventions.md</p></aside></section>
+<div class="ouverture" id="ouverture" role="dialog" aria-label="From an instruction to a self-correcting pipeline"><div class="ouv-contenu"><p class="ouv-genre">JOURNEY · 10 LEVELS</p><h1 class="ouv-titre">From an instruction to a self-correcting pipeline</h1><p class="ouv-sous">Ten levels for building an agentic system, from the simplest to the most mature — each step answers an observed problem</p><p class="ouv-lire">HOW TO READ EACH PAGE</p><ol class="ouv-lecture"><li><b>The problem</b>what gets stuck at the previous level</li><li><b>Before / After</b>a real case, captured on disk</li><li><b>The evidence</b>measured, with its confidence level</li><li><b>The limit</b>it calls for the next level</li></ol><p class="ouv-meta">Technical and data teams · 25 min · 2026-11-13 · Agentic Explorer</p><button type="button" class="ouv-go" data-action="ouvrir">Start</button><p class="ouv-astuce">→ or Space: advance step by step · ?: help</p></div><p class="ouv-provisoire">Provisional theme — to be confirmed</p></div>
+</main></div>
+<div class="commandes" id="commandes" role="toolbar" aria-label="From an instruction to a self-correcting pipeline">
+<button type="button" data-action="precedent" aria-label="Previous">&#8249;</button>
+<span class="compteur" id="compteur" aria-hidden="true">1 of 10</span>
+<button type="button" data-action="suivant" aria-label="Next">&#8250;</button>
+<button type="button" data-action="notes">Notes</button>
+<button type="button" data-action="plan">Outline</button>
+<button type="button" data-action="plein">Full screen</button>
+<button type="button" data-action="aide" aria-label="Help">?</button>
+</div>
+<aside id="notes" class="notes-panneau" hidden aria-label="Speaker notes"><h2>Speaker notes</h2><div id="notes-texte"></div></aside>
+<nav id="plan" class="plan" hidden aria-label="Outline"><ol><li><button type="button" data-i="0">1. An instruction that names the case</button></li><li><button type="button" data-i="1">2. One rule per file, in the right place</button></li><li><button type="button" data-i="2">3. A specialized agent</button></li><li><button type="button" data-i="3">4. A skill: the procedure, on demand</button></li><li><button type="button" data-i="4">5. A template and a script</button></li><li><button type="button" data-i="5">6. A guardrail that blocks, not just reminds</button></li><li><button type="button" data-i="6">7. A brigade: one chef, several specialists</button></li><li><button type="button" data-i="7">8. A scripted pipeline that resumes on its own</button></li><li><button type="button" data-i="8">9. Maintenance that corrects itself</button></li><li><button type="button" data-i="9">10. A memory that names, and the proof</button></li></ol></nav>
+<div id="aide" class="aide" hidden role="dialog" aria-label="Help"><h2>Help</h2><dl><dt>← →  Space</dt><dd>Reveal step by step, then change page</dd><dt>A</dt><dd>Reveal the whole page</dd><dt>Home / End</dt><dd>First / last page</dd><dt>N</dt><dd>Speaker notes</dd><dt>G</dt><dd>Journey outline</dd><dt>F</dt><dd>Full screen</dd><dt>?</dt><dd>This help</dd><dt>Esc</dt><dd>Close</dd></dl></div>
+<div id="annonce" class="sr-only" aria-live="polite"></div>
+<script>
+(function () {
+  "use strict";
+
+  var scene = document.getElementById("scene");
+  var stage = document.getElementById("stage");
+  var diapos = Array.prototype.slice.call(stage.querySelectorAll(".diapo"));
+  var total = diapos.length;
+  var courant = 0;
+  // Pas à pas : une page « niveau » se dévoile en `data-etapes` temps ; les autres types n'en ont aucun.
+  var etapes = diapos.map(function (d) { return parseInt(d.getAttribute("data-etapes") || "0", 10); });
+  var etape = 0;
+  if (etapes.some(function (n) { return n > 0; })) { document.body.classList.add("js-etapes"); }
+  var $ = function (id) { return document.getElementById(id); };
+  var notes = $("notes"), notesTexte = $("notes-texte"), plan = $("plan"), aide = $("aide");
+  var annonce = $("annonce"), progres = $("progres"), compteur = $("compteur"), commandes = $("commandes");
+  var ouverture = $("ouverture");
+  var libSur = document.body.getAttribute("data-sur") || "/";
+  var libDiapo = document.body.getAttribute("data-diapositive") || "";
+  var minuterie = null;
+
+  function echelle() {
+    var s = Math.min(scene.clientWidth / 1280, scene.clientHeight / 720);
+    stage.style.setProperty("--echelle", String(s));
+  }
+
+  function majNotes() {
+    var source = diapos[courant].querySelector(".notes");
+    notesTexte.innerHTML = source ? source.innerHTML : "";
+  }
+
+  function majEtape() {
+    var d = diapos[courant];
+    var items = d.querySelectorAll("[data-etape]");
+    for (var k = 0; k < items.length; k++) {
+      if (parseInt(items[k].getAttribute("data-etape"), 10) <= etape) { items[k].classList.add("revele"); }
+      else { items[k].classList.remove("revele"); }
+    }
+    d.setAttribute("data-etape-courante", String(etape));
+  }
+
+  // `debut` : on arrive par « suivant » et la page se dévoile depuis le début ; sinon (saut, retour, adresse) elle est complète.
+  function aller(i, sansHistorique, debut) {
+    i = Math.max(0, Math.min(total - 1, i));
+    diapos[courant].classList.remove("actif");
+    courant = i;
+    diapos[courant].classList.add("actif");
+    etape = debut ? 0 : etapes[courant];
+    majEtape();
+    compteur.textContent = (courant + 1) + " " + libSur + " " + total;
+    progres.style.width = (100 * (courant + 1) / total) + "%";
+    annonce.textContent = diapos[courant].getAttribute("aria-label") || "";
+    majNotes();
+    var boutons = plan.querySelectorAll("button");
+    for (var k = 0; k < boutons.length; k++) {
+      if (k === courant) { boutons[k].setAttribute("aria-current", "true"); } else { boutons[k].removeAttribute("aria-current"); }
+    }
+    if (!sansHistorique && window.history && history.replaceState) {
+      history.replaceState(null, "", "#/" + (courant + 1));
+    }
+  }
+
+  function suivant() {
+    if (fermerOuverture()) { return; }
+    if (etape < etapes[courant]) { etape++; majEtape(); return; }
+    if (courant < total - 1) { aller(courant + 1, false, true); }
+  }
+  function precedent() {
+    if (etape > 0) { etape--; majEtape(); return; }
+    aller(courant - 1);
+  }
+  function toutDevoiler() { etape = etapes[courant]; majEtape(); }
+
+  // Écran d'ouverture d'un parcours : il s'efface au premier « suivant » et n'est jamais une page.
+  function fermerOuverture() {
+    if (ouverture && !ouverture.hasAttribute("hidden")) { ouverture.setAttribute("hidden", ""); return true; }
+    return false;
+  }
+
+  function basculerNotes() {
+    var ouvert = notes.hasAttribute("hidden");
+    if (ouvert) { notes.removeAttribute("hidden"); } else { notes.setAttribute("hidden", ""); }
+    scene.style.setProperty("--bas", ouvert ? notes.offsetHeight + "px" : "0px");
+    echelle();
+  }
+
+  function basculer(element) {
+    if (element.hasAttribute("hidden")) { element.removeAttribute("hidden"); } else { element.setAttribute("hidden", ""); }
+  }
+
+  function fermer() {
+    plan.setAttribute("hidden", "");
+    aide.setAttribute("hidden", "");
+  }
+
+  function pleinEcran() {
+    if (document.fullscreenElement) {
+      document.exitFullscreen();
+    } else if (document.documentElement.requestFullscreen) {
+      document.documentElement.requestFullscreen();
+    }
+  }
+
+  function repondre(bouton) {
+    var quiz = bouton.closest(".quiz");
+    if (!quiz || quiz.getAttribute("data-repondu") === "1") { return; }
+    quiz.setAttribute("data-repondu", "1");
+    var juste = parseInt(quiz.getAttribute("data-reponse"), 10);
+    var boutons = quiz.querySelectorAll(".choix button");
+    for (var k = 0; k < boutons.length; k++) {
+      boutons[k].setAttribute("aria-disabled", "true");
+      if (k === juste) { boutons[k].classList.add("ok"); }
+    }
+    if (boutons[juste] !== bouton) { bouton.classList.add("ko"); }
+    var explication = quiz.querySelector(".explication");
+    if (explication) { explication.removeAttribute("hidden"); }
+  }
+
+  function reveler() {
+    var diapo = diapos[courant];
+    var quiz = diapo.querySelector(".quiz");
+    if (quiz && quiz.getAttribute("data-repondu") !== "1") {
+      var juste = parseInt(quiz.getAttribute("data-reponse"), 10);
+      var cible = quiz.querySelectorAll(".choix button")[juste];
+      if (cible) { repondre(cible); }
+      return;
+    }
+    var corrige = diapo.querySelector(".corrige");
+    var bouton = diapo.querySelector(".btn-corrige");
+    if (corrige) {
+      basculer(corrige);
+      var cache = corrige.hasAttribute("hidden");
+      if (bouton) {
+        bouton.setAttribute("aria-expanded", cache ? "false" : "true");
+        bouton.textContent = bouton.getAttribute(cache ? "data-voir" : "data-masquer") || bouton.textContent;
+      }
+    }
+  }
+
+  function montrerCommandes() {
+    commandes.classList.add("visible");
+    clearTimeout(minuterie);
+    minuterie = setTimeout(function () { commandes.classList.remove("visible"); }, 2500);
+  }
+
+  document.addEventListener("keydown", function (e) {
+    if (e.ctrlKey || e.metaKey || e.altKey) { return; }
+    var cible = e.target;
+    if (cible && cible.closest && cible.closest("button") && (e.key === " " || e.key === "Enter")) { return; }
+    if (ouverture && !ouverture.hasAttribute("hidden") &&
+        (e.key === "ArrowRight" || e.key === "PageDown" || e.key === " " || e.key === "Enter" || e.key === "Escape")) {
+      fermerOuverture();
+      e.preventDefault();
+      return;
+    }
+    switch (e.key) {
+      case "ArrowRight": case "PageDown": case " ": suivant(); break;
+      case "ArrowLeft": case "PageUp": case "Backspace": precedent(); break;
+      case "Home": aller(0); break;
+      case "End": aller(total - 1); break;
+      case "n": case "N": basculerNotes(); break;
+      case "g": case "G": basculer(plan); break;
+      case "f": case "F": pleinEcran(); break;
+      case "r": case "R": reveler(); break;
+      case "a": case "A": toutDevoiler(); break;
+      case "?": basculer(aide); break;
+      case "Escape": fermer(); break;
+      default: return;
+    }
+    e.preventDefault();
+    montrerCommandes();
+  });
+
+  document.addEventListener("click", function (e) {
+    var bouton = e.target.closest && e.target.closest("button");
+    if (!bouton) { return; }
+    if (bouton.closest(".choix")) { repondre(bouton); return; }
+    if (bouton.classList.contains("btn-corrige")) { reveler(); return; }
+    if (bouton.closest("#plan") && bouton.hasAttribute("data-i")) {
+      aller(parseInt(bouton.getAttribute("data-i"), 10));
+      fermer();
+      return;
+    }
+    if (bouton.closest(".nv-pile") && bouton.hasAttribute("data-i")) {
+      aller(parseInt(bouton.getAttribute("data-i"), 10));
+      return;
+    }
+    var action = bouton.getAttribute("data-action");
+    if (action === "suivant") { suivant(); }
+    else if (action === "debut") { aller(0, false, true); }
+    else if (action === "ouvrir") { fermerOuverture(); }
+    else if (action === "precedent") { precedent(); }
+    else if (action === "notes") { basculerNotes(); }
+    else if (action === "plan") { basculer(plan); }
+    else if (action === "plein") { pleinEcran(); }
+    else if (action === "aide") { basculer(aide); }
+  });
+
+  var departX = null;
+  stage.addEventListener("touchstart", function (e) { departX = e.changedTouches[0].clientX; }, { passive: true });
+  stage.addEventListener("touchend", function (e) {
+    if (departX === null || (e.target.closest && e.target.closest("button"))) { departX = null; return; }
+    var dx = e.changedTouches[0].clientX - departX;
+    departX = null;
+    if (Math.abs(dx) > 50) { if (dx < 0) { suivant(); } else { precedent(); } }
+  }, { passive: true });
+
+  window.addEventListener("resize", echelle);
+  document.addEventListener("mousemove", montrerCommandes);
+  window.addEventListener("hashchange", function () {
+    var m = /^#\/(\d+)$/.exec(location.hash);
+    if (m) { fermerOuverture(); aller(parseInt(m[1], 10) - 1, true); }
+  });
+
+  var depart = /^#\/(\d+)$/.exec(location.hash);
+  if (ouverture) {
+    ouverture.addEventListener("click", fermerOuverture);
+    if (depart) { fermerOuverture(); }
+  }
+  echelle();
+  aller(depart ? parseInt(depart[1], 10) - 1 : 0, true, !depart);
+  montrerCommandes();
+})();
+
+</script>
+</body>
+</html>

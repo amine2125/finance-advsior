@@ -11,7 +11,7 @@ import { useApp } from "../hooks/useApp";
 const STEPS = [
   ["Faisons connaissance", "Une vingtaine de questions sur votre situation et votre rapport au risque."],
   ["Dites ce que vous voulez faire", "« J'ai 10 000 $ à investir », « Je veux 2 000 $ de NVIDIA »…"],
-  ["Décidez en connaissance de cause", "Les agents analysent, vérifient chaque chiffre, et rien n'est fait sans votre accord."],
+  ["Décidez en connaissance de cause", "Les agents vérifient votre idée contre vos règles, chiffres à l'appui, et rien n'est fait sans votre accord."],
 ];
 const TINT: Record<string, string> = { amira: "bg-primary-500", mateo: "bg-gain-600", robert: "bg-ink" };
 
@@ -51,7 +51,7 @@ export default function Login() {
           <motion.h1 initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="font-display text-[42px] font-semibold leading-[1.02] tracking-tightest text-ink sm:text-[60px]">
             Investir, avec un accompagnement qui <span className="inline-block whitespace-nowrap rounded-[0.14em] bg-primary-500/15 px-[0.12em] pb-[0.02em] pt-[0.1em] align-baseline leading-[0.78] text-primary-600">VOUS</span> ressemble.
           </motion.h1>
-          <p className="mt-5 max-w-xl text-lg leading-relaxed text-ink-soft">Dites ce que vous voulez faire de votre argent. Des agents analysent votre profil, vos placements et le marché, puis vous proposent quoi faire, en expliquant pourquoi.</p>
+          <p className="mt-5 max-w-xl text-lg leading-relaxed text-ink-soft">Dites ce que vous voulez faire de votre argent. Des agents analysent votre profil, vos placements et le marché, puis vous disent si votre idée respecte vos propres règles, en expliquant pourquoi.</p>
           <Stagger as="ol" className="mt-10 hidden space-y-5 lg:block">
             {STEPS.map(([t, d], i) => (
               <StaggerItem key={t} className="flex gap-4">

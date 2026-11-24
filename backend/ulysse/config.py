@@ -30,10 +30,15 @@ USER_AGENT = os.environ.get("ULYSSE_USER_AGENT", "ULYSSE-datathon-prototype/0.1 
 
 # The app's "today". Default: two days after the datapack's last day (2026-11-14 for the official kit), so that the
 # Wikipedia views and issuer snapshots of that last day are usable. ULYSSE_ASOF pins it for a reproducible demo.
-DEFAULT_ASOF = os.environ.get("ULYSSE_ASOF") or None
-
-
 def kit_end() -> str:
     """Last day of the kit in use: KIT_END for the official kit, later for a kit extended by scripts/extend_kit.py."""
     ext = KIT_DIR / "EXTENSION.json"
-    return json.loads(ext.read_text())["extended_to"] if ext.exists() else KIT_END
+    return json.loads(ext.read_text(encoding="utf-8"))["extended_to"] if ext.exists() else KIT_END
+
+
+def _default_asof() -> str:
+    from datetime import date, timedelta
+    return (date.fromisoformat(kit_end()) + timedelta(days=2)).isoformat()
+
+
+DEFAULT_ASOF = os.environ.get("ULYSSE_ASOF") or _default_asof()

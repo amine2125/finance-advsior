@@ -24,8 +24,8 @@ const STOPS: Stop[] = [
 ];
 
 // Demo accounts are shared by the jury: remember the tour per browser session, so every judge gets it once.
-const SESSION_KEY = "aegis.tour.seen";
-const isDemo = (email?: string | null) => !!email && email.endsWith("@demo.aegis-finance.ca");
+const SESSION_KEY = "ulysse.visite.vue";
+const isDemo = (email?: string | null) => !!email && email.endsWith("@demo.example.com");
 const sessionSeen = () => { try { return sessionStorage.getItem(SESSION_KEY) === "1"; } catch { return false; } };
 
 const visible = (name: string): HTMLElement | null => {
@@ -94,7 +94,7 @@ const placeCard = (b: Box, cw: number, ch: number, vw: number, vh: number) => {
   return { top: vh - (b.top + b.height) >= b.top ? clamp(below, M, vh - ch - M) : clamp(above, M, vh - ch - M), left: x };
 };
 
-/** Guided tour of the home screen: starts by itself on the first visit, and on demand (event « aegis:tour »). */
+/** Guided tour of the home screen: starts by itself on the first visit, and on demand (event « ulysse:visite »). */
 export default function Tour() {
   const { me, reload } = useApp();
   const loc = useLocation();
@@ -113,8 +113,8 @@ export default function Tour() {
 
   useEffect(() => {
     const h = () => start();
-    window.addEventListener("aegis:tour", h);
-    return () => window.removeEventListener("aegis:tour", h);
+    window.addEventListener("ulysse:visite", h);
+    return () => window.removeEventListener("ulysse:visite", h);
   }, [start]);
   useEffect(() => {  // first visit after the questionnaire
     const seen = isDemo(me?.email) ? sessionSeen() : me?.guide?.tour_done;
@@ -171,7 +171,7 @@ export default function Tour() {
   const finish = async () => {
     setStops(null); setBox(null);
     if (isDemo(me?.email)) { try { sessionStorage.setItem(SESSION_KEY, "1"); } catch { /* private mode */ } return; }
-    if (!me?.guide?.tour_done) { await api.put("/guide", { tour_done: true }).catch(() => undefined); reload(); }
+    if (!me?.guide?.tour_done) { await api.post("/guide", { visite_faite: true }).catch(() => undefined); reload(); }
   };
   useEffect(() => {
     if (!stops) return;
